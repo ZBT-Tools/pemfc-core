@@ -24,14 +24,5 @@ from .src import species
 from .src import stack
 from .src import temperature_system
 from . import main_app
-from . import gui_app
-
-from .gui import base
-from .gui import button
-from .gui import frame
-from .gui import widget_set
-from .gui import input
-from .gui import data_transfer
-from .gui import entry_value
 
 
