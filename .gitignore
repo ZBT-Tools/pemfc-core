@@ -1,0 +1,12 @@
+.DS_Store
+__pycache__/
+.idea/
+venv/
+output/
+build/
+bin/
+pemfc/bin
+pemfc/build
+*.pyc
+# *.png
+*.jpg

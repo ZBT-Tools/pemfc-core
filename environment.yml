@@ -1,0 +1,14 @@
+name: dash_app
+dependencies:
+        - python=3.9.7
+        - pip:
+                - numpy
+                - scipy
+                - matplotlib
+                - dash
+                - dash-core-components
+                - dash-bootstrap-components
+                - flask-caching
+                - plotly
+                - glom
+                - gunicorn
