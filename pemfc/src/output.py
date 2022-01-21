@@ -9,9 +9,6 @@ import timeit
 import json
 import sys
 
-
-
-
 # local module imports
 from . import interpolation as ip
 from . import global_functions as g_func
