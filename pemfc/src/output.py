@@ -7,7 +7,9 @@ import matplotlib
 import matplotlib.pyplot as plt
 import timeit
 import json
-import __main__ as main
+import sys
+
+
 
 
 # local module imports
@@ -17,10 +19,9 @@ from . import stack as stack
 from ..data import input_dicts
 
 # configure backend here
-main_name = os.path.basename(main.__file__)
-if main_name == 'main_app.py':
+main_name=sys.argv[0]
+if 'main_app.py' in main_name:
     matplotlib.use('TkAgg')
-
 
 # globals
 FONT_SIZE = 14
