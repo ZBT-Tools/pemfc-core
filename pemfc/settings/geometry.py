@@ -2,7 +2,7 @@
 
 """Stack Settings"""
 # number of cells in the stack
-cell_number = 10
+cell_number = 100
 
 """"Cell Geometry """
 # length of the cell, a side of the active area [m]
