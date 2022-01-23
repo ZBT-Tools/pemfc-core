@@ -1,6 +1,6 @@
 import numpy as np
 import timeit
-from pemfc import simulation
+import src.simulation as simulation
 import sys
 import os
 
