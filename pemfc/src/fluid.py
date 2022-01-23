@@ -1,4 +1,5 @@
 # general imports
+import sys
 import numpy as np
 from abc import ABC, abstractmethod
 
@@ -6,7 +7,11 @@ from abc import ABC, abstractmethod
 from .output_object import OutputObject
 from . import constants, global_functions as g_func, species
 from collections import OrderedDict
-import data.water_properties as water_props
+
+if 'main_app.py' in sys.argv[0]:
+    from data import water_properties as water_props
+else:
+    from pemfc.data import water_properties as water_props
 
 
 class OneDimensionalFluid(ABC, OutputObject):

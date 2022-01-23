@@ -4,7 +4,7 @@ import numpy as np
 # local module imports
 from . import electrical_coupling as el_cpl, flow_circuit as flow_circuit, \
     cell as cl, temperature_system as therm_cpl, fluid as fluid, channel as chl
-from data import input_dicts
+# from data import input_dicts
 # from ..gui import data_transfer
 
 # gui_data = True
@@ -12,10 +12,10 @@ from data import input_dicts
 
 class Stack:
 
-    def __init__(self, n_nodes, current_control=False):
+    def __init__(self, settings, n_nodes, current_control=False):
 
         # Read settings dictionaries
-        stack_dict = input_dicts.sim_dict['stack']
+        stack_dict = settings['stack']
 
         self.n_cells = stack_dict['cell_number']
         # number of cells of the stack
@@ -29,10 +29,10 @@ class Stack:
         # switch to calculate the flow distribution
 
         # decompose input dict the individual objects
-        cell_dict = input_dicts.sim_dict['cell']
-        membrane_dict = input_dicts.sim_dict['membrane']
-        anode_dict = input_dicts.sim_dict['anode']
-        cathode_dict = input_dicts.sim_dict['cathode']
+        cell_dict = settings['cell']
+        membrane_dict = settings['membrane']
+        anode_dict = settings['anode']
+        cathode_dict = settings['cathode']
         ano_channel_dict = anode_dict['channel']
         cat_channel_dict = cathode_dict['channel']
         ano_fluid_dict = ano_channel_dict['fluid']
@@ -43,7 +43,7 @@ class Stack:
         cat_flow_circuit_dict = cathode_dict['flow_circuit']
         cat_in_manifold_dict = cat_flow_circuit_dict['inlet_manifold']
         cat_out_manifold_dict = cat_flow_circuit_dict['outlet_manifold']
-        temperature_dict = input_dicts.sim_dict['temperature_system']
+        temperature_dict = settings['temperature_system']
 
         half_cell_dicts = [cathode_dict, anode_dict]
         channel_dicts = [cat_channel_dict, ano_channel_dict]
@@ -54,7 +54,7 @@ class Stack:
 
         # switch for cell discretizsation
         cell_dict['channel_land_discretization'] = \
-            input_dicts.sim_dict['simulation']['channel_land_discretization']
+            settings['simulation']['channel_land_discretization']
 
         # Initialize fluid channels
         fluids, channels = [], []
@@ -119,11 +119,11 @@ class Stack:
 
         cool_flow = stack_dict['cool_flow']
         if cool_flow:
-            coolant_channel_dict = input_dicts.sim_dict['coolant_channel']
+            coolant_channel_dict = settings['coolant_channel']
             coolant_dict = coolant_channel_dict['fluid']
             coolant_dict['nodes'] = n_nodes
             dict_coolant_flow_circuit = \
-                input_dicts.sim_dict['coolant_flow_circuit']
+                settings['coolant_flow_circuit']
             dict_coolant_in_manifold = \
                 dict_coolant_flow_circuit['inlet_manifold']
             dict_coolant_out_manifold = \

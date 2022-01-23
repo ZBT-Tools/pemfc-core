@@ -1,0 +1,360 @@
+{
+  "stack": {
+    "cell_number": 10,
+    "heat_power": 0.0,
+    "cool_flow": true,
+    "calc_temperature": true,
+    "calc_current_density": true,
+    "init_current_density": 20000.0,
+    "init_voltage": null
+  },
+  "simulation": {
+    "maximum_iteration": 100,
+    "minimum_iteration": 3,
+    "convergence_criteria": 1e-07,
+    "current_control": true,
+    "operation_control": "Current",
+    "elements": 10,
+    "current_density": 20000.0,
+    "average_cell_voltage": 0.5,
+    "channel_land_discretization": false
+  },
+  "cell": {
+    "width": 0.1,
+    "length": 0.5,
+    "underrelaxation_factor": 0.7,
+    "open_circuit_voltage": 1.0,
+    "thermoneutral_voltage": 1.25,
+    "channel_land_discretization": false,
+    "first_cell": false,
+    "last_cell": true,
+    "heat_flux": 0.0
+  },
+  "membrane": {
+    "type": "Springer",
+    "thickness": 1.5e-05,
+    "ionic_conductivity": 15.0,
+    "basic_resistance": 4.3e-05,
+    "temperature_coefficient": 7e-08,
+    "thermal_conductivity": [
+      0.26,
+      0.26
+    ],
+    "calc_loss": true,
+    "width": 0.1,
+    "length": 0.5,
+    "underrelaxation_factor": 0.7,
+    "name": "Membrane"
+  },
+  "cathode": {
+    "name": "Cathode",
+    "flow_direction": 1,
+    "channel_number": 50,
+    "stoichiometry": 1.5,
+    "is_cathode": true,
+    "charge_number": 4.0,
+    "reaction_stoichiometry": [
+      -1.0,
+      0.0,
+      2.0
+    ],
+    "electrical_conductivity_bpp": [
+      60000.0,
+      60000.0
+    ],
+    "electrical_conductivity_gde": [
+      500.0,
+      500.0
+    ],
+    "thermal_conductivity_bpp": [
+      100.0,
+      100.0
+    ],
+    "thermal_conductivity_gde": [
+      1.0,
+      1.0
+    ],
+    "thickness_cl": 1e-05,
+    "thickness_gdl": 0.0002,
+    "thickness_bpp": 0.002,
+    "porosity_cl": 0.5,
+    "porosity_gdl": 0.8,
+    "tafel_slope": 0.035,
+    "prot_con_cl": 3.5,
+    "vol_ex_cd": 800000.0,
+    "diff_coeff_cl": 1e-07,
+    "diff_coeff_gdl": 6e-06,
+    "calc_act_loss": true,
+    "calc_cl_diff_loss": true,
+    "calc_gdl_diff_loss": true,
+    "c_eps": 0.1,
+    "delta_i": 5.0,
+    "channel": {
+      "name": "Cathode Channel",
+      "fluid": {
+        "name": "Cathode Gas Mixture",
+        "components": {
+          "O2": {
+            "state": "gas",
+            "molar_fraction": 0.21
+          },
+          "N2": {
+            "state": "gas",
+            "molar_fraction": 0.79
+          },
+          "H2O": {
+            "state": "gas-liquid",
+            "molar_fraction": 0.0
+          }
+        },
+        "humidity": 0.5,
+        "temperature": 343.15,
+        "pressure": 101325.0,
+        "nodes": 11
+      },
+      "cross_sectional_shape": "rectangular",
+      "rib_width": 0.001,
+      "base_width": 0.0008,
+      "length": 0.5,
+      "p_out": 101325.0,
+      "temp_in": 343.15,
+      "flow_direction": 1,
+      "width": 0.001,
+      "height": 0.001,
+      "bend_number": 0,
+      "bend_friction_factor": 0.1
+    },
+    "flow_circuit": {
+      "name": "Cathode Flow Circuit",
+      "type": "UpdatedKoh",
+      "shape": "U",
+      "calc_distribution": true,
+      "tolerance": 1e-07,
+      "min_iter": 3,
+      "max_iter": 100,
+      "underrelaxation_factor": 0.3,
+      "inlet_manifold": {
+        "name": "Cathode Inlet Manifold",
+        "length": 0.04435000000000001,
+        "p_out": 101325.0,
+        "temp_in": 343.15,
+        "flow_direction": 1,
+        "cross_sectional_shape": "circular",
+        "diameter": 0.04,
+        "width": 0.01,
+        "height": 0.01,
+        "bend_number": 0,
+        "bend_friction_factor": 0.0,
+        "constant_friction_factor": 0.4
+      },
+      "outlet_manifold": {
+        "name": "Cathode Outlet Manifold",
+        "length": 0.04435000000000001,
+        "p_out": 101325.0,
+        "temp_in": 343.15,
+        "flow_direction": 1,
+        "cross_sectional_shape": "circular",
+        "diameter": 0.04,
+        "width": 0.01,
+        "height": 0.01,
+        "bend_number": 0,
+        "bend_friction_factor": 0.0,
+        "constant_friction_factor": 0.4
+      }
+    }
+  },
+  "anode": {
+    "name": "Anode",
+    "flow_direction": -1,
+    "channel_number": 50,
+    "stoichiometry": 1.5,
+    "is_cathode": false,
+    "charge_number": 4.0,
+    "reaction_stoichiometry": [
+      -2.0,
+      0.0,
+      0.0
+    ],
+    "electrical_conductivity_bpp": [
+      60000.0,
+      60000.0
+    ],
+    "electrical_conductivity_gde": [
+      500.0,
+      500.0
+    ],
+    "thermal_conductivity_bpp": [
+      100.0,
+      100.0
+    ],
+    "thermal_conductivity_gde": [
+      1.0,
+      1.0
+    ],
+    "thickness_cl": 1e-05,
+    "thickness_gdl": 0.0002,
+    "thickness_bpp": 0.002,
+    "porosity_cl": 0.5,
+    "porosity_gdl": 0.8,
+    "tafel_slope": 0.035,
+    "prot_con_cl": 3.5,
+    "vol_ex_cd": 500000000.0,
+    "diff_coeff_cl": 1e-06,
+    "diff_coeff_gdl": 0.0001,
+    "calc_act_loss": true,
+    "calc_cl_diff_loss": true,
+    "calc_gdl_diff_loss": true,
+    "c_eps": 0.1,
+    "delta_i": 5.0,
+    "channel": {
+      "name": "Anode Channel",
+      "fluid": {
+        "name": "Anode Gas Mixture",
+        "components": {
+          "H2": {
+            "state": "gas",
+            "molar_fraction": 1.0
+          },
+          "N2": {
+            "state": "gas",
+            "molar_fraction": 0.0
+          },
+          "H2O": {
+            "state": "gas-liquid",
+            "molar_fraction": 0.0
+          }
+        },
+        "humidity": 0.5,
+        "temperature": 343.15,
+        "pressure": 101325.0,
+        "nodes": 11
+      },
+      "cross_sectional_shape": "rectangular",
+      "rib_width": 0.001,
+      "base_width": 0.0008,
+      "length": 0.5,
+      "p_out": 101325.0,
+      "temp_in": 343.15,
+      "flow_direction": -1,
+      "width": 0.001,
+      "height": 0.001,
+      "bend_number": 0,
+      "bend_friction_factor": 0.1
+    },
+    "flow_circuit": {
+      "name": "Anode Flow Circuit",
+      "type": "UpdatedKoh",
+      "shape": "U",
+      "calc_distribution": true,
+      "tolerance": 1e-07,
+      "min_iter": 3,
+      "max_iter": 100,
+      "underrelaxation_factor": 0.3,
+      "inlet_manifold": {
+        "name": "Anode Inlet Manifold",
+        "length": 0.04435000000000001,
+        "p_out": 101325.0,
+        "temp_in": 343.15,
+        "flow_direction": 1,
+        "cross_sectional_shape": "circular",
+        "diameter": 0.04,
+        "width": 0.01,
+        "height": 0.01,
+        "bend_number": 0,
+        "bend_friction_factor": 0.0,
+        "constant_friction_factor": 0.4
+      },
+      "outlet_manifold": {
+        "name": "Anode Outlet Manifold",
+        "length": 0.04435000000000001,
+        "p_out": 101325.0,
+        "temp_in": 343.15,
+        "flow_direction": 1,
+        "cross_sectional_shape": "circular",
+        "diameter": 0.04,
+        "width": 0.01,
+        "height": 0.01,
+        "bend_number": 0,
+        "bend_friction_factor": 0.0,
+        "constant_friction_factor": 0.4
+      }
+    }
+  },
+  "coolant_channel": {
+    "name": "Coolant Channel",
+    "fluid": {
+      "name": "Coolant Fluid",
+      "specific_heat": 2010.0,
+      "density": 981.0,
+      "viscosity": 0.00981,
+      "thermal_conductivity": 0.159,
+      "nodes": 11,
+      "temperature": 340.65,
+      "pressure": 101325.0
+    },
+    "cross_sectional_shape": "rectangular",
+    "base_width": 0.0016,
+    "length": 0.5,
+    "p_out": 101325.0,
+    "temp_in": 340.65,
+    "flow_direction": 1,
+    "width": 0.002,
+    "height": 0.001,
+    "bend_number": 0.0,
+    "bend_friction_factor": 0.1
+  },
+  "coolant_flow_circuit": {
+    "name": "Coolant Flow Circuit",
+    "type": "UpdatedKoh",
+    "shape": "U",
+    "calc_distribution": true,
+    "tolerance": 1e-07,
+    "min_iter": 3,
+    "max_iter": 100,
+    "underrelaxation_factor": 0.3,
+    "inlet_manifold": {
+      "name": "Coolant Inlet Manifold",
+      "p_out": 101325.0,
+      "temp_in": 340.65,
+      "flow_direction": 1,
+      "cross_sectional_shape": "circular",
+      "diameter": 0.04,
+      "width": 0.01,
+      "height": 0.01,
+      "bend_number": 0,
+      "bend_friction_factor": 0.0,
+      "constant_friction_factor": 0.4,
+      "length": 0.04435000000000001
+    },
+    "outlet_manifold": {
+      "name": "Coolant Inlet Manifold",
+      "p_out": 101325.0,
+      "temp_in": 340.65,
+      "flow_direction": 1,
+      "cross_sectional_shape": "circular",
+      "diameter": 0.04,
+      "width": 0.01,
+      "height": 0.01,
+      "bend_number": 0,
+      "bend_friction_factor": 0.0,
+      "constant_friction_factor": 0.4,
+      "length": 0.04435000000000001
+    }
+  },
+  "temperature_system": {
+    "temp_amb": 293.15,
+    "alpha_amb": 10.0,
+    "heat_flux": 0.0,
+    "cool_ch_bc": true,
+    "cool_ch_numb": 20,
+    "cool_temp_diff": 5.0,
+    "cool_mass_flow": null,
+    "coolant_control": "Temperature Difference"
+  },
+  "output": {
+    "save_csv": false,
+    "save_plot": false,
+    "show_loss": false,
+    "directory": "D:\\ZBT\\Python\\pemfc-core\\pemfc\\settings\\..\\..\\output"
+  }
+}
