@@ -2,10 +2,10 @@ name: Project Tests
 on:
   push:
     branches:
-      - master
+      - settings_as_arguments
   pull_request:
     branches:
-      - master
+      - settings_as_arguments
 
 jobs:
   build:
