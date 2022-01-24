@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from .output_object import OutputObject
 from . import constants, global_functions as g_func, species
 from collections import OrderedDict
-import pemfc.data.water_properties as water_props
+import data.water_properties as water_props
 
 
 class OneDimensionalFluid(ABC, OutputObject):

@@ -7,7 +7,7 @@ import timeit
 # local module imports
 from . import stack
 from . import output
-from ..data import input_dicts
+from data import input_dicts
 # from ..gui import data_transfer
 
 
