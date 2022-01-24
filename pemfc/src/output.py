@@ -13,10 +13,10 @@ import sys
 from . import interpolation as ip
 from . import global_functions as g_func
 from . import stack as stack
-from data import input_dicts
+# from ..data import input_dicts
 
 # configure backend here
-main_name=sys.argv[0]
+main_name = sys.argv[0]
 if 'main_app.py' in main_name:
     matplotlib.use('TkAgg')
 
@@ -587,9 +587,9 @@ class Output:
                            + ('{0:' + v.get('format', '.4f')
                            + '}\n').format(v['value']))
 
-    def save_settings(self, settings=None, fmt='json'):
-        if settings is None:
-            settings = input_dicts.sim_dict
+    def save_settings(self, settings, fmt='json'):
+        # if settings is None:
+        #     settings = input_dicts.sim_dict
         if not isinstance(settings, dict):
             raise TypeError('must provide python dict to save settings')
         else:
@@ -597,3 +597,15 @@ class Output:
             if fmt == 'json':
                 with open(file_path, 'w') as file:
                     file.write(json.dumps(settings, indent=2))
+
+    def save_global_results(self, results, fmt='json'):
+        # if settings is None:
+        #     settings = input_dicts.sim_dict
+        if not isinstance(results, dict):
+            raise TypeError('must provide python dict to save global results')
+        else:
+            file_path = os.path.join(self.output_dir, self.case_name,
+                                     'summary.json')
+            if fmt == 'json':
+                with open(file_path, 'w') as file:
+                    file.write(json.dumps(results, indent=2))

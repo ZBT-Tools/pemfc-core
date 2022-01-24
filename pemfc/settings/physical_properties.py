@@ -27,7 +27,7 @@ v_thermo_neutral = 1.25
 
 """Membrane Resistance"""
 # membrane type ('Constant', 'Springer', or 'Kvesic')
-membrane_type = 'Constant'
+membrane_type = 'Springer'
 # membrane basic resistance [Ohm-m2]
 membrane_basic_resistance = 4.3e-5
 # membrane temperature slope [Ohm-m2/K)]

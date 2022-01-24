@@ -1,7 +1,6 @@
 # PEMFC-Stack-Model
 A reduced dimensional numerical model to simulate the performance of PEM fuel 
-cell stacks developed in Python 3.6 utilizing the numerical libraries NumPy and 
-SciPy.
+cell stacks developed in Python.
 
 #### Geometric Layout
 ![alt text](./data/stack_layout.png "Stack Layout")
@@ -34,24 +33,15 @@ SciPy.
 - Matplotlib 2.2.2
 
 # Usage
-Download the repository, review settings in the pemfc/settings folder
-(ouput.py, geometry.py, operating_conditons.py, physical_properties.py, 
-simulation.py). Then execute 
+Download the repository, review settings in the pemfc/settings/settings.json 
+file. Then execute
 ```python
-python -m pemfc.main_app
+python pemfc\main_app.py
 ```
-
-for the CLI app, or
-
-```python
-python -m pemfc.gui_app
-```
-
-for the GUI app from the repository folder with your Python interpreter. Input
-parameters can be adjusted via GUI (work in progress) or in the corresponding 
-files in the pemfc/settings folder. If not specified otherwise, a folder 
-called "output" will be created at the end of a simulation run, which 
-contains the results in various data files and plots.
+with your Python interpreter.
+If not specified otherwise, a folder called "output" will be created at the end 
+of a simulation run, which contains the results in various data files and 
+plots, if specified in the settings file (bottom).
 
 # Implementation
 
