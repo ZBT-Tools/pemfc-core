@@ -154,6 +154,10 @@ class Simulation:
             average_current_density = \
                 np.average([np.average(cell.i_cd, weights=cell.active_area_dx)
                             for cell in self.stack.cells])
+            if self.stack.coolant_circuit is None:
+                cool_mass_flow = 0.0
+            else:
+                cool_mass_flow = self.stack.coolant_circuit.mass_flow_in
             global_data = \
                 {'Stack Voltage': {'value': self.stack.v_stack, 'units': 'V'},
                  'Average Cell Voltage':
@@ -173,7 +177,7 @@ class Simulation:
                       * self.stack.cells[0].active_area,
                       'units': 'W'},
                  'Cooling Mass Flow Rate:':
-                     {'value': self.stack.coolant_circuit.mass_flow_in,
+                     {'value': cool_mass_flow,
                       'units': 'kg/s', 'format': '.4E'},
                  'Cathode Mass Flow Rate:':
                      {'value': self.stack.fuel_circuits[0].mass_flow_in,
