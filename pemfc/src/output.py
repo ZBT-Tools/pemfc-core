@@ -13,7 +13,7 @@ import sys
 from . import interpolation as ip
 from . import global_functions as g_func
 from . import stack as stack
-from ..data import input_dicts
+# from ..data import input_dicts
 
 # configure backend here
 main_name = sys.argv[0]
@@ -52,7 +52,7 @@ class Output:
             finally:
                 os.umask(original_umask)
 
-        self.clean_directory(self.output_dir)
+        # self.clean_directory(self.output_dir)
 
         # if not os.path.exists(self.output_dir):
         #     os.makedirs(self.output_dir)
@@ -421,8 +421,8 @@ class Output:
         case_path = os.path.join(self.output_dir, folder_name)
         if not os.path.exists(case_path):
             os.makedirs(case_path)
-        else:
-            self.clean_directory(case_path)
+        # else:
+        #     self.clean_directory(case_path)
 
         if not self.save_csv and not self.save_plot:
             return None
@@ -433,12 +433,12 @@ class Output:
         plot_path = os.path.join(case_path, 'plots')
         if not os.path.exists(csv_path):
             os.makedirs(csv_path)
-        else:
-            self.clean_directory(csv_path)
+        # else:
+        #     self.clean_directory(csv_path)
         if not os.path.exists(plot_path):
             os.makedirs(plot_path)
-        else:
-            self.clean_directory(plot_path)
+        # else:
+        #     self.clean_directory(plot_path)
 
         def save_oo_collection(oo_collection, x_values, x_label, **kwargs):
             # data_dict = kwargs.get('data_dict', {})
@@ -587,9 +587,9 @@ class Output:
                            + ('{0:' + v.get('format', '.4f')
                            + '}\n').format(v['value']))
 
-    def save_settings(self, settings=None, fmt='json'):
-        if settings is None:
-            settings = input_dicts.sim_dict
+    def save_settings(self, settings, fmt='json'):
+        # if settings is None:
+        #     settings = input_dicts.sim_dict
         if not isinstance(settings, dict):
             raise TypeError('must provide python dict to save settings')
         else:
@@ -597,3 +597,15 @@ class Output:
             if fmt == 'json':
                 with open(file_path, 'w') as file:
                     file.write(json.dumps(settings, indent=2))
+
+    def save_global_results(self, results, fmt='json'):
+        # if settings is None:
+        #     settings = input_dicts.sim_dict
+        if not isinstance(results, dict):
+            raise TypeError('must provide python dict to save global results')
+        else:
+            file_path = os.path.join(self.output_dir, self.case_name,
+                                     'summary.json')
+            if fmt == 'json':
+                with open(file_path, 'w') as file:
+                    file.write(json.dumps(results, indent=2))

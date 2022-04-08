@@ -1,5 +1,6 @@
 # general imports
 import os
+import sys
 import numpy as np
 import cProfile
 import timeit
@@ -7,7 +8,12 @@ import timeit
 # local module imports
 from . import stack
 from . import output
-from ..data import input_dicts
+# from data import input_dicts
+
+if 'main_app.py' in sys.argv[0]:
+    from data import input_dicts
+else:
+    from pemfc.data import input_dicts
 # from ..gui import data_transfer
 
 
@@ -26,9 +32,14 @@ def do_c_profile(func):
 
 class Simulation:
 
-    def __init__(self, ):
+    def __init__(self, settings=None):
         # dict_simulation = input_dicts.dict_simulation
-        dict_simulation = input_dicts.sim_dict['simulation']
+        if settings is None:
+            self.settings = input_dicts.sim_dict
+        else:
+            self.settings = settings
+
+        dict_simulation = self.settings['simulation']
         # set convergence criteria for current and temperature distribution
         self.it_crit = dict_simulation['convergence_criteria']
 
@@ -57,17 +68,18 @@ class Simulation:
             raise ValueError('parameter current_density must be provided')
         elif not self.current_density and self.average_cell_voltage is None:
             raise ValueError('parameter average_cell_voltage must be provided')
-        stack_dict = input_dicts.sim_dict['stack']
+        stack_dict = self.settings['stack']
         cell_number = stack_dict['cell_number']
         if self.current_control:
             stack_dict['init_current_density'] = self.current_density
         else:
             stack_dict['voltage'] = self.average_cell_voltage * cell_number
 
-        self.stack = stack.Stack(n_nodes, current_control=self.current_control)
+        self.stack = stack.Stack(self.settings, n_nodes,
+                                 current_control=self.current_control)
 
         # initialize output object
-        output_dict = input_dicts.sim_dict['output']
+        output_dict = self.settings['output']
         self.output = output.Output(output_dict)
 
     # @do_c_profile
@@ -142,6 +154,10 @@ class Simulation:
             average_current_density = \
                 np.average([np.average(cell.i_cd, weights=cell.active_area_dx)
                             for cell in self.stack.cells])
+            if self.stack.coolant_circuit is None:
+                cool_mass_flow = 0.0
+            else:
+                cool_mass_flow = self.stack.coolant_circuit.mass_flow_in
             global_data = \
                 {'Stack Voltage': {'value': self.stack.v_stack, 'units': 'V'},
                  'Average Cell Voltage':
@@ -161,7 +177,7 @@ class Simulation:
                       * self.stack.cells[0].active_area,
                       'units': 'W'},
                  'Cooling Mass Flow Rate:':
-                     {'value': self.stack.coolant_circuit.mass_flow_in,
+                     {'value': cool_mass_flow,
                       'units': 'kg/s', 'format': '.4E'},
                  'Cathode Mass Flow Rate:':
                      {'value': self.stack.fuel_circuits[0].mass_flow_in,
@@ -174,6 +190,7 @@ class Simulation:
             output_stop_time = timeit.default_timer()
             self.timing['output'] += output_stop_time - output_start_time
             self.output.print_global_data(self, global_data)
+            self.output.save_global_results(global_data)
 
         output_start_time = timeit.default_timer()
 

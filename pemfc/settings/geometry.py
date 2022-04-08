@@ -2,7 +2,7 @@
 
 """Stack Settings"""
 # number of cells in the stack
-cell_number = 10
+cell_number = 1
 
 """"Cell Geometry """
 # length of the cell, a side of the active area [m]
@@ -62,7 +62,7 @@ anode_flow_direction = -1
 # set boolean to calculate coolant flow
 coolant_circuit = True
 # set boolean for coolant flow between the edge cells and endplates
-cooling_bc = True
+cooling_bc = False
 # channel length [m]
 coolant_channel_length = 0.5
 # height of the coolant channel [m]
@@ -96,12 +96,12 @@ anode_manifold_cross_shape = 'circular'
 coolant_manifold_cross_shape = 'circular'
 
 # manifold diameters [m] (for circular shape)
-cathode_in_manifold_diameter = 75e-3
-cathode_out_manifold_diameter = 75e-3
-anode_in_manifold_diameter = 45-3
-anode_out_manifold_diameter = 45e-3
-coolant_in_manifold_diameter = 55e-3
-coolant_out_manifold_diameter = 55e-3
+cathode_in_manifold_diameter = 40e-3
+cathode_out_manifold_diameter = 40e-3
+anode_in_manifold_diameter = 40e-3
+anode_out_manifold_diameter = 40e-3
+coolant_in_manifold_diameter = 40e-3
+coolant_out_manifold_diameter = 40e-3
 
 # manifold height [m] (for rectangular shape)
 cathode_in_manifold_height = 10e-3
