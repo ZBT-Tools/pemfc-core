@@ -16,7 +16,7 @@ from . import stack as stack
 from ..data import input_dicts
 
 # configure backend here
-main_name=sys.argv[0]
+main_name = sys.argv[0]
 if 'main_app.py' in main_name:
     matplotlib.use('TkAgg')
 
