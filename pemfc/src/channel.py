@@ -339,9 +339,14 @@ class Channel(ABC, oo.OutputObject):
                              'must be of equal shape')
         # calculate resistance based pressure drop
         dp_res = np.zeros(self.n_ele)
-        for zeta in self.zetas:
-            zeta.update()
-            dp_res += zeta.calc_pressure_drop()
+        try:
+            for zeta in self.zetas:
+                zeta.update()
+                dp_res += zeta.calc_pressure_drop()
+        except FloatingPointError:
+            raise FloatingPointError('check if channel geometry is '
+                                     'adequate for flow conditions in {}'.
+                                     format(self.name))
 
         # calculate influence of dynamic pressure variation due to velocity
         # changes on static pressure drop
