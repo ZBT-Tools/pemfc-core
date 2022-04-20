@@ -75,9 +75,10 @@ class WallFrictionFlowResistance(FlowResistance):
             else:
                 raise NotImplementedError
 
-            factor[lam_id] = \
-                np.divide(f_reynolds, reynolds_lam, where=reynolds_lam > 0.0)
-
+            factor_lam = \
+                np.divide(f_reynolds, reynolds_lam,
+                          where=reynolds_lam > 1e-6)
+            factor[lam_id] = factor_lam
         if np.any(turb):
             reynolds_turb = reynolds[turb_id]
             if self.method == 'Blasius':
@@ -89,6 +90,8 @@ class WallFrictionFlowResistance(FlowResistance):
         self.value[np.isnan(self.value)] = 0.0
         self.value[self.value < constants.SMALL] = 0.0
         np.seterr(under='raise')
+        # if np.any(self.value > 1e3):
+        #     raise FloatingPointError
 
     def calc_pressure_drop(self):
         dp_node = 0.5 * self.channel.fluid.density * self.value \

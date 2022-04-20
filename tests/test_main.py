@@ -15,8 +15,8 @@ with open(os.path.join('tests', 'results.json')) as file:
     ref_results = json.load(file)
 
 
-def test_inputs():
-    assert main_settings == ref_settings
+# def test_inputs():
+#     assert main_settings == ref_settings
 
 
 def test_global_results():

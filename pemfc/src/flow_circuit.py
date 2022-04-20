@@ -267,8 +267,14 @@ class KohFlowCircuit(ParallelFlowCircuit):
                 * self.visc_channel * self.l_by_a
         self.dp_ref = np.maximum(self.dp_channel[-1], 1e-3)
         self.alpha[:] = (p_in - p_out) / self.dp_ref
-        self.dp_ref = self.vol_flow_in / np.sum(self.alpha) * self.l_by_a \
-            * self.visc_channel[-1] / self.k_perm[-1] / self.n_subchannels
+        try:
+            self.dp_ref = self.vol_flow_in / np.sum(self.alpha) * self.l_by_a \
+                * self.visc_channel[-1] / self.k_perm[-1] / self.n_subchannels
+        except FloatingPointError:
+            raise FloatingPointError('check if geomtries are adequate '
+                                     'for flow conditions in {}'.
+                                     format(self.name))
+
         p_in += self.dp_ref \
             + self.manifolds[1].pressure[self.manifolds[1].id_out] \
             - self.manifolds[0].p_out
@@ -408,9 +414,13 @@ class UpdatedKohFlowCircuit(KohFlowCircuit):
             self.k_perm[:] = self.channel_vol_flow / self.dp_channel \
                 * self.visc_channel * self.l_by_a / self.n_subchannels
 
-        self.dp_ref = self.vol_flow_in / np.sum(self.alpha) * self.l_by_a[-1] \
-            * self.visc_channel[-1] / self.k_perm[-1] / self.n_subchannels
-
+        try:
+            self.dp_ref = self.vol_flow_in / np.sum(self.alpha) * self.l_by_a[-1] \
+                * self.visc_channel[-1] / self.k_perm[-1] / self.n_subchannels
+        except FloatingPointError:
+            raise FloatingPointError('check if geomtries are adequate '
+                                     'for flow conditions in {}'.
+                                     format(self.name))
         self.update_manifolds(update_fluid=True)
         p_in = ip.interpolate_1d(self.manifolds[0].pressure)
         p_out = ip.interpolate_1d(self.manifolds[1].pressure)
