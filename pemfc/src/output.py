@@ -384,7 +384,7 @@ class Output:
         data = {'Channel Location':
                 {'value': xvalues, 'units': 'm', 'label': xlabel},
                 'Cells':
-                {'value': [i + 1 for i in range(len(cells))], 'units': '-'}}
+                {'value': [list(range(len(cells)))], 'units': '-'}}
         data = get_oo_collection_data(cells, data_dict=data, xkey=xlabel)
         # Save channel values
         cathode_channels = [cell.cathode.channel for cell in fc_stack.cells]
@@ -409,7 +409,6 @@ class Output:
                 data = get_oo_collection_data([fuel_circuits[i]],
                                               data_dict=data,
                                               names=[names[i]], xkey='Cells')
-        data['Cells'] = {'value': list(range(len(cells))), 'units': '-'}
         # Save coolant circuit values
         if fc_stack.coolant_circuit is not None:
             coolant_circuits = [fc_stack.coolant_circuit]
