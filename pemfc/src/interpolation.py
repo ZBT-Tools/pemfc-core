@@ -7,8 +7,8 @@ def interpolate_1d(array, add_edge_points=False):
     add_edge_points is True, the neighbouring value from the settings array is
     used at the edges and the returned array will larger than the settings array.
     """
-
-    interpolated = np.asarray(array[:-1] + array[1:]) * .5
+    array = np.asarray(array)
+    interpolated = (array[:-1] + array[1:]) * .5
     if add_edge_points:
         first = np.asarray([array[0]])
         last = np.asarray([array[-1]])

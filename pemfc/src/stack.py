@@ -191,6 +191,10 @@ class Stack:
         self.flow_circuits = \
             [self.fuel_circuits[0], self.fuel_circuits[1], self.coolant_circuit]
 
+        # # prepend names of output values with flow circuit name
+        # for item in self.flow_circuits:
+        #     item.extend_data_names(item.name)
+
         self.current_control = current_control
 
         i_cd_target = np.asarray(stack_dict['init_current_density'])

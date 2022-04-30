@@ -55,7 +55,8 @@ class Cell(OutputObject):
         # Append half cell names to output data
         for half_cell in self.half_cells:
             half_cell.channel.extend_data_names(half_cell.channel.name)
-            half_cell.channel.fluid.extend_data_names(half_cell.channel.fluid.name)
+            half_cell.channel.fluid.extend_data_names(
+                half_cell.channel.fluid.name)
 
         self.dx = self.cathode.channel.dx
 
