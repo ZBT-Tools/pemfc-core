@@ -409,7 +409,7 @@ class Output:
                 data = get_oo_collection_data([fuel_circuits[i]],
                                               data_dict=data,
                                               names=[names[i]], xkey='Cells')
-        data['Cells'] = {'value': list(range(len(cells))), 'unit': '-'}
+        data['Cells'] = {'value': list(range(len(cells))), 'units': '-'}
         # Save coolant circuit values
         if fc_stack.coolant_circuit is not None:
             coolant_circuits = [fc_stack.coolant_circuit]
