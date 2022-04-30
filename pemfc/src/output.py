@@ -372,8 +372,8 @@ class Output:
                         {'value': var_array,
                          'units': oo_collection[0].
                          print_data[1][base_name][sub_name]['units']}
-                    if xkey is not None:
-                        data_dict[first_key][second_key]['xkey'] = xkey
+                if xkey is not None:
+                    data_dict[first_key]['xkey'] = xkey
             return data_dict
 
         # Save cell values
