@@ -80,7 +80,7 @@ class WaterTransportMembrane(Membrane, ABC):
         self.water_content = np.zeros((2, len(self.dx)))
         self.water_flux = np.zeros(self.dx.shape)
         self.add_print_data(self.water_flux,
-                            'Molar Membrane Water Flux', 'mol/(s-m²')
+                            'Membrane Water Flux', 'mol/(s-m²')
 
     def calc_cross_water_flux(self, current_density, humidity):
         """

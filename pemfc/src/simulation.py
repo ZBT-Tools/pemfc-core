@@ -136,7 +136,17 @@ class Simulation:
 
                 case_name = 'Case'+str(i)
                 self.output.save(case_name, self.stack)
-                local_data_list.append(self.output.get_data(self.stack))
+                local_data_dict = self.output.get_data(self.stack)
+                local_data_dict['Iterations'] = \
+                    {'value': [list(range(counter))], 'units': '-'}
+                local_data_dict['Current Density Error'] = \
+                    {'value': [current_errors], 'units': '-',
+                     'xkey': 'Iterations'}
+                local_data_dict['Temperature Error'] = \
+                    {'value': [current_errors], 'units': '-',
+                     'xkey': 'Iterations'}
+
+                local_data_list.append(local_data_dict)
                 if self.output.save_plot:
                     path = os.path.join(self.output.output_dir, case_name,
                                         'plots', 'Convergence.png')

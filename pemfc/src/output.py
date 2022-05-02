@@ -331,7 +331,8 @@ class Output:
         #             data_dict[names[i]] = p_data
         #     return data_dict
 
-        def get_oo_collection_data(oo_collection, data_dict=None, **kwargs):
+        def get_oo_collection_data(oo_collection, data_dict=None,
+                                   xkey=None, **kwargs):
             if data_dict is None:
                 data_dict = {}
             n_items = len(oo_collection)
@@ -347,6 +348,8 @@ class Output:
                 data_dict[names[i]] = \
                     {'value': var_array,
                      'units': oo_collection[0].print_data[0][name]['units']}
+                if xkey is not None:
+                    data_dict[names[i]]['xkey'] = xkey
 
             names = kwargs.pop('names', None)
             # names = kwargs.pop('names',
@@ -369,6 +372,8 @@ class Output:
                         {'value': var_array,
                          'units': oo_collection[0].
                          print_data[1][base_name][sub_name]['units']}
+                if xkey is not None:
+                    data_dict[first_key]['xkey'] = xkey
             return data_dict
 
         # Save cell values
@@ -379,26 +384,36 @@ class Output:
         data = {'Channel Location':
                 {'value': xvalues, 'units': 'm', 'label': xlabel},
                 'Cells':
-                {'value': [i + 1 for i in range(len(cells))], 'units': '-'}}
-        data = get_oo_collection_data(cells, data_dict=data)
+                {'value': [list(range(len(cells)))], 'units': '-'}}
+        data = get_oo_collection_data(cells, data_dict=data, xkey=xlabel)
         # Save channel values
         cathode_channels = [cell.cathode.channel for cell in fc_stack.cells]
-        data = get_oo_collection_data(cathode_channels, data_dict=data)
+        data = get_oo_collection_data(cathode_channels, data_dict=data,
+                                      xkey=xlabel)
         anode_channels = [cell.anode.channel for cell in fc_stack.cells]
-        data = get_oo_collection_data(anode_channels, data_dict=data)
+        data = get_oo_collection_data(anode_channels, data_dict=data,
+                                      xkey=xlabel)
 
         # Save fluid values
         cathode_fluids = [cell.cathode.channel.fluid for cell in fc_stack.cells]
-        data = get_oo_collection_data(cathode_fluids, data_dict=data)
+        data = get_oo_collection_data(cathode_fluids, data_dict=data,
+                                      xkey=xlabel)
         anode_fluids = [cell.anode.channel.fluid for cell in fc_stack.cells]
-        data = get_oo_collection_data(anode_fluids, data_dict=data)
+        data = get_oo_collection_data(anode_fluids, data_dict=data,
+                                      xkey=xlabel)
 
+        # Save membrane values
+        membranes = [cell.membrane for cell in fc_stack.cells]
+        data = get_oo_collection_data(membranes, data_dict=data,
+                                      xkey=xlabel)
         # Save fuel circuit values
         if fc_stack.n_cells > 1:
             fuel_circuits = fc_stack.fuel_circuits
-            data = get_oo_collection_data(fuel_circuits, data_dict=data,
-                                          names=['Cathode', 'Anode'])
-
+            names = ['Cathode Flow Distribution', 'Anode Flow Distribution']
+            for i in range(len(fuel_circuits)):
+                data = get_oo_collection_data([fuel_circuits[i]],
+                                              data_dict=data,
+                                              names=[names[i]], xkey='Cells')
         # Save coolant circuit values
         if fc_stack.coolant_circuit is not None:
             coolant_circuits = [fc_stack.coolant_circuit]
@@ -406,7 +421,8 @@ class Output:
                 {'value': [i + 1 for i
                            in range(coolant_circuits[0].n_channels)],
                  'units': '-'}
-            data = get_oo_collection_data(coolant_circuits, data_dict=data)
+            data = get_oo_collection_data(coolant_circuits, data_dict=data,
+                                          names=['Coolant Flow Distribution'])
 
             cool_channels = \
                 [channel for channel in coolant_circuits[0].channels]
