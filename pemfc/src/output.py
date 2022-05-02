@@ -401,6 +401,11 @@ class Output:
         anode_fluids = [cell.anode.channel.fluid for cell in fc_stack.cells]
         data = get_oo_collection_data(anode_fluids, data_dict=data,
                                       xkey=xlabel)
+
+        # Save membrane values
+        membranes = [cell.membrane for cell in fc_stack.cells]
+        data = get_oo_collection_data(membranes, data_dict=data,
+                                      xkey=xlabel)
         # Save fuel circuit values
         if fc_stack.n_cells > 1:
             fuel_circuits = fc_stack.fuel_circuits

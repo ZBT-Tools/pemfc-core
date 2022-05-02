@@ -31,8 +31,8 @@ class OneDimensionalFluid(ABC, OutputObject):
                 'units': ['K', 'Pa'],
                 # 'sub_names': ['None', 'None']
             }
-        self.combine_print_variables(self.print_variables,
-                                     kwargs.get('print_variables', None))
+        self.print_variables = self.combine_print_variables(
+            self.print_variables, kwargs.get('print_variables', None))
         temperature = np.asarray(temperature)
         pressure = np.asarray(pressure)
         self._temperature = np.zeros(self.nodes)
@@ -321,7 +321,7 @@ class GasMixture(OneDimensionalFluid):
 
         # self.add_print_data(self.mole_fraction, 'Mole Fraction',
         #                     sub_names=self.species.names)
-        self.add_print_variables(self.print_variables)
+        # self.add_print_variables(self.print_variables)
 
     @property
     def mole_fraction(self):
@@ -498,14 +498,8 @@ class TwoPhaseMixture(OneDimensionalFluid):
                  liquid_props=None, temperature=298.15, pressure=101325.0,
                  **kwargs):
         # print("__init__ for TwoPhaseMixture")
-        print_variables = \
-            {
-                'names': ['humidity'],
-                'units': ['-'],
-                'sub_names': ['None']
-            }
-        super().__init__(nx, name, temperature, pressure,
-                         print_variables=print_variables, **kwargs)
+
+        super().__init__(nx, name, temperature, pressure, **kwargs)
         if not isinstance(species_dict, dict):
             raise TypeError('Argument species_dict must be a dict '
                             'containing all species names and their '
@@ -574,7 +568,13 @@ class TwoPhaseMixture(OneDimensionalFluid):
         self.saturation_pressure = np.zeros(nx)
 
         # Print data
-        self.add_print_variables(self.print_variables)
+        print_variables = \
+            {
+                'names': ['humidity', 'mole_fraction'],
+                'units': ['-', '-'],
+                'sub_names': ['None', 'self.species.names']
+            }
+        self.add_print_variables(print_variables)
         # self.add_print_data(self.humidity, 'Humidity')
         # print(self.print_data)
         # print(self.gas.print_data)
