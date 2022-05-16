@@ -66,10 +66,13 @@ def build_x_cell_conductance_matrix(cond_vector, n_ele, n_layer=None):
         raise ValueError('x-conductance matrix can only be built for n_ele > 1')
     if n_layer is None:
         n_layer = len(cond_vector)
-    center_diag = np.concatenate([cond_vector[:, i] for i in range(n_ele)])
+    # center_diag = np.concatenate([cond_vector[:, i] for i in range(n_ele)])
+    # flatten in column-major order
+    center_diag = cond_vector.flatten(order='F')
+    off_diag = center_diag[:-n_layer]
     center_diag[n_layer:-n_layer] *= 2.0
     center_diag *= -1.0
-    off_diag = np.concatenate([cond_vector[:, i] for i in range(n_ele-1)])
+    # off_diag = np.concatenate([cond_vector[:, i] for i in range(n_ele-1)])
     return np.diag(center_diag, k=0) \
         + np.diag(off_diag, k=-n_layer) \
         + np.diag(off_diag, k=n_layer)

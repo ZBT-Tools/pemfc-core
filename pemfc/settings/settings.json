@@ -1,6 +1,6 @@
 {
   "stack": {
-    "cell_number": 10,
+    "cell_number": 3,
     "heat_power": 0.0,
     "cool_flow": true,
     "calc_temperature": true,
@@ -14,7 +14,7 @@
     "convergence_criteria": 1e-07,
     "current_control": true,
     "operation_control": "Current",
-    "elements": 10,
+    "elements": 4,
     "current_density": 20000.0,
     "average_cell_voltage": 0.5,
     "channel_land_discretization": false
@@ -25,7 +25,6 @@
     "underrelaxation_factor": 0.7,
     "open_circuit_voltage": 1.0,
     "thermoneutral_voltage": 1.25,
-    "channel_land_discretization": false,
     "first_cell": false,
     "last_cell": true,
     "heat_flux": 0.0

@@ -105,6 +105,13 @@ class Cell(OutputObject):
                         self.anode.gde.thermal_conductance[1],
                         self.anode.bpp.thermal_conductance[1]])
 
+        # self.thermal_conductance_y = \
+        #     np.asarray([self.cathode.bpp.thermal_conductance[1],
+        #                 self.cathode.gde.thermal_conductance[1],
+        #                 self.membrane.thermal_conductance[1],
+        #                 self.anode.gde.thermal_conductance[1],
+        #                 self.anode.bpp.thermal_conductance[1]])
+
         self.thermal_conductance_x = \
             (self.thermal_conductance_x
              + np.roll(self.thermal_conductance_x, 1, axis=0)) * 0.5
