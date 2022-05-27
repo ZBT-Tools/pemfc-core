@@ -1,8 +1,8 @@
 import numpy as np
 import pemfc.src.fluid as fluid
 import cantera as ct
-import CoolProp
-import CoolProp.CoolProp as CP
+# import CoolProp
+# import CoolProp.CoolProp as CP
 
 import time
 
@@ -31,6 +31,9 @@ fluid_dict = \
 
 humid_air_pemfc = fluid.factory(fluid_dict)
 humid_air_pemfc.update()
+
+humid_air_ct = fluid.factory(fluid_dict, backend='cantera')
+humid_air_ct.update()
 # print(humid_air_pemfc.mole_fraction)
 # print(humid_air_pemfc.gas.concentration)
 
@@ -88,8 +91,6 @@ start_time_ct = time.time()
 for i in range(n_iter):
     humid_air_ct.TP = np.ones(fluid_dict['nodes']) * 343.15, \
                       np.ones(fluid_dict['nodes']) * 101325
-    humid_air_ct.X = dict(zip(species_names, [item * np.ones(fluid_dict['nodes'])
-                                              for item in humid_fractions]))
     density = humid_air_ct.density
 end_time_ct = time.time()
 

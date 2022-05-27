@@ -22,8 +22,8 @@ except ImportError:
 
 class OneDimensionalFluid(ABC, OutputObject):
 
-    PROPERTY_NAMES = ['Density', 'Specific Heat', 'Viscosity',
-                      'Thermal Conductivity']
+    PROPERTY_NAMES = ['density', 'specific_heat', 'viscosity',
+                      'thermal_conductivity']
     TYPE_NAME = 'Base Fluid'
 
     def __init__(self, nx, name, temperature=298.15, pressure=101325.0,
@@ -117,35 +117,35 @@ class OneDimensionalFluid(ABC, OutputObject):
 
     @property
     def density(self):
-        return self.property['Density']
+        return self.property['density']
 
     @property
     def viscosity(self):
-        return self.property['Viscosity']
+        return self.property['viscosity']
 
     @property
     def thermal_conductivity(self):
-        return self.property['Thermal Conductivity']
+        return self.property['thermal_conductivity']
 
     @property
     def specific_heat(self):
-        return self.property['Specific Heat']
+        return self.property['specific_heat']
 
     # @density.setter
     # def density(self, value):
-    #     self.property['Density'] = value
+    #     self.property['density'] = value
     #
     # @viscosity.setter
     # def viscosity(self, value):
-    #     self.property['Viscosity'] = value
+    #     self.property['viscosity'] = value
     #
     # @thermal_conductivity.setter
     # def thermal_conductivity(self, value):
-    #     self.property['Thermal Conductivity'] = value
+    #     self.property['thermal_conductivity'] = value
     #
     # @specific_heat.setter
     # def specific_heat(self, value):
-    #     self.property['Specific Heat'] = value
+    #     self.property['specific_heat'] = value
 
     def rescale(self, new_nx):
         """
@@ -213,10 +213,10 @@ class ConstantFluid(OneDimensionalFluid):
             raise TypeError('Argument fluid_props must be of type '
                             'ConstantProperties')
         else:
-            self.property['Density'][:] = fluid_props.density
-            self.property['Specific Heat'][:] = fluid_props.specific_heat
-            self.property['Viscosity'][:] = fluid_props.viscosity
-            self.property['Thermal Conductivity'][:] = \
+            self.property['density'][:] = fluid_props.density
+            self.property['specific_heat'][:] = fluid_props.specific_heat
+            self.property['viscosity'][:] = fluid_props.viscosity
+            self.property['thermal_conductivity'][:] = \
                 fluid_props.thermal_conductivity
         self.add_print_variables(self.print_variables)
 
@@ -464,13 +464,13 @@ class GasMixture(OneDimensionalFluid):
         :param method: method density calculation (at the moment only ideal)
         :return: the calculated 1D array of the specific property
         """
-        if property_name == 'Specific Heat':
+        if property_name == 'specific_heat':
             return self.calc_specific_heat(temperature)
-        elif property_name == 'Viscosity':
+        elif property_name == 'viscosity':
             return self.calc_viscosity(temperature)
-        elif property_name == 'Thermal Conductivity':
+        elif property_name == 'thermal_conductivity':
             return self.calc_thermal_conductivity(temperature, pressure)
-        elif property_name == 'Density':
+        elif property_name == 'density':
             return self.calc_density(temperature, pressure, method)
         else:
             raise ValueError('property_name '
@@ -692,7 +692,7 @@ class TwoPhaseMixture(OneDimensionalFluid):
         :param method: method density calculation (at the moment only ideal)
         :return: the calculated 1D array of the specific property
         """
-        if property_name == 'Specific Heat':
+        if property_name == 'specific_heat':
             return self.calc_specific_heat()
         else:
             return self.gas.property[property_name]
@@ -781,9 +781,15 @@ class CanteraGasMixture(OneDimensionalFluid):
     def __init__(self, nx, name, species_dict, mole_fractions,
                  temperature=298.15, pressure=101325.0, **kwargs):
         super().__init__(nx, name, temperature, pressure, **kwargs)
-        self.species_names = species_dict.keys()
+        self.species_names = list(species_dict.keys())
         self.n_species = len(self.species_names)
 
+        # Property name reference to Cantera names
+        self.prop_name_ref = \
+            {'density': 'density',
+             'viscosity': 'viscosity',
+             'thermal_conductivity': 'thermal_conductivity',
+             'specific_heat': 'cp'}
         # Create Cantera gas solution
         self.solution = ct.Solution('gri30.yaml')
         # Set initial species and their mole fractions
@@ -806,6 +812,7 @@ class CanteraGasMixture(OneDimensionalFluid):
         self.solution_array.TP = self._temperature, self._pressure
         if mole_composition is not None:
             self.solution_array.X = self.set_composition(mole_composition)
+        self.calc_properties(self._temperature, self._pressure)
 
     def set_composition(self, mole_composition):
         if np.shape(mole_composition)[0] != self.n_species:
@@ -825,8 +832,11 @@ class CanteraGasMixture(OneDimensionalFluid):
         :return: the calculated 1D array of the specific property
         """
         for prop in self.PROPERTY_NAMES:
-            self.property[prop][:] = \
-                self.solution_array.
+            if hasattr(self.solution_array, self.prop_name_ref[prop]):
+                self.property[prop][:] = \
+                    getattr(self.solution_array, self.prop_name_ref[prop])
+            else:
+                raise AttributeError
 
 
 class CanteraTwoPhaseMixture(CanteraGasMixture):
@@ -839,7 +849,7 @@ class CanteraTwoPhaseMixture(CanteraGasMixture):
         phase_change_species_names = \
             [key for key in species_dict
              if 'gas' and 'liquid' in species_dict[key]]
-        species_names = species_dict.keys()
+        species_names = list(species_dict.keys())
 
         ids_pc = [species_names.index(name) for name in
                   phase_change_species_names]
@@ -875,9 +885,10 @@ class CanteraTwoPhaseMixture(CanteraGasMixture):
         return humid_composition
 
     def update(self, temperature=None, pressure=None,
-               mole_composition=None, gas_mole_composition=None, *args, **kwargs):
+               mole_composition=None, gas_mole_composition=None,
+               *args, **kwargs):
         super().update(temperature, pressure, *args, **kwargs)
-        self.water.TP = self._temperature, self._pressure
+        # self.water.TP = self._temperature, self._pressure
 
 
 def liquid_factory(nx, name, liquid_props, temperature, pressure):
@@ -893,19 +904,30 @@ def liquid_factory(nx, name, liquid_props, temperature, pressure):
 
 def arg_factory(nx, name, liquid_props=None, species_dict=None,
                 mole_fractions=None, temperature=293.15,
-                pressure=101325.0, **kwargs):
+                pressure=101325.0, backend='pemfc', **kwargs):
     if species_dict is None:
         return liquid_factory(nx, name, liquid_props, temperature, pressure)
     else:
         species_types = list(species_dict.values())
         species_types_str = ' '.join(species_types)
         if 'gas' in species_types_str and 'liquid' not in species_types_str:
-            return GasMixture(nx, name, species_dict, mole_fractions,
-                              temperature, pressure)
+            if backend == 'pemfc':
+                return GasMixture(nx, name, species_dict, mole_fractions,
+                                  temperature, pressure)
+            elif backend == 'cantera':
+                return CanteraGasMixture(nx, name, species_dict, mole_fractions,
+                                         temperature, pressure)
+            else:
+                raise NotImplementedError
         elif 'gas' in species_types_str and 'liquid' in species_types_str:
-            return TwoPhaseMixture(nx, name, species_dict, mole_fractions,
-                                   liquid_props, temperature, pressure,
-                                   **kwargs)
+            if backend == 'pemfc':
+                return TwoPhaseMixture(
+                    nx, name, species_dict, mole_fractions, liquid_props,
+                    temperature, pressure, **kwargs)
+            elif backend == 'cantera':
+                return CanteraTwoPhaseMixture(
+                    nx, name, species_dict, mole_fractions,
+                    temperature, pressure, **kwargs)
         elif 'liquid' in species_types_str and 'gas' \
                 not in species_types_str:
             return liquid_factory(nx, name, liquid_props, temperature, pressure)
@@ -944,8 +966,7 @@ def factory(fluid_dict, backend='pemfc'):
         fluid_props = species.ConstantProperties(name, **props_dict)
         return ConstantFluid(nx, name, fluid_props, temperature, pressure)
     else:
-        return arg_factory(nx, name, liquid_props=liquid_props,
-                           species_dict=species_dict,
-                           mole_fractions=mole_fractions,
-                           temperature=temperature,
-                           pressure=pressure, humidity=humidity)
+        return arg_factory(
+            nx, name, liquid_props=liquid_props, species_dict=species_dict,
+            mole_fractions=mole_fractions, temperature=temperature,
+            pressure=pressure, humidity=humidity, backend=backend)
