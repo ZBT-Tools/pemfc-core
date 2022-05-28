@@ -72,25 +72,23 @@ molar_composition = np.asarray([item * np.ones(fluid_dict['nodes'])
                                 for item in humid_fractions])
 
 
-humid_air_obj_ct.TP = fluid_dict['temperature'], fluid_dict['pressure']
-humid_air_ct = ct.SolutionArray(humid_air_obj_ct, (fluid_dict['nodes']))
-humid_air_ct.TP = 383.15, 101325
-humid_air_ct.X[:, species_ids] = molar_composition.transpose()
+# humid_air_obj_ct.TP = fluid_dict['temperature'], fluid_dict['pressure']
+# humid_air_ct = ct.SolutionArray(humid_air_obj_ct, (fluid_dict['nodes']))
+# humid_air_ct.TP = 383.15, 101325
+# humid_air_ct.X[:, species_ids] = molar_composition.transpose()
 
 print(humid_air_obj_ct())
 
 n_iter = 1000
 start_time_pemfc = time.time()
 for i in range(n_iter):
-    humid_air_pemfc.update(np.ones(fluid_dict['nodes']) * 343.15,
-                           np.ones(fluid_dict['nodes']) * 101325)
+    humid_air_pemfc.update(343.15, 101325)
     density = humid_air_pemfc.density
 end_time_pemfc = time.time()
 
 start_time_ct = time.time()
 for i in range(n_iter):
-    humid_air_ct.TP = np.ones(fluid_dict['nodes']) * 343.15, \
-                      np.ones(fluid_dict['nodes']) * 101325
+    humid_air_ct.update(343.15, 101325)
     density = humid_air_ct.density
 end_time_ct = time.time()
 

@@ -832,11 +832,20 @@ class CanteraGasMixture(OneDimensionalFluid):
         :return: the calculated 1D array of the specific property
         """
         for prop in self.PROPERTY_NAMES:
-            if hasattr(self.solution_array, self.prop_name_ref[prop]):
-                self.property[prop][:] = \
-                    getattr(self.solution_array, self.prop_name_ref[prop])
-            else:
-                raise AttributeError
+        #     if prop == 'density':
+        #         self.property[prop] = self.solution_array.density
+        #     elif prop == 'viscosity':
+        #         self.property[prop] = self.solution_array.viscosity
+        #     elif prop == 'thermal_conductivity':
+        #         self.property[prop] = self.solution_array.thermal_conductivity
+        #     elif prop == 'specific_heat':
+        #         self.property[prop] = self.solution_array.cp
+        # The following is more elegant but seems to be really slow
+        #     if hasattr(self.solution_array, self.prop_name_ref[prop]):
+            self.property[prop] = \
+               getattr(self.solution_array, self.prop_name_ref[prop])
+            # else:
+            #     raise AttributeError
 
 
 class CanteraTwoPhaseMixture(CanteraGasMixture):
