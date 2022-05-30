@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 # local module imports
 from . import interpolation as ip, global_functions as g_func, \
-    channel as chl, output_object as oo
+    channel as chl, output_object as oo, fluid as fluids
 
 
 class ParallelFlowCircuit(ABC, oo.OutputObject):
@@ -603,9 +603,17 @@ def factory(dict_circuit, dict_in_manifold, dict_out_manifold,
         raise TypeError('argument channels must be a list of type Channel')
 
     n_channels = len(channels)
-    in_manifold_fluid = channels[0].fluid.copy()
-    in_manifold_fluid.rescale(n_channels + 1)
-    out_manifold_fluid = in_manifold_fluid.copy()
+
+    if hasattr(channels[0].fluid, 'dict') \
+            and isinstance(channels[0].fluid, fluids.CanteraGasMixture):
+        fluid_dict = channels[0].fluid.dict
+        fluid_dict['nodes'] = n_channels + 1
+        in_manifold_fluid = fluids.factory(fluid_dict)
+        out_manifold_fluid = fluids.factory(fluid_dict)
+    else:
+        in_manifold_fluid = channels[0].fluid.copy()
+        in_manifold_fluid.rescale(n_channels + 1)
+        out_manifold_fluid = in_manifold_fluid.copy()
 
     manifolds = [chl.Channel(dict_in_manifold, in_manifold_fluid),
                  chl.Channel(dict_out_manifold, out_manifold_fluid)]

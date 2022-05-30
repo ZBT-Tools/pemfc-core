@@ -15,9 +15,9 @@ else:
 
 try:
     import cantera as ct
-    CANTERA = True
+    CANTERA_FOUND = True
 except ImportError:
-    CANTERA = False
+    CANTERA_FOUND = False
 
 
 class OneDimensionalFluid(ABC, OutputObject):
@@ -338,6 +338,14 @@ class GasMixture(OneDimensionalFluid):
     def concentration(self, value):
         self._concentration[:] = value.transpose()
 
+    @property
+    def species_mw(self):
+        return self.species.mw
+
+    @property
+    def species_names(self):
+        return self.species.names
+
     def update(self, temperature=None, pressure=None, mole_composition=None,
                method='ideal', *args, **kwargs):
         super().update(temperature, pressure)
@@ -622,6 +630,14 @@ class TwoPhaseMixture(OneDimensionalFluid):
     def species(self):
         return self.gas.species
 
+    @property
+    def species_mw(self):
+        return self.gas.species_mw
+
+    @property
+    def species_names(self):
+        return self.gas.species_names
+
     def _set_name(self, name):
         super()._set_name(name)
         self.gas.name = self.name + ': Gas Phase'
@@ -781,6 +797,8 @@ class CanteraGasMixture(OneDimensionalFluid):
     def __init__(self, nx, name, species_dict, mole_fractions,
                  temperature=298.15, pressure=101325.0, **kwargs):
         super().__init__(nx, name, temperature, pressure, **kwargs)
+
+        self.dict = kwargs.get('fluid_dict')
         self.species_names = list(species_dict.keys())
         self.n_species = len(self.species_names)
 
@@ -803,26 +821,37 @@ class CanteraGasMixture(OneDimensionalFluid):
         # Get ids for used species from complete list
         self.species_ids = [self.all_species_names.index(item) for item
                             in self.species_names]
-
-        self._mole_fraction = self.get_composition()
+        self.species_mw = \
+            self.solution.molecular_weights[self.species_ids] * 1e-3
+        self._mole_fraction = self._get_composition()
+        self._mass_fraction = self._get_composition(mole_fractions=False)
 
     def update(self, temperature=None, pressure=None, mole_composition=None,
                *args, **kwargs):
         super().update(temperature, pressure)
         self.solution_array.TP = self._temperature, self._pressure
         if mole_composition is not None:
-            self.solution_array.X = self.set_composition(mole_composition)
+            self.solution_array.X = self._set_composition(mole_composition)
         self.calc_properties(self._temperature, self._pressure)
+        self._mass_fraction = self._get_composition(mole_fractions=False)
 
-    def set_composition(self, mole_composition):
+    def _set_composition(self, mole_composition):
         if np.shape(mole_composition)[0] != self.n_species:
             raise ValueError('First dimension of composition must be '
                              'equal to number of species')
         self.solution_array.X[:, self.species_ids] = \
             mole_composition.transpose()
 
-    def get_composition(self):
-        return self.solution_array.X[:, self.species_ids]
+    def _get_composition(self, mole_fractions=True):
+        if mole_fractions:
+            return self.solution_array.X[:, self.species_ids]
+        else:
+            return self.solution_array.Y[:, self.species_ids]
+
+    def rescale(self, new_nx):
+        super().rescale(new_nx)
+        self.solution_array(self.solution, new_nx)
+        self.update(self._temperature, self._pressure, self._mole_fraction)
 
     def calc_properties(self, temperature, pressure=101325.0, **kwargs):
         """
@@ -832,20 +861,41 @@ class CanteraGasMixture(OneDimensionalFluid):
         :return: the calculated 1D array of the specific property
         """
         for prop in self.PROPERTY_NAMES:
-        #     if prop == 'density':
-        #         self.property[prop] = self.solution_array.density
-        #     elif prop == 'viscosity':
-        #         self.property[prop] = self.solution_array.viscosity
-        #     elif prop == 'thermal_conductivity':
-        #         self.property[prop] = self.solution_array.thermal_conductivity
-        #     elif prop == 'specific_heat':
-        #         self.property[prop] = self.solution_array.cp
-        # The following is more elegant but seems to be really slow
-        #     if hasattr(self.solution_array, self.prop_name_ref[prop]):
             self.property[prop] = \
                getattr(self.solution_array, self.prop_name_ref[prop])
-            # else:
-            #     raise AttributeError
+
+    # @property
+    # def density(self):
+    #     return self.solution_array.density
+    #
+    # @property
+    # def viscosity(self):
+    #     return self.solution_array.viscosity
+    #
+    # @property
+    # def thermal_conductivity(self):
+    #     return self.solution_array.thermal_conductivity
+    #
+    # @property
+    # def specific_heat(self):
+    #     return self.solution_array.cp
+    @property
+    def mole_fraction(self):
+        return self._mole_fraction.transpose()
+
+    @property
+    def mass_fraction(self):
+        return self._mass_fraction.transpose()
+
+    @property
+    def concentration(self):
+        return self.solution_array\
+            .concentrations[:, self.species_ids].transpose() * 1e-3
+
+    @concentration.setter
+    def concentration(self, value):
+        self.solution_array.concentrations[:, self.species_ids] = \
+            value.transpose() * 1000.0
 
 
 class CanteraTwoPhaseMixture(CanteraGasMixture):
@@ -922,10 +972,10 @@ def arg_factory(nx, name, liquid_props=None, species_dict=None,
         if 'gas' in species_types_str and 'liquid' not in species_types_str:
             if backend == 'pemfc':
                 return GasMixture(nx, name, species_dict, mole_fractions,
-                                  temperature, pressure)
+                                  temperature, pressure, **kwargs)
             elif backend == 'cantera':
                 return CanteraGasMixture(nx, name, species_dict, mole_fractions,
-                                         temperature, pressure)
+                                         temperature, pressure, **kwargs)
             else:
                 raise NotImplementedError
         elif 'gas' in species_types_str and 'liquid' in species_types_str:
@@ -944,7 +994,12 @@ def arg_factory(nx, name, liquid_props=None, species_dict=None,
             raise NotImplementedError
 
 
-def factory(fluid_dict, backend='pemfc'):
+def factory(fluid_dict, backend='cantera'):
+
+    if not CANTERA_FOUND and backend == 'cantera':
+        # print('Warning: Cantera module not found, using basic pemfc backend')
+        backend = 'pemfc'
+
     nx = fluid_dict['nodes']
     name = fluid_dict['name']
     liquid_props = fluid_dict.get('liquid_props', None)
@@ -978,4 +1033,5 @@ def factory(fluid_dict, backend='pemfc'):
         return arg_factory(
             nx, name, liquid_props=liquid_props, species_dict=species_dict,
             mole_fractions=mole_fractions, temperature=temperature,
-            pressure=pressure, humidity=humidity, backend=backend)
+            pressure=pressure, humidity=humidity, backend=backend,
+            fluid_dict=fluid_dict)

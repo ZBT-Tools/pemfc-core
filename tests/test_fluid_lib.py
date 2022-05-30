@@ -26,10 +26,10 @@ fluid_dict = \
         "humidity": 0.5,
         "temperature": 343.15,
         "pressure": 101325.0,
-        "nodes": 50
+        "nodes": 46
     }
 
-humid_air_pemfc = fluid.factory(fluid_dict)
+humid_air_pemfc = fluid.factory(fluid_dict, backend='pemfc')
 humid_air_pemfc.update()
 
 humid_air_ct = fluid.factory(fluid_dict, backend='cantera')
@@ -83,13 +83,16 @@ n_iter = 1000
 start_time_pemfc = time.time()
 for i in range(n_iter):
     humid_air_pemfc.update(343.15, 101325)
-    density = humid_air_pemfc.density
+
 end_time_pemfc = time.time()
 
 start_time_ct = time.time()
+temp = 343.15
 for i in range(n_iter):
-    humid_air_ct.update(343.15, 101325)
-    density = humid_air_ct.density
+    # temp += 10.0
+    humid_air_ct.update(temp, 101325)
+
+    print('test')
 end_time_ct = time.time()
 
 # import numpy as np
