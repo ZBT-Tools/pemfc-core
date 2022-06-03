@@ -38,6 +38,7 @@ humid_air_ct.update()
 # print(humid_air_pemfc.gas.concentration)
 
 water_ct = ct.Water()
+water_ct.TP = 373.15, 101325.0
 
 
 def calc_humid_composition(humidity, temperature, pressure,
@@ -71,19 +72,10 @@ species_ids = [all_species_names.index(item) for item in species_names]
 molar_composition = np.asarray([item * np.ones(fluid_dict['nodes'])
                                 for item in humid_fractions])
 
-
-# humid_air_obj_ct.TP = fluid_dict['temperature'], fluid_dict['pressure']
-# humid_air_ct = ct.SolutionArray(humid_air_obj_ct, (fluid_dict['nodes']))
-# humid_air_ct.TP = 383.15, 101325
-# humid_air_ct.X[:, species_ids] = molar_composition.transpose()
-
-print(humid_air_obj_ct())
-
 n_iter = 1000
 start_time_pemfc = time.time()
 for i in range(n_iter):
     humid_air_pemfc.update(343.15, 101325)
-
 end_time_pemfc = time.time()
 
 start_time_ct = time.time()
@@ -91,70 +83,13 @@ temp = 343.15
 for i in range(n_iter):
     # temp += 10.0
     humid_air_ct.update(temp, 101325)
-
-    print('test')
 end_time_ct = time.time()
 
-# import numpy as np
-# import itertools
-# from multiprocessing import Pool
-# CP.set_config_bool(CP.DONT_CHECK_PROPERTY_LIMITS, True)
-#
-# def generate_values(TR,P=101325):
-#     """ Starting with T,R as inputs, generate all other values """
-#     T,R = TR
-#     psi_w = CP.HAPropsSI('psi_w','T',T,'R',R,'P',P)
-#     other_output_keys = ['T_wb','T_dp','Hda','Sda','Vda','Omega']
-#     outputs = {'psi_w':psi_w,'T':T,'P':P,'R':R}
-#     for k in other_output_keys:
-#         outputs[k] = CP.HAPropsSI(k,'T',T,'R',R,'P',P)
-#     return outputs
-#
-# def get_supported_input_pairs():
-#     """ Determine which input pairs are supported """
-#     good_ones = []
-#     inputs = generate_values((300, 0.5))
-#     for k1, k2 in itertools.product(inputs.keys(), inputs.keys()):
-#         if 'P' in [k1,k2] or k1==k2:
-#             continue
-#         args = ('psi_w', k1, inputs[k1], k2, inputs[k2], 'P', inputs['P'])
-#         try:
-#             psi_w_new = CP.HAPropsSI(*args)
-#             if not np.isfinite(psi_w_new):
-#                 raise ValueError('Returned NaN; not ok')
-#             good_ones.append((k1,k2))
-#         except BaseException as BE:
-#             pass
-#             if 'currently at least one of' in str(BE) or 'cannot provide two inputs' in str(BE):
-#                 pass
-#             else:
-#                 print(BE)
-#                 good_ones.append((k1,k2))
-#     return good_ones
-# supported_pairs = get_supported_input_pairs()
-#
-# def calculate(inputs):
-#     """ For a given input, try all possible input pairs """
-#     errors = []
-#     for k1, k2 in supported_pairs:
-#         psi_w_input = inputs['psi_w']
-#         args = 'psi_w',k1,inputs[k1],k2,inputs[k2],'P',inputs['P']
-#         try:
-#             psi_w_new = CP.HAPropsSI(*args)
-#             if not np.isfinite(psi_w_new):
-#                 raise ValueError('Returned NaN; not ok')
-#         except BaseException as BE:
-#             errors.append((str(BE),args, inputs))
-#     return errors
-#
-# if __name__ == '__main__':
-#     print(CoolProp.__version__)
-#     TR = itertools.product(np.linspace(240, 345, 11), np.linspace(0, 1, 11))
-#     with Pool(processes=2) as pool:
-#         input_values = pool.map(generate_values, TR)
-#         errors = pool.map(calculate, input_values)
-#         for err in itertools.chain.from_iterable(errors):
-#             print(err)
+vap_enthalpy_pemfc = humid_air_pemfc.calc_vaporization_enthalpy(temp)
+vap_enthalpy_ct = humid_air_ct.calc_vaporization_enthalpy(temp)
+
+print(vap_enthalpy_pemfc)
+print(vap_enthalpy_ct)
 
 print('PEMFC Time: ', end_time_pemfc-start_time_pemfc)
 print('Cantera Time: ', end_time_ct-start_time_ct)

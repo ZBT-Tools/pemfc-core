@@ -15,9 +15,9 @@ else:
 
 try:
     import cantera as ct
-    CANTERA_FOUND = True
+    FOUND_CANTERA = True
 except ImportError:
-    CANTERA_FOUND = False
+    FOUND_CANTERA = False
 
 
 class OneDimensionalFluid(ABC, OutputObject):
@@ -496,6 +496,98 @@ class GasMixture(OneDimensionalFluid):
             self.property[prop][:] = \
                 self.calc_property(prop, temperature, pressure, method)
 
+class CanteraGasMixture(OneDimensionalFluid):
+    """
+    Wrapper for discrete fluid properties calculated by Cantera library
+    """
+    def __init__(self, nx, name, species_dict, mole_fractions,
+                 temperature=298.15, pressure=101325.0, **kwargs):
+        super().__init__(nx, name, temperature, pressure, **kwargs)
+
+        self.dict = kwargs.get('fluid_dict')
+        self.species_names = list(species_dict.keys())
+        self.n_species = len(self.species_names)
+
+        # Property name reference to Cantera names
+        self.prop_name_ref = \
+            {'density': 'density',
+             'viscosity': 'viscosity',
+             'thermal_conductivity': 'thermal_conductivity',
+             'specific_heat': 'cp'}
+        # Create Cantera gas solution
+        self.solution = ct.Solution('gri30.yaml')
+        # Set initial species and their mole fractions
+        self.solution.X = dict(zip(self.species_names, mole_fractions))
+        # Initialize state
+        self.solution.TP = temperature, pressure
+        # Create an array based solution
+        self.solution_array = ct.SolutionArray(self.solution, nx)
+
+        self.all_species_names = self.solution.species_names
+        # Get ids for used species from complete list
+        self.species_ids = [self.all_species_names.index(item) for item
+                            in self.species_names]
+        self.species_mw = \
+            self.solution.molecular_weights[self.species_ids] * 1e-3
+        self._mole_fraction = self._get_composition()
+        self._mass_fraction = self._get_composition(mole_fractions=False)
+
+    def update(self, temperature=None, pressure=None, mole_composition=None,
+               *args, **kwargs):
+        super().update(temperature, pressure)
+        self.solution_array.TP = self._temperature, self._pressure
+        if mole_composition is not None:
+            self.solution_array.X = self._set_composition(mole_composition)
+        self.calc_properties(self._temperature, self._pressure)
+        self._mass_fraction = self._get_composition(mole_fractions=False)
+
+    def _set_composition(self, mole_composition):
+        if np.shape(mole_composition)[0] != self.n_species:
+            raise ValueError('First dimension of composition must be '
+                             'equal to number of species')
+        self.solution_array.X[:, self.species_ids] = \
+            mole_composition.transpose()
+
+    def _get_composition(self, mole_fractions=True):
+        if mole_fractions:
+            return self.solution_array.X[:, self.species_ids]
+        else:
+            return self.solution_array.Y[:, self.species_ids]
+
+    def rescale(self, new_nx):
+        super().rescale(new_nx)
+        self.solution_array(self.solution, new_nx)
+        self.update(self._temperature, self._pressure, self._mole_fraction)
+
+    def calc_properties(self, temperature, pressure=101325.0, **kwargs):
+        """
+        Wrapper function to calculate the classes properties
+        :param temperature: 1D temperature array
+        :param pressure: float or 1D pressure array
+        :return: the calculated 1D array of the specific property
+        """
+        for prop in self.PROPERTY_NAMES:
+            self.property[prop] = \
+               getattr(self.solution_array, self.prop_name_ref[prop])
+
+    @property
+    def mole_fraction(self):
+        return self._mole_fraction.transpose()
+
+    @property
+    def mass_fraction(self):
+        return self._mass_fraction.transpose()
+
+    @property
+    def concentration(self):
+        return self.solution_array\
+            .concentrations[:, self.species_ids].transpose() * 1e3
+
+    @concentration.setter
+    def concentration(self, value):
+        self.solution_array.concentrations[:, self.species_ids] = \
+            value.transpose() * 1000.0
+
 
 class TwoPhaseMixture(OneDimensionalFluid):
 
@@ -789,113 +881,8 @@ class TwoPhaseMixture(OneDimensionalFluid):
         self.humidity[:] = \
             self._mole_fraction[:, self.id_pc] * self._pressure / p_sat
 
-
-class CanteraGasMixture(OneDimensionalFluid):
-    """
-    Wrapper for discrete fluid properties calculated by Cantera library
-    """
-    def __init__(self, nx, name, species_dict, mole_fractions,
-                 temperature=298.15, pressure=101325.0, **kwargs):
-        super().__init__(nx, name, temperature, pressure, **kwargs)
-
-        self.dict = kwargs.get('fluid_dict')
-        self.species_names = list(species_dict.keys())
-        self.n_species = len(self.species_names)
-
-        # Property name reference to Cantera names
-        self.prop_name_ref = \
-            {'density': 'density',
-             'viscosity': 'viscosity',
-             'thermal_conductivity': 'thermal_conductivity',
-             'specific_heat': 'cp'}
-        # Create Cantera gas solution
-        self.solution = ct.Solution('gri30.yaml')
-        # Set initial species and their mole fractions
-        self.solution.X = dict(zip(self.species_names, mole_fractions))
-        # Initialize state
-        self.solution.TP = temperature, pressure
-        # Create an array based solution
-        self.solution_array = ct.SolutionArray(self.solution, nx)
-
-        self.all_species_names = self.solution.species_names
-        # Get ids for used species from complete list
-        self.species_ids = [self.all_species_names.index(item) for item
-                            in self.species_names]
-        self.species_mw = \
-            self.solution.molecular_weights[self.species_ids] * 1e-3
-        self._mole_fraction = self._get_composition()
-        self._mass_fraction = self._get_composition(mole_fractions=False)
-
-    def update(self, temperature=None, pressure=None, mole_composition=None,
-               *args, **kwargs):
-        super().update(temperature, pressure)
-        self.solution_array.TP = self._temperature, self._pressure
-        if mole_composition is not None:
-            self.solution_array.X = self._set_composition(mole_composition)
-        self.calc_properties(self._temperature, self._pressure)
-        self._mass_fraction = self._get_composition(mole_fractions=False)
-
-    def _set_composition(self, mole_composition):
-        if np.shape(mole_composition)[0] != self.n_species:
-            raise ValueError('First dimension of composition must be '
-                             'equal to number of species')
-        self.solution_array.X[:, self.species_ids] = \
-            mole_composition.transpose()
-
-    def _get_composition(self, mole_fractions=True):
-        if mole_fractions:
-            return self.solution_array.X[:, self.species_ids]
-        else:
-            return self.solution_array.Y[:, self.species_ids]
-
-    def rescale(self, new_nx):
-        super().rescale(new_nx)
-        self.solution_array(self.solution, new_nx)
-        self.update(self._temperature, self._pressure, self._mole_fraction)
-
-    def calc_properties(self, temperature, pressure=101325.0, **kwargs):
-        """
-        Wrapper function to calculate the classes properties
-        :param temperature: 1D temperature array
-        :param pressure: float or 1D pressure array
-        :return: the calculated 1D array of the specific property
-        """
-        for prop in self.PROPERTY_NAMES:
-            self.property[prop] = \
-               getattr(self.solution_array, self.prop_name_ref[prop])
-
-    # @property
-    # def density(self):
-    #     return self.solution_array.density
-    #
-    # @property
-    # def viscosity(self):
-    #     return self.solution_array.viscosity
-    #
-    # @property
-    # def thermal_conductivity(self):
-    #     return self.solution_array.thermal_conductivity
-    #
-    # @property
-    # def specific_heat(self):
-    #     return self.solution_array.cp
-    @property
-    def mole_fraction(self):
-        return self._mole_fraction.transpose()
-
-    @property
-    def mass_fraction(self):
-        return self._mass_fraction.transpose()
-
-    @property
-    def concentration(self):
-        return self.solution_array\
-            .concentrations[:, self.species_ids].transpose() * 1e-3
-
-    @concentration.setter
-    def concentration(self, value):
-        self.solution_array.concentrations[:, self.species_ids] = \
-            value.transpose() * 1000.0
+    def calc_vaporization_enthalpy(self, temperature):
+        return self.phase_change_species.calc_vaporization_enthalpy(temperature)
 
 
 class CanteraTwoPhaseMixture(CanteraGasMixture):
@@ -917,16 +904,24 @@ class CanteraTwoPhaseMixture(CanteraGasMixture):
             raise NotImplementedError('at the moment only one species '
                                       'undergoing phase change is allowed')
 
-        self.water = ct.Water()
-        self.water.TP = temperature, pressure
-
+        self.water_base = ct.Water()
+        # if isinstance(temperature, (np.ndarray, list, tuple)):
+        #     self.water.TP = temperature[0], pressure[0]
+        # else:
+        #     self.water.TP = temperature
+        self.water = ct.SolutionArray(self.water_base, nx)
         # update mole_fractions if humidity is provided
         humidity = kwargs.get('humidity', None)
+
         if humidity is not None:
+            self.humidity = np.ones(nx) * humidity
             mole_fractions = \
                 self.calc_humid_composition(humidity, temperature,
                                             pressure, mole_fractions,
                                             self.id_pc)
+        else:
+            self.humidity = np.zeros(nx)
+        self.saturation_pressure = np.zeros(nx)
         super().__init__(nx, name, species_dict, mole_fractions,
                          temperature, pressure, **kwargs)
 
@@ -934,8 +929,8 @@ class CanteraTwoPhaseMixture(CanteraGasMixture):
                                dry_molar_composition, id_pc=-1):
         if humidity > 1.0:
             raise ValueError('relative humidity must not exceed 1.0')
-        self.water.TP = temperature, pressure
-        molar_fraction_water = humidity * self.water.P_sat / pressure
+        self.water_base.TP = temperature, pressure
+        molar_fraction_water = humidity * self.water_base.P_sat / pressure
         humid_composition = np.asarray(dry_molar_composition)
         humid_composition[id_pc] = 0.0
         humid_composition /= np.sum(humid_composition, axis=0)
@@ -947,7 +942,36 @@ class CanteraTwoPhaseMixture(CanteraGasMixture):
                mole_composition=None, gas_mole_composition=None,
                *args, **kwargs):
         super().update(temperature, pressure, *args, **kwargs)
+        self.water.TP = self._temperature, self._pressure
+        self.saturation_pressure[:] = self.water.P_sat
+        self.calc_humidity()
         # self.water.TP = self._temperature, self._pressure
+
+    def calc_humidity(self):
+        """
+        Calculates the relative humidity of the fluid.
+        """
+        self.humidity[:] = self._mole_fraction[:, self.id_pc] \
+            * self._pressure / self.saturation_pressure
+
+    def calc_vaporization_enthalpy(self, temperature=None):
+        """
+        Returns molar enthalpy of vaporization (J/mol)
+        """
+        if temperature is None:
+            temperature = self._temperature
+
+        temperature = np.asarray(g_func.ensure_list(temperature))
+        vap_enthalpy = np.zeros(temperature.shape)
+
+        for i in range(len(vap_enthalpy)):
+            self.water_base.TQ = temperature[i], 0.0
+            enthalpy_sat_liq = self.water_base.enthalpy_mole
+            self.water_base.TQ = temperature[i], 1.0
+            enthalpy_sat_vap = self.water_base.enthalpy_mole
+            vap_enthalpy[i] = np.abs(enthalpy_sat_vap - enthalpy_sat_liq)
+        self.water_base.TP = self._temperature[0], self.pressure[0]
+        return vap_enthalpy * 1e-3
 
 
 def liquid_factory(nx, name, liquid_props, temperature, pressure):
@@ -994,10 +1018,12 @@ def arg_factory(nx, name, liquid_props=None, species_dict=None,
             raise NotImplementedError
 
 
-def factory(fluid_dict, backend='cantera'):
+def factory(fluid_dict, **kwargs):
 
-    if not CANTERA_FOUND and backend == 'cantera':
-        # print('Warning: Cantera module not found, using basic pemfc backend')
+    backend = kwargs.pop('backend', 'pemfc')
+    if not FOUND_CANTERA and backend == 'cantera':
+        print('Warning: Cantera module not found, '
+              'using internal gas property library')
         backend = 'pemfc'
 
     nx = fluid_dict['nodes']

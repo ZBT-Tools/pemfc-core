@@ -112,7 +112,7 @@ incompressible_polynomials = \
 
 phase_change_polynomials = \
     {
-        'Saturation Pressure':
+        'saturation_pressure':
             {
                 'H2O':
                     np.asarray(
@@ -121,7 +121,7 @@ phase_change_polynomials = \
                          -8.53414571e+00, 2.11600925e+03, -3.40245294e+05,
                          3.20415279e+07, -1.34211567e+09)),
             },
-        'Vaporization Enthalpy':
+        'vaporization_enthalpy':
             {
                 'H2O':
                     np.asarray(

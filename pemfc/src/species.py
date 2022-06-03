@@ -152,7 +152,7 @@ class GasProperties(PolynomialProperties):
 
 class PhaseChangeProperties(PolynomialProperties):
 
-    PROPERTY_NAMES = ['Saturation Pressure', 'Vaporization Enthalpy']
+    PROPERTY_NAMES = ['saturation_pressure', 'vaporization_enthalpy']
 
     def __init__(self, liquids_dict):
         # print("Constructor of Two Phase Species")
@@ -190,16 +190,16 @@ class PhaseChangeProperties(PolynomialProperties):
 
     def calc_saturation_pressure(self, temperature):
         return polyval(temperature,
-                       self.coeff_dict_arr['Saturation Pressure'])
+                       self.coeff_dict_arr['saturation_pressure'])
 
     def calc_vaporization_enthalpy(self, temperature):
         return polyval(temperature,
-                       self.coeff_dict_arr['Vaporization Enthalpy'])
+                       self.coeff_dict_arr['vaporization_enthalpy'])
 
     def calc_property(self, property_name, temperature, **kwargs):
-        if property_name == 'Saturation Pressure':
+        if property_name == 'saturation_pressure':
             return self.calc_saturation_pressure(temperature)
-        elif property_name == 'Vaporization Enthalpy':
+        elif property_name == 'vaporization_enthalpy':
             return self.calc_vaporization_enthalpy(temperature)
         else:
             raise ValueError('property_name {} not valid'.format(

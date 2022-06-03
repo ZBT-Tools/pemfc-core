@@ -355,6 +355,6 @@
     "save_csv": false,
     "save_plot": false,
     "show_loss": false,
-    "directory": "D:\\ZBT\\Python\\pemfc-core\\pemfc\\settings\\..\\..\\output"
+    "directory": "../output"
   }
 }

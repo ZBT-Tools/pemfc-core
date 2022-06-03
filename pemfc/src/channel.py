@@ -711,8 +711,8 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         """
         condensation_rate = self.flow_direction \
             * np.ediff1d(self.mole_flow_liq[self.fluid.id_pc])
-        vaporization_enthalpy = self.fluid.phase_change_species.\
-            calc_vaporization_enthalpy(self.temp_ele)
+        vaporization_enthalpy = \
+            self.fluid.calc_vaporization_enthalpy(self.temp_ele)
         self.condensation_heat[:] = condensation_rate * vaporization_enthalpy
 
     def calc_heat_capacitance(self, factor=1.0):
