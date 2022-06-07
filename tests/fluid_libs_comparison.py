@@ -26,7 +26,7 @@ fluid_dict = \
         "humidity": 0.5,
         "temperature": 343.15,
         "pressure": 101325.0,
-        "nodes": 46
+        "nodes": (10, 5)
     }
 
 humid_air_pemfc = fluid.factory(fluid_dict, backend='pemfc')
@@ -85,11 +85,12 @@ for i in range(n_iter):
     humid_air_ct.update(temp, 101325)
 end_time_ct = time.time()
 
-vap_enthalpy_pemfc = humid_air_pemfc.calc_vaporization_enthalpy(temp)
-vap_enthalpy_ct = humid_air_ct.calc_vaporization_enthalpy(temp)
+vap_enthalpy_pemfc = humid_air_pemfc.calc_vaporization_enthalpy()
+vap_enthalpy_ct = humid_air_ct.calc_vaporization_enthalpy()
 
 print(vap_enthalpy_pemfc)
 print(vap_enthalpy_ct)
 
 print('PEMFC Time: ', end_time_pemfc-start_time_pemfc)
 print('Cantera Time: ', end_time_ct-start_time_ct)
+

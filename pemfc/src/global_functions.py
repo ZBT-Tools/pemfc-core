@@ -44,6 +44,17 @@ def fill_transposed(in_array, shape):
     return transposed_array.transpose()
 
 
+def move_axis(array, source=0, target=-1):
+    if array.ndim > 2:
+        return np.moveaxis(array, source, target)
+    else:
+        return array.transpose()
+
+
+def array_vector_multiply(array, vector):
+    return (array.transpose() * vector).transpose()
+
+
 def add_source(var, source, direction=1, tri_mtx=None):
     """
     Add discrete 1d source of length n-1 to var of length n
