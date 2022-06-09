@@ -20,9 +20,10 @@ class Channel(ABC, oo.OutputObject):
         if type(fluid) is fluids.IncompressibleFluid \
                 or type(fluid) is fluids.ConstantFluid:
             return super(Channel, cls).__new__(IncompressibleFluidChannel)
-        elif type(fluid) is fluids.GasMixture:
+        elif type(fluid) in (fluids.GasMixture, fluids.CanteraGasMixture):
             return super(Channel, cls).__new__(GasMixtureChannel)
-        elif type(fluid) is fluids.TwoPhaseMixture:
+        elif type(fluid) in (fluids.TwoPhaseMixture,
+                             fluids.CanteraTwoPhaseMixture):
             return super(Channel, cls).__new__(TwoPhaseMixtureChannel)
         else:
             raise NotImplementedError('Only Channel types of '
@@ -516,7 +517,7 @@ class GasMixtureChannel(Channel):
         self.mole_source = np.zeros((self.fluid.n_species, self.n_ele))
 
         self.add_print_data(self.mole_flow, 'Mole Flow',
-                            'mol/s', self.fluid.species.names)
+                            'mol/s', self.fluid.species_names)
 
     # def update(self, mass_flow_in=None, mass_source=None,
     #            wall_temp=None, heat_flux=None,
@@ -589,13 +590,13 @@ class GasMixtureChannel(Channel):
                     ' of shape: ', self.mass_flow.shape)
             self.mass_flow[:] = mass_flow
             # self.mole_flow[:] = \
-            #     (mass_flow.transpose() / self.fluid.species.mw).transpose()
+            #     (mass_flow.transpose() / self.fluid.species_mw).transpose()
         if mass_source is not None:
             if np.shape(mass_source) == (self.fluid.n_species, self.n_ele):
                 self.mass_source[:] = mass_source
                 self.mole_source[:] = \
                     (mass_source.transpose()
-                     / self.fluid.species.mw).transpose()
+                     / self.fluid.species_mw).transpose()
             else:
                 raise ValueError('shape of mass_source does not conform '
                                  'to mole_source array')
@@ -606,9 +607,9 @@ class GasMixtureChannel(Channel):
         self.mass_flow[self.mass_flow < 0.0] = 0.0
         self.mass_flow_total[:] = np.sum(self.mass_flow, axis=0)
         # self.mass_flow[:] = \
-        #     (self.mole_flow.transpose() * self.fluid.species.mw).transpose()
+        #     (self.mole_flow.transpose() * self.fluid.species_mw).transpose()
         self.mole_flow[:] = \
-            (self.mass_flow.transpose() / self.fluid.species.mw).transpose()
+            (self.mass_flow.transpose() / self.fluid.species_mw).transpose()
         self.mole_flow_total[:] = np.sum(self.mole_flow, axis=0)
 
 
@@ -628,9 +629,9 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         self.cond_rate_time_const = 5.0
 
         self.add_print_data(self.mole_flow_gas, 'Gas Mole Flow', 'mol/s',
-                            self.fluid.species.names)
+                            self.fluid.species_names)
         self.add_print_data(self.mole_flow_liq, 'Liquid Mole Flow',
-                            'mol/s', self.fluid.species.names)
+                            'mol/s', self.fluid.species_names)
 
     def update_mass(self, mass_flow_in=None, liquid_mass_flow_in=None,
                     mass_source=None, update_fluid=True):
@@ -664,7 +665,7 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         #                             - self.fluid.saturation_pressure)
         # mole_source_liquid = \
         #     self.cross_area * self.dx * self.cond_rate_time_const * dp_cond
-        # mw_water = self.fluid.gas.species.mw[id_pc]
+        # mw_water = self.fluid.gas.species_mw[id_pc]
         # mass_source_liquid = mole_source_liquid * mw_water
         # g_func.add_source(self.mass_flow_liq[id_pc], mass_source_liquid,
         #                   self.flow_direction, self.tri_mtx)
@@ -710,8 +711,8 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         """
         condensation_rate = self.flow_direction \
             * np.ediff1d(self.mole_flow_liq[self.fluid.id_pc])
-        vaporization_enthalpy = self.fluid.phase_change_species.\
-            calc_vaporization_enthalpy(self.temp_ele)
+        vaporization_enthalpy = \
+            self.fluid.calc_vaporization_enthalpy(self.temp_ele)
         self.condensation_heat[:] = condensation_rate * vaporization_enthalpy
 
     def calc_heat_capacitance(self, factor=1.0):

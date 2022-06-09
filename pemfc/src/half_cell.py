@@ -215,7 +215,7 @@ class HalfCell:
             if i != self.id_fuel:
                 mole_flow_in[i] = mole_flow_in[self.id_fuel] \
                     * inlet_composition[i] / inlet_composition[self.id_fuel]
-        mass_flow_in = mole_flow_in * self.channel.fluid.species.mw
+        mass_flow_in = mole_flow_in * self.channel.fluid.species_mw
         return mass_flow_in, mole_flow_in
 
     def calc_mass_source(self, current_density):
@@ -232,7 +232,7 @@ class HalfCell:
             self.flow_field.active_area_dx * self.w_cross_flow
         # self.channel.flow_direction
         mass_source = (mole_source.transpose()
-                       * self.channel.fluid.species.mw).transpose()
+                       * self.channel.fluid.species_mw).transpose()
         return mass_source, mole_source
 
     def calc_fuel_flow(self, current_density, stoi=None):
@@ -345,7 +345,10 @@ class HalfCell:
         return v_loss_gdl_diff
 
     def calc_electrode_loss(self, current_density):
-        conc = self.channel.fluid.gas.concentration[self.id_fuel]
+        if hasattr(self.channel.fluid, 'gas'):
+            conc = self.channel.fluid.gas.concentration[self.id_fuel]
+        else:
+            conc = self.channel.fluid.concentration[self.id_fuel]
         conc_ele = ip.interpolate_1d(conc)
         conc_ref = conc[self.channel.id_in]
         conc_star = conc_ele / conc_ref

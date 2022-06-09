@@ -614,14 +614,17 @@ class Output:
                 with open(file_path, 'w') as file:
                     file.write(json.dumps(settings, indent=2))
 
-    def save_global_results(self, results, fmt='json'):
+    def save_global_results(self, results, fmt='json', **kwargs):
         # if settings is None:
         #     settings = input_dicts.sim_dict
         if not isinstance(results, dict):
             raise TypeError('must provide python dict to save global results')
         else:
-            file_path = os.path.join(self.output_dir, self.case_name,
-                                     'summary.json')
+            file_dir = os.path.join(self.output_dir, self.case_name)
+            if not os.path.exists(file_dir):
+                os.makedirs(file_dir)
+            file_name = kwargs.get('file_name', 'summary.json')
+            file_path = os.path.join(file_dir, file_name)
             if fmt == 'json':
                 with open(file_path, 'w') as file:
                     file.write(json.dumps(results, indent=2))

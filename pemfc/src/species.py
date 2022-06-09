@@ -24,8 +24,8 @@ class FluidProperties(ABC):
 
 class ConstantProperties(FluidProperties):
 
-    PROPERTY_NAMES = ['Density', 'Specific Heat', 'Viscosity',
-                      'Thermal Conductivity']
+    PROPERTY_NAMES = ['density', 'specific_heat', 'viscosity',
+                      'thermal_conductivity']
     ATTRIBUTE_NAMES = [name.replace(' ', '_').lower()
                        for name in PROPERTY_NAMES]
 
@@ -81,8 +81,8 @@ class PolynomialProperties(FluidProperties, ABC):
 
 class IncompressibleProperties(PolynomialProperties):
 
-    PROPERTY_NAMES = ['Density', 'Specific Heat', 'Viscosity',
-                      'Thermal Conductivity']
+    PROPERTY_NAMES = ['density', 'specific_heat', 'viscosity',
+                      'thermal_conductivity']
 
     def __init__(self, species_list):
         poly_coeffs = mat_prop.incompressible_polynomials
@@ -90,21 +90,21 @@ class IncompressibleProperties(PolynomialProperties):
         self.name = self.names[0]
 
     def calc_specific_heat(self, temperature):
-        return polyval(temperature, self.coeff_dict_arr['Specific Heat'])
+        return polyval(temperature, self.coeff_dict_arr['specific_heat'])
 
     def calc_viscosity(self, temperature):
-        return polyval(temperature, self.coeff_dict_arr['Viscosity'])
+        return polyval(temperature, self.coeff_dict_arr['viscosity'])
 
     def calc_thermal_conductivity(self, temperature):
-        return polyval(temperature, self.coeff_dict_arr['Thermal Conductivity'])
+        return polyval(temperature, self.coeff_dict_arr['thermal_conductivity'])
 
     def calc_density(self, temperature):
-        return polyval(temperature, self.coeff_dict_arr['Density'])
+        return polyval(temperature, self.coeff_dict_arr['density'])
 
 
 class GasProperties(PolynomialProperties):
 
-    PROPERTY_NAMES = ['Specific Heat', 'Viscosity', 'Thermal Conductivity']
+    PROPERTY_NAMES = ['specific_heat', 'viscosity', 'thermal_conductivity']
 
     def __init__(self, species_list):
         poly_coeffs = mat_prop.gas_polynomials
@@ -126,25 +126,25 @@ class GasProperties(PolynomialProperties):
         self.mw = np.asarray(self.mw)
 
     def calc_specific_heat(self, temperature):
-        return polyval(temperature, self.coeff_dict_arr['Specific Heat'])
+        return polyval(temperature, self.coeff_dict_arr['specific_heat'])
 
     def calc_viscosity(self, temperature):
-        return polyval(temperature, self.coeff_dict_arr['Viscosity'])
+        return polyval(temperature, self.coeff_dict_arr['viscosity'])
 
     def calc_thermal_conductivity(self, temperature, pressure):
         lambda_1_bar = \
             polyval(temperature,
-                    self.coeff_dict_arr['Thermal Conductivity'][:][0])
+                    self.coeff_dict_arr['thermal_conductivity'][:][0])
         lambda_10_bar = \
             polyval(temperature,
-                    self.coeff_dict_arr['Thermal Conductivity'][:][1])
+                    self.coeff_dict_arr['thermal_conductivity'][:][1])
         result = lambda_1_bar \
             + (pressure - 1.e5) / 9.e5 * (lambda_10_bar - lambda_1_bar)
         result *= 10.0
         return result
 
     def calc_property(self, property_name, temperature, pressure=101325.0):
-        if property_name == 'Thermal Conductivity':
+        if property_name == 'thermal_conductivity':
             return self.calc_thermal_conductivity(temperature, pressure)
         else:
             return super().calc_property(property_name, temperature, pressure)
@@ -152,7 +152,7 @@ class GasProperties(PolynomialProperties):
 
 class PhaseChangeProperties(PolynomialProperties):
 
-    PROPERTY_NAMES = ['Saturation Pressure', 'Vaporization Enthalpy']
+    PROPERTY_NAMES = ['saturation_pressure', 'vaporization_enthalpy']
 
     def __init__(self, liquids_dict):
         # print("Constructor of Two Phase Species")
@@ -190,16 +190,16 @@ class PhaseChangeProperties(PolynomialProperties):
 
     def calc_saturation_pressure(self, temperature):
         return polyval(temperature,
-                       self.coeff_dict_arr['Saturation Pressure'])
+                       self.coeff_dict_arr['saturation_pressure'])
 
     def calc_vaporization_enthalpy(self, temperature):
         return polyval(temperature,
-                       self.coeff_dict_arr['Vaporization Enthalpy'])
+                       self.coeff_dict_arr['vaporization_enthalpy'])
 
     def calc_property(self, property_name, temperature, **kwargs):
-        if property_name == 'Saturation Pressure':
+        if property_name == 'saturation_pressure':
             return self.calc_saturation_pressure(temperature)
-        elif property_name == 'Vaporization Enthalpy':
+        elif property_name == 'vaporization_enthalpy':
             return self.calc_vaporization_enthalpy(temperature)
         else:
             raise ValueError('property_name {} not valid'.format(

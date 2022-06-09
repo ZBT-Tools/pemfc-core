@@ -10,7 +10,7 @@ molecular_weight = \
 
 gas_polynomials = \
     {
-        'Specific Heat':
+        'specific_heat':
             {
                 'O2':
                     np.array([-8.66817221e-19, 4.73115002e-15, -1.15709215e-11,
@@ -29,7 +29,7 @@ gas_polynomials = \
                               -1.22872163e-08, -4.19918931e-06, 7.45080766e-03,
                               -2.56601734e+00, 2.12709233e+03])
             },
-        'Viscosity':
+        'viscosity':
             {
                 'O2':
                     np.array([1.18758866e-26, -6.48183635e-23, 1.55753837e-19,
@@ -48,7 +48,7 @@ gas_polynomials = \
                               -1.85885301e-15, 1.35158418e-12, -6.12002995e-10,
                               2.08858479e-07, -1.90872183e-05])
             },
-        'Thermal Conductivity':
+        'thermal_conductivity':
         # First array dimension for pressure dependence:
         # index 0 for 1e5 Pa, index 1 for 1e6 Pa
         # result will be interpolated
@@ -86,24 +86,24 @@ gas_polynomials = \
 
 incompressible_polynomials = \
     {
-        'Density':
+        'density':
             {
                 'H2O':
                     np.array((-6.989e-06, 6.312e-03, -2.422e00, 1.351e+03))
             },
-        'Specific Heat':
+        'specific_heat':
             {
                 'H2O':
                     np.array((2.276e-06, -3.755e-03, 2.299e+00, -6.166e+02,
                               6.515e+04))
             },
-        'Viscosity':
+        'viscosity':
             {
                 'H2O':
                     np.array((6.746e-13, -1.320e-09, 9.609e-07, -3.093e-04,
                               3.738e-02))
             },
-        'Thermal Conductivity':
+        'thermal_conductivity':
             {
                 'H2O':
                     np.array((-5.712e-06, 4.757e-03, -2.946e-01))
@@ -112,7 +112,7 @@ incompressible_polynomials = \
 
 phase_change_polynomials = \
     {
-        'Saturation Pressure':
+        'saturation_pressure':
             {
                 'H2O':
                     np.asarray(
@@ -121,7 +121,7 @@ phase_change_polynomials = \
                          -8.53414571e+00, 2.11600925e+03, -3.40245294e+05,
                          3.20415279e+07, -1.34211567e+09)),
             },
-        'Vaporization Enthalpy':
+        'vaporization_enthalpy':
             {
                 'H2O':
                     np.asarray(
@@ -134,19 +134,19 @@ phase_change_polynomials = \
 
 constant = \
     {
-        'Density':
+        'density':
             {
                 'H2O': 1000.0
             },
-        'Specific Heat':
+        'specific_heat':
             {
                 'H2O': 4000.0
             },
-        'Viscosity':
+        'viscosity':
             {
                 'H2O': 1e-3
             },
-        'Thermal Conductivity':
+        'thermal_conductivity':
             {
                 'H2O': 0.2
             }
