@@ -448,7 +448,7 @@ class GasMixture(DiscreteFluid):
             alpha.append(beta)
         return np.asarray(alpha)
 
-    def calc_thermal_conductivity(self, temperature, pressure):
+    def _calc_thermal_conductivity(self, temperature, pressure):
         """
         Calculates the heat conductivity of a gas mixture,
         according to Wilkes equation.
@@ -496,7 +496,7 @@ class GasMixture(DiscreteFluid):
         elif property_name == 'viscosity':
             return self._calc_viscosity(temperature)
         elif property_name == 'thermal_conductivity':
-            return self.calc_thermal_conductivity(temperature, pressure)
+            return self._calc_thermal_conductivity(temperature, pressure)
         elif property_name == 'density':
             return self._calc_density(temperature, pressure, method)
         else:
