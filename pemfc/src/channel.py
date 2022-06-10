@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 
 # local modul imports
 from . import interpolation as ip, global_functions as g_func, \
-    fluid as fluids, flow_resistance as fr, output_object as oo
-
+    flow_resistance as fr, output_object as oo
+from .fluid import fluid as fluids
 try:
     import pemfc.src.cython.channel_heat_transfer as cht
     CHT_FOUND = True
@@ -494,7 +494,7 @@ class IncompressibleFluidChannel(Channel):
         #     self.fluid.update(self.temperature, self.pressure)
 
     def update_fluid(self):
-        self.fluid.update(self.temperature, self.pressure)
+        self.fluid.update(self.temperature, self.pressure,,
 
     def calc_mass_balance(self, mass_flow_in=None, mass_source=None):
         if mass_flow_in is not None:
@@ -556,7 +556,7 @@ class GasMixtureChannel(Channel):
         #     self.fluid.update(self.temperature, self.pressure, self.mole_flow)
 
     def update_fluid(self):
-        self.fluid.update(self.temperature, self.pressure, self.mole_flow)
+        self.fluid.update(self.temperature, self.pressure, self.mole_flow, )
 
     def calc_mass_balance(self, mass_flow_in=None, mass_source=None):
         """

@@ -5,8 +5,9 @@ from scipy import optimize
 
 # local module imports
 from . import interpolation as ip, layers as layers, constants, \
-    global_functions as g_func, fluid as fluids, flow_field as ff, \
+    global_functions as g_func, flow_field as ff, \
     channel as chl
+from .fluid import fluid as fluids
 
 warnings.filterwarnings("ignore")
 
@@ -158,8 +159,7 @@ class HalfCell:
             self.channel.mass_source[:], self.channel.mole_source[:] = \
                 self.calc_mass_source(current_density)
             if update_channel:
-                self.channel.update(update_mass=True, update_flow=False,
-                                    update_heat=False, update_fluid=True)
+                self.channel.update(,
             self.update_voltage_loss(corrected_current_density)
 
             # calculate stoichiometry

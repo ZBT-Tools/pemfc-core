@@ -4,9 +4,10 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 # local module imports
-from .output_object import OutputObject
-from . import constants, global_functions as gf, species
-from .global_functions import move_axis
+from pemfc.src.output_object import OutputObject
+from pemfc.src import constants, global_functions as gf
+from . import species
+from pemfc.src.global_functions import move_axis
 from collections import OrderedDict
 
 if 'main_app.py' in sys.argv[0]:
@@ -21,7 +22,7 @@ except ImportError:
     FOUND_CANTERA = False
 
 
-class OneDimensionalFluid(ABC, OutputObject):
+class DiscreteFluid(ABC, OutputObject):
 
     PROPERTY_NAMES = ['density', 'specific_heat', 'viscosity',
                       'thermal_conductivity']
@@ -176,6 +177,7 @@ class OneDimensionalFluid(ABC, OutputObject):
 
                         if rescaled is not None:
                             setattr(self, name, rescaled)
+            self.array_shape = new_array_shape
         self.add_print_variables(self.print_variables)
 
     def _rescale_attribute(self, attribute, new_nx):
@@ -207,7 +209,7 @@ class OneDimensionalFluid(ABC, OutputObject):
                     'argument array must be of type numpy.ndarray')
 
 
-class ConstantFluid(OneDimensionalFluid):
+class ConstantFluid(DiscreteFluid):
 
     TYPE_NAME = 'Constant Fluid'
 
@@ -234,7 +236,7 @@ class ConstantFluid(OneDimensionalFluid):
         pass
 
 
-class IncompressibleFluid(OneDimensionalFluid):
+class IncompressibleFluid(DiscreteFluid):
 
     TYPE_NAME = 'Incompressible Fluid'
 
@@ -274,7 +276,7 @@ class IncompressibleFluid(OneDimensionalFluid):
                 self.calc_property(prop, temperature)
 
 
-class GasMixture(OneDimensionalFluid):
+class GasMixture(DiscreteFluid):
 
     TYPE_NAME = 'Gas Mixture'
 
@@ -514,7 +516,7 @@ class GasMixture(OneDimensionalFluid):
                 self._calc_property(prop, temperature, pressure, method)
 
 
-class CanteraGasMixture(OneDimensionalFluid):
+class CanteraGasMixture(DiscreteFluid):
     """
     Wrapper for discrete fluid properties calculated by Cantera library
     """
@@ -605,7 +607,7 @@ class CanteraGasMixture(OneDimensionalFluid):
         self.solution_array.concentrations[:, self.species_ids] = value * 1000.0
 
 
-class TwoPhaseMixture(OneDimensionalFluid):
+class TwoPhaseMixture(DiscreteFluid):
 
     TYPE_NAME = 'Two-Phase Mixture'
 

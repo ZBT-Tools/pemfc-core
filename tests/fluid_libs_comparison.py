@@ -1,8 +1,6 @@
 import numpy as np
-import pemfc.src.fluid as fluid
+import pemfc.src.fluid.fluid as fluid
 import cantera as ct
-# import CoolProp
-# import CoolProp.CoolProp as CP
 
 import time
 
@@ -30,10 +28,10 @@ fluid_dict = \
     }
 
 humid_air_pemfc = fluid.factory(fluid_dict, backend='pemfc')
-humid_air_pemfc.update()
+humid_air_pemfc.update(,
 
 humid_air_ct = fluid.factory(fluid_dict, backend='cantera')
-humid_air_ct.update()
+humid_air_ct.update(,
 # print(humid_air_pemfc.mole_fraction)
 # print(humid_air_pemfc.gas.concentration)
 
@@ -75,14 +73,14 @@ molar_composition = np.asarray([item * np.ones(fluid_dict['nodes'])
 n_iter = 1000
 start_time_pemfc = time.time()
 for i in range(n_iter):
-    humid_air_pemfc.update(343.15, 101325)
+    humid_air_pemfc.update(343.15, 101325,,
 end_time_pemfc = time.time()
 
 start_time_ct = time.time()
 temp = 343.15
 for i in range(n_iter):
     # temp += 10.0
-    humid_air_ct.update(temp, 101325)
+    humid_air_ct.update(temp, 101325,,
 end_time_ct = time.time()
 
 vap_enthalpy_pemfc = humid_air_pemfc.calc_vaporization_enthalpy()

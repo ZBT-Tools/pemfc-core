@@ -95,7 +95,7 @@ iter_max = 50
 mass_flows = [mass_flow_hydrogen, mass_flow_air, mass_flow_water]
 
 for j, channel in enumerate(channels):
-    channel.update(mass_flow_in=mass_flows[j])
+    channel.update(,
 
 x = ip.interpolate_1d(channels[0].x)
 for channel in channels:

@@ -1,16 +1,38 @@
 import numpy as np
 
+# Molecular weights of selected molecules (kg/mol)
 molecular_weight = \
     {
+        'Ar': 0.039948,
         'O2': 0.032,
         'N2': 0.028,
         'H2': 0.002,
-        'H2O': 0.018
+        'H2O': 0.018,
+        'CO': 0.02801,
+        'CO2': 0.04401,
+        'NH3': 0.01703052
     }
 
+# Dimensionless diffusion volumes from:
+# Poling, Bruce E., J. M. Prausnitz, and John P. O’Connell. The Properties of
+# Gases and Liquids. 5th ed. New York: McGraw-Hill, 2001."
+diffusion_volume = \
+    {
+        'Ar': 16.2,
+        'H2': 6.12,
+        'N2': 18.5,
+        'CO': 18.0,
+        'CO2': 26.9,
+        'H2O': 13.1,
+        'NH3': 20.7,
+        'O2': 16.3
+    }
+
+# Polynomials for properties of pure gaseous substances
 gas_polynomials = \
     {
         'specific_heat':
+        # Temperature-dependent specific heat (J/kg-K)
             {
                 'O2':
                     np.array([-8.66817221e-19, 4.73115002e-15, -1.15709215e-11,
@@ -30,6 +52,7 @@ gas_polynomials = \
                               -2.56601734e+00, 2.12709233e+03])
             },
         'viscosity':
+        # Temperature-dependent viscosity (Pa-s)
             {
                 'O2':
                     np.array([1.18758866e-26, -6.48183635e-23, 1.55753837e-19,
@@ -49,9 +72,9 @@ gas_polynomials = \
                               2.08858479e-07, -1.90872183e-05])
             },
         'thermal_conductivity':
-        # First array dimension for pressure dependence:
-        # index 0 for 1e5 Pa, index 1 for 1e6 Pa
-        # result will be interpolated
+        # Temperature- and pressure-dependent thermal conductivity (W/m-K)
+        # First polynomial at 1e5 Pa, second polynomial at 1e6 Pa
+        # Result will be interpolated
             {
                 'O2':
                     np.array(((-1.58986421e-22, 8.03802084e-19, -1.67882604e-15,
@@ -84,35 +107,42 @@ gas_polynomials = \
             }
     }
 
+# Polynomials for properties of incompressible (liquid) substances
 incompressible_polynomials = \
     {
         'density':
+        # Temperature-dependent density (kg/m3)
             {
                 'H2O':
                     np.array((-6.989e-06, 6.312e-03, -2.422e00, 1.351e+03))
             },
         'specific_heat':
+        # Temperature-dependent specific heat (J/kg-K)
             {
                 'H2O':
                     np.array((2.276e-06, -3.755e-03, 2.299e+00, -6.166e+02,
                               6.515e+04))
             },
         'viscosity':
+        # Temperature-dependent viscosity (Pa-s)
             {
                 'H2O':
                     np.array((6.746e-13, -1.320e-09, 9.609e-07, -3.093e-04,
                               3.738e-02))
             },
         'thermal_conductivity':
+        # Temperature-dependent thermal conductivity (W/m-K)
             {
                 'H2O':
                     np.array((-5.712e-06, 4.757e-03, -2.946e-01))
             }
     }
 
+# Polynomials for phase change properties of fluids
 phase_change_polynomials = \
     {
         'saturation_pressure':
+        # Temperature-dependent saturation pressure (Pa)
             {
                 'H2O':
                     np.asarray(
@@ -122,6 +152,7 @@ phase_change_polynomials = \
                          3.20415279e+07, -1.34211567e+09)),
             },
         'vaporization_enthalpy':
+        # Temperature-dependent vaporization enthalpy (J/kg)
             {
                 'H2O':
                     np.asarray(
