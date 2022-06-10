@@ -45,6 +45,7 @@ class DiffusionModel(ABC):
         :param species_j: string with sum formula for second species
         :param temperature: temperature (K) (float or numpy array)
         :param pressure: pressure (Pa) (float or numpy array)
+
         According to:
         'Bao, Cheng, Zeyi Jiang, and Xinxin Zhang. “Modeling Mass Transfer in
         Solid Oxide Fuel Cell Anode: I. Comparison between Fickian,
@@ -79,6 +80,12 @@ class DiffusionModel(ABC):
         :param species_i: string with sum formula for species
         :param temperature: temperature (K) (float or numpy array)
         :return: knudsen diffusion coefficient (m²/s)
+
+        According to:
+        'Bao, Cheng, Zeyi Jiang, and Xinxin Zhang. “Modeling Mass Transfer in
+        Solid Oxide Fuel Cell Anode: I. Comparison between Fickian,
+        Stefan-Maxwell and Dusty-Gas Models.” Journal of Power Sources 310
+        (April 2016): 32–40. https://doi.org/10.1016/j.jpowsour.2016.01.099.'
         """
         if self.knudsen:
             return 2.0 / 3.0 * self.pore_radius \
@@ -111,6 +118,11 @@ class MixtureAveragedDiffusionModel(DiffusionModel):
         :param flux_ratio: ratio of molar fluxes between binary components,
         can be 'stoich' (equals unity), 'graham'
 
+        According to:
+        'Bao, Cheng, Zeyi Jiang, and Xinxin Zhang. “Modeling Mass Transfer in
+        Solid Oxide Fuel Cell Anode: I. Comparison between Fickian,
+        Stefan-Maxwell and Dusty-Gas Models.” Journal of Power Sources 310
+        (April 2016): 32–40. https://doi.org/10.1016/j.jpowsour.2016.01.099.'
         """
         assert len(mole_fractions) == self.n_species
 
