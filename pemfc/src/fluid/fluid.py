@@ -441,10 +441,10 @@ class GasMixture(DiscreteFluid):
         for i in range(self.n_species):
             beta = []
             for j in range(self.n_species):
-                a = np.power((1. + np.power((visc[i] / visc[j]), 0.5)
-                             * np.power(mw[j] / mw[i], 0.25)),  2.0)
-                b = np.power(np.sqrt(8.) * (1. + mw[j] / mw[i]), -0.5)
-                beta.append(a/b)
+                a = (1. + np.sqrt((visc[i] / visc[j]))
+                     * (mw[j] / mw[i]) ** 0.25) ** 2.0
+                b = (np.sqrt(8.) * (1. + mw[j] / mw[i])) ** -0.5
+                beta.append(a / b)
             alpha.append(beta)
         return np.asarray(alpha)
 
