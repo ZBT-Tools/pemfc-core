@@ -159,7 +159,8 @@ class HalfCell:
             self.channel.mass_source[:], self.channel.mole_source[:] = \
                 self.calc_mass_source(current_density)
             if update_channel:
-                self.channel.update(,
+                self.channel.update(update_mass=True, update_flow=False,
+                                    update_heat=False, update_fluid=True)
             self.update_voltage_loss(corrected_current_density)
 
             # calculate stoichiometry

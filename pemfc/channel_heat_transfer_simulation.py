@@ -99,7 +99,8 @@ for i in range(iter_max):
         break
     error = 0.0
     for j, channel in enumerate(channels):
-        channel.update(,
+        channel.update(mass_flow_in=mass_flows[j], heat_flux=heat_flux,
+                       wall_temp=wall_temp)
         mass_flows[j] = np.sum(channel.heat) \
             / (np.average(channel.fluid.specific_heat) * delta_temp)
         error += np.sum(np.abs(((temp_old[j] - channel.temperature) / channel.temperature)))

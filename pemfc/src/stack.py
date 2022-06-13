@@ -292,7 +292,7 @@ class Stack:
         if update_inflows:
             mass_flows_in[:] = self.calc_mass_flows()
         for i in range(len(self.fuel_circuits)):
-            self.fuel_circuits[i].update(mass_flows_in[i],,
+            self.fuel_circuits[i].update(mass_flows_in[i])
         if self.coolant_circuit is not None:
             cool_mass_flow = None
             if self.current_control or update_inflows:
@@ -300,7 +300,7 @@ class Stack:
                     cool_mass_flow = coolant_mass_flow
                 else:
                     cool_mass_flow = self.calc_cool_mass_flow(coolant_temp_diff)
-            self.coolant_circuit.update(cool_mass_flow,,
+            self.coolant_circuit.update(cool_mass_flow)
 
     def calc_cool_mass_flow(self, coolant_temp_diff):
         n_cool_cell = self.coolant_circuit.n_subchannels

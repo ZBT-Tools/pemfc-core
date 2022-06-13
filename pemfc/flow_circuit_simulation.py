@@ -7,10 +7,10 @@ import matplotlib.pyplot as plt
 import matplotlib
 
 # local module imports
-from pemfc import channel as chl
-from pemfc import fluid as fluid
-from pemfc import flow_circuit as flow_circuit
-from pemfc import interpolation as ip
+from pemfc.src import channel as chl
+from pemfc.src.fluid import fluid as fluid
+from pemfc.src import flow_circuit as flow_circuit
+from pemfc.src import interpolation as ip
 
 matplotlib.use('TkAgg')
 
@@ -116,7 +116,7 @@ x = (ip.interpolate_1d(flow_model.manifolds[0].x)
     / (flow_model.manifolds[0].length - flow_model.manifolds[0].dx[0])
 # x = flow_model.manifolds[0].x / flow_model.manifolds[0].length
 
-flow_model.update(,
+flow_model.update(inlet_mass_flow=0.000449642)
 q = (flow_model.normalized_flow_distribution - 1.0) * 100.0
 reynolds = flow_model.manifolds[0].reynolds[0]
 plt.plot(x, q, label='Re={0:.2f}'.format(reynolds), color='k')
