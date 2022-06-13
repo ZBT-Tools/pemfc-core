@@ -187,13 +187,19 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
         channel_enthalpy_out = \
             np.asarray([ch.g_fluid[ch.id_out] * ch.temperature[ch.id_out]
                         for ch in self.channels]) * self.n_subchannels
-        self.manifolds[1].update(,
+        self.manifolds[1].update(mass_flow_in=0.0, mass_source=mass_source,
+                                 update_mass=True, update_flow=True,
+                                 update_heat=False, update_fluid=update_fluid,
+                                 enthalpy_source=channel_enthalpy_out)
 
         # Channel update
         for i, channel in enumerate(self.channels):
             channel.p_out = ip.interpolate_1d(self.manifolds[1].pressure)[i]
             channel.temperature[channel.id_in] = self.manifolds[0].temp_ele[i]
-            channel.update(,
+            channel.update(mass_flow_in=
+                           channel_mass_flow_in[i] / self.n_subchannels,
+                           update_mass=True, update_flow=True,
+                           update_heat=False, update_fluid=update_fluid)
 
         # Inlet header update
         id_in = self.channels[-1].id_in
@@ -203,7 +209,10 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
         else:
             mass_fraction = 1.0
         mass_source = -self.channel_mass_flow * mass_fraction
-        self.manifolds[0].update(,
+        self.manifolds[0].update(mass_flow_in=self.mass_flow_in,  # * 1.00000,
+                                 mass_source=mass_source,
+                                 update_mass=True, update_flow=True,
+                                 update_heat=False, update_fluid=update_fluid)
         id_in = self.manifolds[0].id_in
         self.vol_flow_in = \
             self.mass_flow_in / self.manifolds[0].fluid.density[id_in]
@@ -363,7 +372,10 @@ class UpdatedKohFlowCircuit(KohFlowCircuit):
         channel_enthalpy_out = \
             np.asarray([ch.g_fluid[ch.id_out] * ch.temperature[ch.id_out]
                         for ch in self.channels]) * self.n_subchannels
-        self.manifolds[1].update(,
+        self.manifolds[1].update(mass_flow_in=0.0, mass_source=mass_source,
+                                 update_mass=True, update_flow=True,
+                                 update_heat=False, update_fluid=update_fluid,
+                                 enthalpy_source=channel_enthalpy_out)
 
         # Inlet header update
         self.manifolds[0].p_out = \
@@ -373,7 +385,10 @@ class UpdatedKohFlowCircuit(KohFlowCircuit):
         else:
             mass_fraction = 1.0
         mass_source = -self.channel_mass_flow * mass_fraction
-        self.manifolds[0].update(,
+        self.manifolds[0].update(mass_flow_in=self.mass_flow_in,  # * 1.00000,
+                                 mass_source=mass_source,
+                                 update_mass=True, update_flow=True,
+                                 update_heat=False, update_fluid=update_fluid)
         id_in = self.manifolds[0].id_in
         self.vol_flow_in = \
             self.mass_flow_in / self.manifolds[0].fluid.density[id_in]
