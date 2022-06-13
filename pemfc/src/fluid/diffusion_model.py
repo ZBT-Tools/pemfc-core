@@ -37,8 +37,8 @@ class DiffusionModel(ABC):
                       'used')
         self.updated = False
 
-    def binary_diffusion_coeff(self, species_i, species_j, temperature,
-                               pressure):
+    def calc_binary_diffusion_coeff(self, species_i, species_j, temperature,
+                                    pressure):
         """
         :return: binary diffusion coefficient for species_a and species_b (m²/s)
         :param species_i: string with sum formula for first species
@@ -66,13 +66,10 @@ class DiffusionModel(ABC):
                 if [j, i] in ij_list:
                     self.d_ij[i, j] = self.d_ij[j, i]
                 else:
-                    d_ij = self.binary_diffusion_coeff(self.species_names[i],
-                                                    self.species_names[j],
-                                                    temperature, pressure)
-                    self.d_ij[i, j] = \
-                        self.binary_diffusion_coeff(self.species_names[i],
-                                                    self.species_names[j],
-                                                    temperature, pressure)
+                    d_ij = self.calc_binary_diffusion_coeff(
+                        self.species_names[i], self.species_names[j],
+                        temperature, pressure)
+                    self.d_ij[i, j] = d_ij
                 ij_list.append([i, j])
 
     def knudsen_diffusion_coeff(self, species_i, temperature):
@@ -106,8 +103,8 @@ class MixtureAveragedDiffusionModel(DiffusionModel):
         super().__init__(fluid)
         self.d_eff = np.zeros((self.n_species, *fluid.array_shape))
 
-    def diffusion_coeff(self, species_i, temperature, pressure,
-                        mole_fractions, flux_ratio='stoich'):
+    def calc_diffusion_coeff(self, species_i, temperature, pressure,
+                             mole_fractions, flux_ratio='stoich'):
         """
         :param species_i: string with sum formula for species
         :param temperature: temperature (K) (float or numpy array)
@@ -134,8 +131,8 @@ class MixtureAveragedDiffusionModel(DiffusionModel):
             d_ij = self.d_ij[id_i, :]
         else:
             d_ij = np.asarray(
-                [self.binary_diffusion_coeff(species_i, species_j,
-                                             temperature, pressure)
+                [self.calc_binary_diffusion_coeff(species_i, species_j,
+                                                  temperature, pressure)
                     for species_j in self.species_names])
             self.d_ij[:] = d_ij
 
@@ -160,12 +157,14 @@ class MixtureAveragedDiffusionModel(DiffusionModel):
     def update(self, temperature, pressure, mole_fractions, flux_ratio='stoich',
                *args, **kwargs):
         super().update(temperature, pressure, *args, **kwargs)
+        update_names = kwargs.get('update_names', None)
+        if not isinstance(update_names, (tuple, list)):
+            update_names = self.species_names
         # Calculate mixture averaged diffusion coefficients
-        d_eff = np.asarray([self.diffusion_coeff(name, temperature, pressure,
-                           mole_fractions, flux_ratio=flux_ratio)
-                           for name in self.species_names])
-        self.d_eff[:] = np.asarray(
-            [self.diffusion_coeff(name, temperature, pressure,
-                                  mole_fractions, flux_ratio=flux_ratio)
-             for name in self.species_names])
+        for i, name in enumerate(self.species_names):
+            if name in update_names:
+                self.d_eff[i] = \
+                    self.calc_diffusion_coeff(name, temperature, pressure,
+                                              mole_fractions,
+                                              flux_ratio=flux_ratio)
         self.updated = True

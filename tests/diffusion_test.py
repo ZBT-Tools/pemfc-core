@@ -33,9 +33,9 @@ diff_model = diffusion_model.MixtureAveragedDiffusionModel(humid_air.gas)
 diff_model.updated = False
 # diff_model.update(humid_air.temperature, humid_air.pressure,
 #                   humid_air.mole_fraction)
-d_eff = np.asarray([diff_model.diffusion_coeff(name, humid_air.temperature,
-                                               humid_air.pressure,
-                                               humid_air.mole_fraction)
+d_eff = np.asarray([diff_model.calc_diffusion_coeff(name, humid_air.temperature,
+                                                    humid_air.pressure,
+                                                    humid_air.mole_fraction)
                     for name in humid_air.species_names])
 diff_model.update(humid_air.temperature, humid_air.pressure,
                   humid_air.mole_fraction)
