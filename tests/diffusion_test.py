@@ -38,7 +38,7 @@ d_eff = np.asarray([diff_model.calc_diffusion_coeff(name, humid_air.temperature,
                                                     humid_air.mole_fraction)
                     for name in humid_air.species_names])
 diff_model.update(humid_air.temperature, humid_air.pressure,
-                  humid_air.mole_fraction)
+                  humid_air.mole_fraction, update_names=['O2', 'H2O'])
 print(d_eff)
 print(diff_model.d_eff)
 print(diff_model.d_ij[:, :, 0])
