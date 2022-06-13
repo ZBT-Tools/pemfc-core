@@ -494,7 +494,7 @@ class IncompressibleFluidChannel(Channel):
         #     self.fluid.update(self.temperature, self.pressure)
 
     def update_fluid(self):
-        self.fluid.update(self.temperature, self.pressure,,
+        self.fluid.update(self.temperature, self.pressure)
 
     def calc_mass_balance(self, mass_flow_in=None, mass_source=None):
         if mass_flow_in is not None:
@@ -556,7 +556,7 @@ class GasMixtureChannel(Channel):
         #     self.fluid.update(self.temperature, self.pressure, self.mole_flow)
 
     def update_fluid(self):
-        self.fluid.update(self.temperature, self.pressure, self.mole_flow, )
+        self.fluid.update(self.temperature, self.pressure, self.mole_flow)
 
     def calc_mass_balance(self, mass_flow_in=None, mass_source=None):
         """

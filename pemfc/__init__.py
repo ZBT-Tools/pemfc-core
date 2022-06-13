@@ -10,6 +10,8 @@ from .src import electrical_coupling
 from .src import flow_circuit
 from .src import flow_resistance
 from .src.fluid import fluid
+from .src.fluid import diffusion_model
+from .src.fluid import species
 from .src import global_functions
 # from .src.gui import *
 from .src import half_cell
@@ -20,7 +22,6 @@ from .src import membrane
 from .src import output
 from .src import output_object
 from .src import simulation
-from .src.fluid import species
 from .src import stack
 from .src import temperature_system
 # from . import main_app
