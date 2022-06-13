@@ -297,6 +297,8 @@ class GasMixture(DiscreteFluid):
         self.gas_constant = constants.GAS_CONSTANT
         self.species = species.GasProperties(species_names)
         self.n_species = len(self.species.names)
+        self.species_id = \
+            dict(zip(self.species.names, list(range(self.n_species))))
         self.species_viscosity = self.species.calc_viscosity(self._temperature)
 
         mole_fractions = gf.ensure_list(mole_fractions)
@@ -658,6 +660,7 @@ class TwoPhaseMixture(DiscreteFluid):
         all_ids = np.array(list(range(len(self.species.names))), dtype='int32')
         ids_no_pc = np.delete(all_ids, ids_pc)
         self.ids_no_pc = list(ids_no_pc)
+        self.n_species = len(species_dict)
 
         # update mole_fractions if humidity is provided
         humidity = kwargs.get('humidity', None)
@@ -669,7 +672,6 @@ class TwoPhaseMixture(DiscreteFluid):
                                                          self.id_pc)
 
         # Total properties (both phases)
-        self.n_species = len(species_dict)
         self.array_shape_2d = self.gas.array_shape_2d
         self._mole_fraction = \
             gf.array_vector_multiply(np.ones(self.array_shape_2d),
@@ -742,6 +744,10 @@ class TwoPhaseMixture(DiscreteFluid):
     @property
     def species(self):
         return self.gas.species
+
+    @property
+    def species_id(self):
+        return self.gas.species_id
 
     @property
     def species_mw(self):
