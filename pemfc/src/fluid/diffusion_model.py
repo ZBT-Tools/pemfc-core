@@ -16,6 +16,7 @@ class DiffusionModel(ABC):
                             'CanteraGasMixture must be provided')
         self.n_species = fluid.n_species
         self.species_names = fluid.species_names
+        self.fluid = fluid
         array_shape = fluid.array_shape
         try:
             self.mw = {name: mat_prop.molecular_weight[name] for name in
@@ -37,8 +38,8 @@ class DiffusionModel(ABC):
                       'used')
         self.updated = False
 
-    def calc_binary_diffusion_coeff(self, species_i, species_j, temperature,
-                                    pressure):
+    def calc_binary_diffusion_coeff(self, species_i, species_j,
+                                    temperature=None, pressure=None):
         """
         :return: binary diffusion coefficient for species_a and species_b (m²/s)
         :param species_i: string with sum formula for first species
@@ -52,6 +53,10 @@ class DiffusionModel(ABC):
         Stefan-Maxwell and Dusty-Gas Models.” Journal of Power Sources 310
         (April 2016): 32–40. https://doi.org/10.1016/j.jpowsour.2016.01.099.'
         """
+        if temperature is None:
+            temperature = self.fluid.temperature
+        if pressure is None:
+            pressure = self.fluid.pressure
         const = 3.1976e-4
         t_factor = temperature ** 1.75
         mw_factor = np.sqrt(1.0 / self.mw[species_i] + 1.0 / self.mw[species_j])
@@ -59,7 +64,11 @@ class DiffusionModel(ABC):
                                 + self.vd[species_j] ** (1.0 / 3.0)) ** 2.0
         return const * t_factor * mw_factor / vd_factor
 
-    def update_binary_diffusion_coeffs(self, temperature, pressure):
+    def update_binary_diffusion_coeffs(self, temperature=None, pressure=None):
+        if temperature is None:
+            temperature = self.fluid.temperature
+        if pressure is None:
+            pressure = self.fluid.pressure
         ij_list = []
         for i in range(self.n_species):
             for j in range(self.n_species):
@@ -72,7 +81,7 @@ class DiffusionModel(ABC):
                     self.d_ij[i, j] = d_ij
                 ij_list.append([i, j])
 
-    def knudsen_diffusion_coeff(self, species_i, temperature):
+    def knudsen_diffusion_coeff(self, species_i, temperature=None):
         """
         :param species_i: string with sum formula for species
         :param temperature: temperature (K) (float or numpy array)
@@ -84,6 +93,8 @@ class DiffusionModel(ABC):
         Stefan-Maxwell and Dusty-Gas Models.” Journal of Power Sources 310
         (April 2016): 32–40. https://doi.org/10.1016/j.jpowsour.2016.01.099.'
         """
+        if temperature is None:
+            temperature = self.fluid.temperature
         if self.knudsen:
             return 2.0 / 3.0 * self.pore_radius \
                 * np.sqrt(8.0 * constants.GAS_CONSTANT * temperature
@@ -92,7 +103,7 @@ class DiffusionModel(ABC):
             return None
 
     @abstractmethod
-    def update(self, temperature, pressure, *args, **kwargs):
+    def update(self, temperature=None, pressure=None, *args, **kwargs):
         # Calculate binary diffusion coefficients
         self.update_binary_diffusion_coeffs(temperature, pressure)
         self.updated = True
@@ -103,8 +114,8 @@ class MixtureAveragedDiffusionModel(DiffusionModel):
         super().__init__(fluid)
         self.d_eff = np.zeros((self.n_species, *fluid.array_shape))
 
-    def calc_diffusion_coeff(self, species_i, temperature, pressure,
-                             mole_fractions, flux_ratio='stoich'):
+    def calc_diffusion_coeff(self, species_i, temperature=None, pressure=None,
+                             mole_fractions=None, flux_ratio='stoich'):
         """
         :param species_i: string with sum formula for species
         :param temperature: temperature (K) (float or numpy array)
@@ -122,7 +133,12 @@ class MixtureAveragedDiffusionModel(DiffusionModel):
         (April 2016): 32–40. https://doi.org/10.1016/j.jpowsour.2016.01.099.'
         """
         assert len(mole_fractions) == self.n_species
-
+        if temperature is None:
+            temperature = self.fluid.temperature
+        if pressure is None:
+            pressure = self.fluid.pressure
+        if mole_fractions is None:
+            mole_fractions = self.fluid.mole_fraction
         x = np.asarray(mole_fractions)
         id_i = self.species_names.index(species_i)
 
@@ -154,8 +170,14 @@ class MixtureAveragedDiffusionModel(DiffusionModel):
 
         return 1.0 / inv_d
 
-    def update(self, temperature, pressure, mole_fractions, flux_ratio='stoich',
-               *args, **kwargs):
+    def update(self, temperature=None, pressure=None, mole_fractions=None,
+               flux_ratio='stoich', *args, **kwargs):
+        if temperature is None:
+            temperature = self.fluid.temperature
+        if pressure is None:
+            pressure = self.fluid.pressure
+        if mole_fractions is None:
+            mole_fractions = self.fluid.mole_fraction
         super().update(temperature, pressure, *args, **kwargs)
         update_names = kwargs.get('update_names', None)
         if not isinstance(update_names, (tuple, list)):
