@@ -1094,10 +1094,12 @@ def factory(fluid_dict, **kwargs):
     if any(key in fluid_dict for key in prop_names):
         props_dict = {key: fluid_dict[key] for key in prop_names}
         fluid_props = species.ConstantProperties(name, **props_dict)
-        return ConstantFluid(array_shape, name, fluid_props, temperature, pressure)
+        return ConstantFluid(array_shape, name, fluid_props,
+                             temperature, pressure)
     else:
         return arg_factory(
-            array_shape, name, liquid_props=liquid_props, species_dict=species_dict,
+            array_shape, name, liquid_props=liquid_props,
+            species_dict=species_dict,
             mole_fractions=mole_fractions, temperature=temperature,
             pressure=pressure, humidity=humidity, backend=backend,
             fluid_dict=fluid_dict)
