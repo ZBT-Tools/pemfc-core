@@ -28,7 +28,8 @@ fluid_dict = \
 
 humid_air = fluid.factory(fluid_dict, backend='pemfc')
 humid_air.update()
-
+surface_tension = humid_air.phase_change_species.calc_surface_tension(
+    humid_air.temperature)
 diff_model = diffusion_model.MixtureAveragedDiffusionModel(humid_air.gas)
 diff_model.updated = False
 # diff_model.update(humid_air.temperature, humid_air.pressure,

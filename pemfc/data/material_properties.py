@@ -1,6 +1,8 @@
 # Material property database
 # Polynomials will be evaluated with the numpy.polynomial.polynomial.polyval
-# function in the form: p(x) = c[0] + c[1] * x + ... + c[n] * x ** n
+# function, however form given here is reversed due to definition for the
+# deprecated numpy polynomial function before:
+# p(x) = c[0] * x ** n + ... + c[n-1] * x + c[n]
 
 import numpy as np
 
@@ -169,7 +171,7 @@ phase_change_polynomials = \
         # Temperature-dependent surface tension (N/m)
             {
                 'H2O':
-                    np.asarray((0.1150905, -0.0001455))
+                    np.asarray((-1.455e-4, 1.150905e-1))
             }
     }
 
