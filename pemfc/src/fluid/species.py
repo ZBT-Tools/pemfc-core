@@ -152,7 +152,8 @@ class GasProperties(PolynomialProperties):
 
 class PhaseChangeProperties(PolynomialProperties):
 
-    PROPERTY_NAMES = ['saturation_pressure', 'vaporization_enthalpy']
+    PROPERTY_NAMES = ['saturation_pressure', 'vaporization_enthalpy',
+                      'surface_tension']
 
     def __init__(self, liquids_dict):
         # print("Constructor of Two Phase Species")
