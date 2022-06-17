@@ -196,6 +196,19 @@ class PhaseChangeProperties(PolynomialProperties):
         return polyval(temperature,
                        self.coeff_dict_arr['vaporization_enthalpy'])
 
+    def calc_humid_composition(self, humidity, temperature, pressure,
+                               dry_molar_composition, id_pc):
+        if humidity > 1.0:
+            raise ValueError('relative humidity must not exceed 1.0')
+        molar_fraction_phase_change_species = \
+            humidity * self.calc_saturation_pressure(temperature) / pressure
+        humid_composition = np.asarray(dry_molar_composition)
+        humid_composition[id_pc] = 0.0
+        humid_composition /= np.sum(humid_composition, axis=0)
+        humid_composition *= (1.0 - molar_fraction_phase_change_species)
+        humid_composition[id_pc] = molar_fraction_phase_change_species
+        return humid_composition
+
     def calc_property(self, property_name, temperature, **kwargs):
         if property_name == 'saturation_pressure':
             return self.calc_saturation_pressure(temperature)

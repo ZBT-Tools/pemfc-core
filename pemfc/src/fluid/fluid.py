@@ -10,11 +10,6 @@ from . import species
 from pemfc.src.global_functions import move_axis
 from collections import OrderedDict
 
-if 'main_app.py' in sys.argv[0]:
-    from data import water_properties as water_props
-else:
-    from pemfc.data import water_properties as water_props
-
 try:
     import cantera as ct
     FOUND_CANTERA = True
@@ -666,10 +661,8 @@ class TwoPhaseMixture(DiscreteFluid):
         humidity = kwargs.get('humidity', None)
         if humidity is not None:
             mole_fractions = \
-                water_props.water.calc_humid_composition(humidity, temperature,
-                                                         pressure,
-                                                         mole_fractions,
-                                                         self.id_pc)
+                self.phase_change_species.calc_humid_composition(
+                    humidity, temperature, pressure, mole_fractions, self.id_pc)
 
         # Total properties (both phases)
         self.array_shape_2d = self.gas.array_shape_2d

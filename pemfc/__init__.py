@@ -1,5 +1,4 @@
 from .src import *
-from .data import gas_properties
 from .data import input_dicts
 from .data import material_properties
 #
