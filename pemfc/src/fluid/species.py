@@ -171,23 +171,6 @@ class PhaseChangeProperties(PolynomialProperties):
 
         super().__init__(self.names, self.PROPERTY_NAMES, poly_coeffs)
 
-        # self.gas = GasProperties(self.names)
-        # if len(liquids_dict) == 1:
-        #     self.liquid = next(iter(liquids_dict.values()))
-        # else:
-        #     density = [value.density for key, value in liquids_dict]
-        #     specific_heat = \
-        #       [value.specific_heat for key, value in liquids_dict]
-        #     viscosity = [value.viscosity for key, value in liquids_dict]
-        #     thermal_conductivity = \
-        #         [value.thermal_conductivity for key, value in liquids_dict]
-        #     self.liquid = \
-        #         FluidProperties('liquids', density=np.asarray(density),
-        #                         viscosity=np.asarray(viscosity),
-        #                         specific_heat=np.asarray(specific_heat),
-        #                         thermal_conductivity=
-        #                         np.asarray(thermal_conductivity))
-
     def calc_saturation_pressure(self, temperature):
         return polyval(temperature,
                        self.coeff_dict_arr['saturation_pressure'])
@@ -195,6 +178,10 @@ class PhaseChangeProperties(PolynomialProperties):
     def calc_vaporization_enthalpy(self, temperature):
         return polyval(temperature,
                        self.coeff_dict_arr['vaporization_enthalpy'])
+
+    def calc_surface_tension(self, temperature):
+        return polyval(temperature,
+                       self.coeff_dict_arr['surface_tension'])
 
     def calc_humid_composition(self, humidity, temperature, pressure,
                                dry_molar_composition, id_pc):

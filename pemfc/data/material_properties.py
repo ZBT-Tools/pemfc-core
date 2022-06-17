@@ -1,3 +1,7 @@
+# Material property database
+# Polynomials will be evaluated with the numpy.polynomial.polynomial.polyval
+# function in the form: p(x) = c[0] + c[1] * x + ... + c[n] * x ** n
+
 import numpy as np
 
 # Molecular weights of selected molecules (kg/mol)
@@ -160,6 +164,12 @@ phase_change_polynomials = \
                          2.05547260e-08, -1.55445645e-05, 7.98692642e-03,
                          -2.82333561e+00, 6.77951176e+02, -1.05826022e+05,
                          9.69666280e+06, -3.95999179e+08)),
+            },
+        'surface_tension':
+        # Temperature-dependent surface tension (N/m)
+            {
+                'H2O':
+                    np.asarray((0.1150905, -0.0001455))
             }
     }
 
