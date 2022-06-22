@@ -24,7 +24,7 @@ fluid_dict = \
         "humidity": 0.5,
         "temperature": 343.15,
         "pressure": 101325.0,
-        "nodes": (10, 5)
+        "nodes": (1)
     }
 
 humid_air_pemfc = fluid.factory(fluid_dict, backend='pemfc')
@@ -39,36 +39,36 @@ water_ct = ct.Water()
 water_ct.TP = 373.15, 101325.0
 
 
-def calc_humid_composition(humidity, temperature, pressure,
-                           dry_molar_composition, id_pc=-1):
-    if humidity > 1.0:
-        raise ValueError('relative humidity must not exceed 1.0')
-    water_ct.TP = temperature, pressure
-    molar_fraction_water = humidity * water_ct.P_sat / pressure
-    humid_composition = np.asarray(dry_molar_composition)
-    humid_composition[id_pc] = 0.0
-    humid_composition /= np.sum(humid_composition, axis=0)
-    humid_composition *= (1.0 - molar_fraction_water)
-    humid_composition[id_pc] = molar_fraction_water
-    return humid_composition
-
-
-humid_air_obj_ct = ct.Solution('gri30.yaml')
-
-species_names = fluid_dict['components'].keys()
-
-dry_fractions = [v['molar_fraction'] for k, v
-                 in fluid_dict['components'].items()]
-humid_fractions = calc_humid_composition(fluid_dict['humidity'],
-                                         fluid_dict['temperature'],
-                                         fluid_dict['pressure'],
-                                         dry_fractions, -1)
-
-humid_air_obj_ct.X = dict(zip(species_names, humid_fractions))
-all_species_names = humid_air_obj_ct.species_names
-species_ids = [all_species_names.index(item) for item in species_names]
-molar_composition = np.asarray([item * np.ones(fluid_dict['nodes'])
-                                for item in humid_fractions])
+# def calc_humid_composition(humidity, temperature, pressure,
+#                            dry_molar_composition, id_pc=-1):
+#     if humidity > 1.0:
+#         raise ValueError('relative humidity must not exceed 1.0')
+#     water_ct.TP = temperature, pressure
+#     molar_fraction_water = humidity * water_ct.P_sat / pressure
+#     humid_composition = np.asarray(dry_molar_composition)
+#     humid_composition[id_pc] = 0.0
+#     humid_composition /= np.sum(humid_composition, axis=0)
+#     humid_composition *= (1.0 - molar_fraction_water)
+#     humid_composition[id_pc] = molar_fraction_water
+#     return humid_composition
+#
+#
+# humid_air_obj_ct = ct.Solution('gri30.yaml')
+#
+# species_names = fluid_dict['components'].keys()
+#
+# dry_fractions = [v['molar_fraction'] for k, v
+#                  in fluid_dict['components'].items()]
+# humid_fractions = calc_humid_composition(fluid_dict['humidity'],
+#                                          fluid_dict['temperature'],
+#                                          fluid_dict['pressure'],
+#                                          dry_fractions, -1)
+#
+# humid_air_obj_ct.X = dict(zip(species_names, humid_fractions))
+# all_species_names = humid_air_obj_ct.species_names
+# species_ids = [all_species_names.index(item) for item in species_names]
+# molar_composition = np.asarray([item * np.ones(fluid_dict['nodes'])
+#                                 for item in humid_fractions])
 
 n_iter = 1000
 start_time_pemfc = time.time()
@@ -77,10 +77,10 @@ for i in range(n_iter):
 end_time_pemfc = time.time()
 
 start_time_ct = time.time()
-temp = 343.15
+# temp = 343.15
 for i in range(n_iter):
     # temp += 10.0
-    humid_air_ct.update(temp, 101325)
+    humid_air_ct.update(343.15, 101325)
 end_time_ct = time.time()
 
 vap_enthalpy_pemfc = humid_air_pemfc.calc_vaporization_enthalpy()
