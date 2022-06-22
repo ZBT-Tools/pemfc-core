@@ -131,15 +131,15 @@ class GasProperties(PolynomialProperties):
                         poly_coeffs[prop_name][species_name]
         self.mw = np.asarray(self.mw)
 
-    def calc_specific_heat(self, temperature, tensor=False):
+    def calc_specific_heat(self, temperature, tensor=True):
         return polyval(temperature, self.coeff_dict_arr['specific_heat'],
                        tensor=tensor)
 
-    def calc_viscosity(self, temperature, tensor=False):
+    def calc_viscosity(self, temperature, tensor=True):
         return polyval(temperature, self.coeff_dict_arr['viscosity'],
                        tensor=tensor)
 
-    def calc_thermal_conductivity(self, temperature, pressure, tensor=False):
+    def calc_thermal_conductivity(self, temperature, pressure, tensor=True):
         lambda_1_bar = \
             polyval(temperature,
                     self.coeff_dict_arr['thermal_conductivity'][:][0],
@@ -154,7 +154,7 @@ class GasProperties(PolynomialProperties):
         return result
 
     def calc_property(self, property_name, temperature, pressure=101325.0,
-                      tensor=False):
+                      tensor=True):
         if property_name == 'thermal_conductivity':
             return self.calc_thermal_conductivity(temperature, pressure,
                                                   tensor=tensor)
