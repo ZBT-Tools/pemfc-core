@@ -132,14 +132,23 @@ class GasProperties(PolynomialProperties):
         self.mw = np.asarray(self.mw)
 
     def calc_specific_heat(self, temperature, tensor=True):
+        """
+        Specific heat capacity at constant pressure in J/(kg-K)
+        """
         return polyval(temperature, self.coeff_dict_arr['specific_heat'],
                        tensor=tensor)
 
     def calc_viscosity(self, temperature, tensor=True):
+        """
+        Dynamic viscosity in Pa-s
+        """
         return polyval(temperature, self.coeff_dict_arr['viscosity'],
                        tensor=tensor)
 
     def calc_thermal_conductivity(self, temperature, pressure, tensor=True):
+        """
+        Thermal conductivity in W/(m-K)
+        """
         lambda_1_bar = \
             polyval(temperature,
                     self.coeff_dict_arr['thermal_conductivity'][:][0],
@@ -186,16 +195,25 @@ class PhaseChangeProperties(PolynomialProperties):
         super().__init__(self.names, self.PROPERTY_NAMES, poly_coeffs)
 
     def calc_saturation_pressure(self, temperature, tensor=False):
+        """
+        Saturation pressure in Pa
+        """
         return polyval(temperature,
                        self.coeff_dict_arr['saturation_pressure'],
                        tensor=tensor)
 
     def calc_vaporization_enthalpy(self, temperature, tensor=False):
+        """
+        Vaporization enthalpy in J/mol
+        """
         return polyval(temperature,
                        self.coeff_dict_arr['vaporization_enthalpy'],
                        tensor=tensor)
 
     def calc_surface_tension(self, temperature, tensor=False):
+        """
+        Surface tension in N/m
+        """
         return polyval(temperature,
                        self.coeff_dict_arr['surface_tension'], tensor=tensor)
 

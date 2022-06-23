@@ -5,5 +5,5 @@ dependencies:
         - pip:
                 - numpy
                 - scipy
-                - cantera
                 - matplotlib
+                - cantera

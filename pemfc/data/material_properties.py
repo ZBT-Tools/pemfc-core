@@ -158,7 +158,7 @@ phase_change_polynomials = \
                          3.20415279e+07, -1.34211567e+09)),
             },
         'vaporization_enthalpy':
-        # Temperature-dependent vaporization enthalpy (J/kg)
+        # Temperature-dependent vaporization enthalpy (J/mol)
             {
                 'H2O':
                     np.asarray(
