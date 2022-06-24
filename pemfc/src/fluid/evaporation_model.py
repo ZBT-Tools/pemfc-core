@@ -10,21 +10,26 @@ from pemfc.src import constants as constants
 
 
 class EvaporationModel(ABC):
-    def __init__(self, fluid, *arg, **kwargs):
+    def __new__(cls, fluid, model_dict, *arg, **kwargs):
+        model_type = model_dict.get('type', 'HertzKnudsenSchrage')
+        if model_type == 'HertzKnudsenSchrage':
+            return super(EvaporationModel, cls).\
+                __new__(HertzKnudsenSchrageModel)
+
+        else:
+            raise NotImplementedError
+
+    def __init__(self, fluid, model_dict, *arg, **kwargs):
         if not isinstance(fluid, (fl.TwoPhaseMixture,
                                   fl.CanteraTwoPhaseMixture)):
             raise TypeError('Argument fluid of type TwoPhaseMixture or '
                             'CanteraTwoPhaseMixture must be provided')
+        self.dict = model_dict
+        self.name = model_dict.get('name', None)
         self.n_species = fluid.n_species
         self.species_names = fluid.species_names
         self.fluid = fluid
-        try:
-            self.mw = {name: mat_prop.molecular_weight[name] for name in
-                       self.species_names}
-        except KeyError:
-            raise NotImplementedError('Provided substance in species_list '
-                                      'is not available (yet)')
-
+        self.mw = fluid.gas.species.mw[fluid.id_pc]
         self.updated = False
 
     @abstractmethod
@@ -43,7 +48,7 @@ class EvaporationModel(ABC):
 
 
 class HertzKnudsenSchrageModel(EvaporationModel):
-    def __init__(self, fluid, model_dict):
+    def __init__(self, fluid, model_dict, *arg, **kwargs):
         super().__init__(fluid, model_dict)
         self.evap_coeff = model_dict['evaporation_coefficient']
         self.mw = fluid.gas.species.mw[fluid.id_pc]
