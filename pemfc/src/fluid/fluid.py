@@ -365,8 +365,8 @@ class GasMixture(DiscreteFluid):
                              'number of species')
         if np.max(mole_composition) > constants.SMALL:
             mole_composition[mole_composition < constants.SMALL] = 0.0
-        self._mole_fraction[:] = self._calc_mole_fraction(mole_composition)
-        self._calc_molar_mass()
+        self._mole_fraction[:] = self.calc_mole_fraction(mole_composition)
+        self.calc_molar_mass()
         self._mass_fraction[:] = \
             self.calc_mass_fraction(self._mole_fraction)
         self._calc_properties(self._temperature, self._pressure, method)
@@ -380,13 +380,13 @@ class GasMixture(DiscreteFluid):
             / (self.gas_constant * self._temperature)
         return self._mole_fraction * total_mol_conc
 
-    def _calc_mole_fraction(self, mole_composition):
+    def calc_mole_fraction(self, mole_composition):
         if np.min(mole_composition) < 0.0:
             raise ValueError('mole_composition must not be smaller zero')
         mole_fraction = self._calc_fraction(mole_composition)
         return mole_fraction
 
-    def _calc_molar_mass(self, mole_fraction=None):
+    def calc_molar_mass(self, mole_fraction=None):
         if mole_fraction is None:
             self.mw[:] = np.sum(gf.array_vector_multiply(self._mole_fraction,
                                                          self.species.mw),
@@ -763,9 +763,9 @@ class TwoPhaseMixture(DiscreteFluid):
             if np.max(mole_composition) > constants.SMALL:
                 mole_composition[mole_composition < constants.SMALL] = 0.0
                 self._mole_fraction[:] = \
-                    self.gas._calc_mole_fraction(mole_composition)
+                    self.gas.calc_mole_fraction(mole_composition)
 
-        self.mw[:] = self.gas._calc_molar_mass(self.mole_fraction)
+        self.mw[:] = self.gas.calc_molar_mass(self.mole_fraction)
         test = self.mw[0]
         self._mass_fraction[:] = \
             self.gas.calc_mass_fraction(self._mole_fraction, self.mw)
@@ -971,10 +971,10 @@ class CanteraTwoPhaseMixture(CanteraGasMixture):
             self.water_base.TP = temperature[i], pressure[i]
             sat_pressure[i] = self.water_base.P_sat
         # self.saturation_pressure[:] = sat_pressure.reshape(self.array_shape)
-        self.calc_humidity()
+        self._calc_humidity()
         # self.water.TP = self._temperature, self._pressure
 
-    def calc_humidity(self):
+    def _calc_humidity(self):
         """
         Calculates the relative humidity of the fluid.
         """

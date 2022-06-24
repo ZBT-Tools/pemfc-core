@@ -23,7 +23,7 @@ fluid_dict = \
         "humidity": 0.5,
         "temperature": 333.15,
         "pressure": 101325.0,
-        "nodes": (10)
+        "nodes": (1)
     }
 
 humid_air = fluid.factory(fluid_dict, backend='pemfc')
