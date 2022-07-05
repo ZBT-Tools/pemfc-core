@@ -681,6 +681,7 @@ class TwoPhaseMixture(DiscreteFluid):
         self.liquid_mole_fraction = np.zeros(self.array_shape)
         self.humidity = np.zeros(self.array_shape)
         self.saturation_pressure = np.zeros(self.array_shape)
+        self.surface_tension = np.zeros(self.array_shape)
 
         # Print data
         print_variables = \
@@ -787,6 +788,7 @@ class TwoPhaseMixture(DiscreteFluid):
             np.sum(mole_composition * self.mw, axis=0) \
             - np.sum(gas_mole_composition * self.gas.mw, axis=0)
         self.liquid_mass_fraction[self.liquid_mass_fraction < 0.0] = 0.0
+        self.surface_tension[:] = self.calc_surface_tension()
 
         # dry_conc = np.copy(gas_conc)
         # dry_conc[self.id_pc] = 0.0
@@ -808,6 +810,11 @@ class TwoPhaseMixture(DiscreteFluid):
 
         self._calc_properties(temperature, pressure, method)
         self._calc_humidity()
+
+    def calc_surface_tension(self, temperature=None):
+        if temperature is None:
+            temperature = self.temperature
+        return self.phase_change_species.calc_surface_tension(temperature)
 
     def _calc_property(self, property_name, temperature, pressure=101325.0,
                        method='ideal'):
