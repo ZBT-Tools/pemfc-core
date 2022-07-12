@@ -4,6 +4,14 @@ import inspect
 import json
 import numpy as np
 import timeit
+
+# Location of this file
+__location__ = os.path.realpath(
+    os.path.join(os.getcwd(), os.path.dirname(__file__)))
+# Location of main executing file
+run_location = os.path.realpath(os.path.join(
+    os.getcwd(), os.path.dirname(sys.argv[0])))
+# if run_location == __location__:
 if __name__ == "__main__":
     from src import simulation
 else:
