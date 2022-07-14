@@ -4,7 +4,7 @@ import inspect
 import json
 import numpy as np
 import timeit
-from pemfc.data import input_dicts
+# from pemfc.data import input_dicts
 
 # Location of this file
 __location__ = os.path.realpath(
