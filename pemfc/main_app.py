@@ -4,6 +4,7 @@ import inspect
 import json
 import numpy as np
 import timeit
+from pemfc.data import input_dicts
 
 # Location of this file
 __location__ = os.path.realpath(
@@ -41,5 +42,8 @@ if __name__ == "__main__":
         os.path.dirname(os.path.abspath(inspect.getsourcefile(lambda: 0)))
     with open(os.path.join(base_dir, 'settings', 'settings.json')) as file:
         settings = json.load(file)
+    # settings = input_dicts.sim_dict
+    # with open(os.path.join(base_dir, 'settings', 'settings.json'), 'w') as file:
+    #     json.dump(settings, file, indent=4)
     global_data, local_data, sim = main(settings)
 
