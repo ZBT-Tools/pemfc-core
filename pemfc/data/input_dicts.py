@@ -22,9 +22,8 @@ sim_dict = {
         'calc_temperature': sim.calc_temperature,
         'calc_current_density': sim.calc_current_density,
         # 'calc_flow_distribution': sim.calc_flow_distribution,
-
-        'init_current_density': op_con.current_density,
-        'init_voltage': None
+        # 'init_current_density': op_con.current_density,
+        # 'init_voltage': None
         },
     'simulation': {
         'maximum_iteration': sim.maximum_iteration_number,
@@ -32,6 +31,8 @@ sim_dict = {
         # 'maximum_iteration_flow': sim.maximum_iteration_number_flow,
         # 'minimum_iteration_flow': sim.minimum_iteration_number_flow,
         'convergence_criteria': sim.convergence_criteria,
+        'underrelaxation_factor': sim.underrelaxation_factor,
+
         # 'convergence_criteria_flow':  sim.convergence_criteria_flow,
         'current_control': op_con.current_control,
         'operation_control': 'Current',
@@ -58,7 +59,6 @@ sim_dict = {
         #      phy_prop.electrical_conductivity_gas_diffusion_electrode_x],
         # 'temp_cool_in': op_con.temp_coolant_in,
         # 'temp_init': op_con.temp_initial,
-        'underrelaxation_factor': sim.underrelaxation_factor,
         'open_circuit_voltage': op_con.open_circuit_voltage,
         'thermoneutral_voltage': phy_prop.v_thermo_neutral
         },
@@ -80,10 +80,10 @@ sim_dict = {
         },
     'cathode': {
         'name': 'Cathode',
-        'flow_direction': geom.cathode_flow_direction,
+        # 'flow_direction': geom.cathode_flow_direction,
         'channel_number': geom.cathode_channel_number,
         'stoichiometry': op_con.stoichiometry_cathode,
-        'is_cathode': True,
+        # 'is_cathode': True,
         # 'species_names': op_con.cathode_species,
         # 'inlet_composition': op_con.cathode_inlet_composition,
         'charge_number': op_con.cathode_electron_number,
@@ -182,10 +182,10 @@ sim_dict = {
         },
     'anode': {
         'name': 'Anode',
-        'flow_direction': geom.anode_flow_direction,
+        # 'flow_direction': geom.anode_flow_direction,
         'channel_number': geom.anode_channel_number,
         'stoichiometry': op_con.stoichiometry_anode,
-        'is_cathode': False,
+        # 'is_cathode': False,
         # 'species_names': op_con.anode_species,
         # 'inlet_composition': op_con.anode_inlet_composition,
         'charge_number': op_con.anode_electron_number,

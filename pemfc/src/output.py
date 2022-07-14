@@ -7,6 +7,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import timeit
 import json
+from json import JSONEncoder
 import sys
 
 # local module imports
@@ -27,6 +28,13 @@ MARKER_SIZE = 5.0
 LINE_WIDTH = 1.0
 FIG_DPI = 150
 FIG_SIZE = (6.4, 4.8)
+
+
+class NumpyArrayEncoder(JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return JSONEncoder.default(self, obj)
 
 
 class Output:
@@ -612,7 +620,8 @@ class Output:
             file_path = os.path.join(self.output_dir, 'settings.json')
             if fmt == 'json':
                 with open(file_path, 'w') as file:
-                    file.write(json.dumps(settings, indent=2))
+                    file.write(json.dumps(settings, indent=2,
+                                          cls=NumpyArrayEncoder))
 
     def save_global_results(self, results, fmt='json', **kwargs):
         # if settings is None:
