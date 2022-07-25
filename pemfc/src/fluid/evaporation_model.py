@@ -112,4 +112,77 @@ class HertzKnudsenSchrageModel(EvaporationModel):
         if pressure is None:
             pressure = self.fluid.pressure
         self.evap_rate[:] = \
-            self.calc_evaporation_rate(temperature, pressure)
+            self.calc_evaporation_rate(temperature, pressure, *args, **kwargs)
+
+
+class WangSiModel(EvaporationModel):
+    def __init__(self, fluid, model_dict, *arg, **kwargs):
+        super().__init__(fluid, model_dict)
+        self.evap_coeff = model_dict['evaporation_coefficient']
+        self.cond_coeff = model_dict['condensation_coefficient']
+        self.evap_rate = np.zeros(*fluid.array_shape)
+        self. evap_coeff_factor = 2.0 * self.evap_coeff \
+            / (2.0 - self.evap_coeff)
+
+        # k_b = constants.BOLTZMANN
+        # m = self.mw / constants.AVOGADRO_NUMBER
+        self.gas_constant = constants.GAS_CONSTANT
+        # self.const_factor = np.sqrt(m / (2.0 * np.pi * k_b))
+
+    def calc_evaporation_rate(self, saturation=None, temperature=None,
+                              pressure=None, capillary_pressure=None,
+                              *args, **kwargs):
+        """
+        :param saturation: liquid water saturation (-) (float or numpy array)
+        :param temperature: temperature (K) (float or numpy array)
+        :param pressure: pressure (Pa) (float or numpy array)
+        :param capillary_pressure: capillary_pressure (Pa) (float or numpy
+        array), if given is used to correct the saturation pressure
+        :rtype: evaporation/condensation rate (kg / s) (float or numpy array)
+
+        According to:
+        'Si, Chao, Gui Lu, Xiao-Dong Wang, and Duu-Jong Lee.
+        “Gas Diffusion Layer Properties on the Performance of Proton Exchange
+        Membrane Fuel Cell: Pc-s Relationship with K-Function.” International
+        Journal of Hydrogen Energy 41, no. 46 (December 2016): 21827–37.
+        https://doi.org/10.1016/j.ijhydene.2016.07.005.
+        """
+        if saturation is None:
+            raise ValueError('saturation must be provided')
+        if temperature is None:
+            temperature = self.fluid.temperature
+        if pressure is None:
+            pressure = self.fluid.pressure
+
+        if 'porosity' in kwargs:
+            porosity = kwargs['porosity']
+        else:
+            raise ValueError('porosity must be provided in kwargs')
+
+        p_sat = self.fluid.saturation_pressure
+        if capillary_pressure is not None:
+            gas_const = constants.GAS_CONSTANT
+            p_sat *= \
+                np.exp(capillary_pressure * self.mw
+                       / (gas_const * temperature * self.fluid.gas.density))
+        p_vap = pressure * self.fluid.mole_fraction[self.fluid.id_pc]
+
+        mw_h2o = self.fluid.gas.species.mw[self.fluid.id_pc]
+        x_h2o = self.fluid.mole_fraction[self.fluid.id_pc]
+
+        h_pc_c = self.cond_coeff * porosity * (1.0 - saturation) * \
+            x_h2o / (2.0 * self.gas_constant * temperature) * \
+            (1.0 + np.abs(p_vap - p_sat) / (p_vap - p_sat))
+        h_pc_e = self.evap_coeff * porosity * saturation * \
+            self.fluid.liquid.density / (2.0 * mw_h2o) * \
+            (1.0 - np.abs(p_vap - p_sat) / (p_vap - p_sat))
+        return (h_pc_c + h_pc_e) * mw_h2o * (p_vap - p_sat)
+
+    def update(self, temperature=None, pressure=None, *args, **kwargs):
+        super().update(temperature, pressure, *args, **kwargs)
+        if temperature is None:
+            temperature = self.fluid.temperature
+        if pressure is None:
+            pressure = self.fluid.pressure
+        self.evap_rate[:] = \
+            self.calc_evaporation_rate(temperature, pressure, *args, **kwargs)
