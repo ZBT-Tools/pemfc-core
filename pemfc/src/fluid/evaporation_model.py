@@ -182,7 +182,7 @@ class WangSiModel(EvaporationModel):
         h_pc_e = self.evap_coeff * porosity * saturation * \
             self.fluid.liquid.density / (2.0 * mw_h2o) * \
             (1.0 - pressure_ratio)
-        return (h_pc_c + h_pc_e) * mw_h2o * p_diff
+        return -(h_pc_c + h_pc_e) * mw_h2o * p_diff
 
     def update(self, temperature=None, pressure=None, *args, **kwargs):
         super().update(temperature, pressure, *args, **kwargs)
