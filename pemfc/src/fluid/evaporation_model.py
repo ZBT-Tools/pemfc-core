@@ -169,7 +169,7 @@ class WangSiModel(EvaporationModel):
         p_vap = pressure * self.fluid.mole_fraction[self.fluid.id_pc]
 
         p_diff = p_vap - p_sat
-        with np.errstate(divide='ignore'):
+        with np.errstate(invalid='ignore'):
             pressure_ratio = \
                 np.where(p_diff == 0.0, 1.0, np.abs(p_diff) / p_diff)
 
