@@ -15,7 +15,8 @@ class EvaporationModel(ABC):
         if model_type == 'HertzKnudsenSchrage':
             return super(EvaporationModel, cls).\
                 __new__(HertzKnudsenSchrageModel)
-
+        elif model_type == 'WangSi':
+            return super(EvaporationModel, cls).__new__(WangSiModel)
         else:
             raise NotImplementedError
 
