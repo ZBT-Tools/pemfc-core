@@ -168,15 +168,18 @@ class WangSiModel(EvaporationModel):
                        / (gas_const * temperature * self.fluid.gas.density))
         p_vap = pressure * self.fluid.mole_fraction[self.fluid.id_pc]
 
+        pressure_ratio = np.where(
+            p_vap == p_sat, 1.0, np.abs(p_vap - p_sat) / (p_vap - p_sat))
+
         mw_h2o = self.fluid.gas.species.mw[self.fluid.id_pc]
         x_h2o = self.fluid.mole_fraction[self.fluid.id_pc]
 
         h_pc_c = self.cond_coeff * porosity * (1.0 - saturation) * \
             x_h2o / (2.0 * self.gas_constant * temperature) * \
-            (1.0 + np.abs(p_vap - p_sat) / (p_vap - p_sat))
+            (1.0 + pressure_ratio)
         h_pc_e = self.evap_coeff * porosity * saturation * \
             self.fluid.liquid.density / (2.0 * mw_h2o) * \
-            (1.0 - np.abs(p_vap - p_sat) / (p_vap - p_sat))
+            (1.0 - pressure_ratio)
         return (h_pc_c + h_pc_e) * mw_h2o * (p_vap - p_sat)
 
     def update(self, temperature=None, pressure=None, *args, **kwargs):
