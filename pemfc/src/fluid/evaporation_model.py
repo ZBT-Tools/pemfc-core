@@ -122,8 +122,6 @@ class WangSiModel(EvaporationModel):
         self.evap_coeff = model_dict['evaporation_coefficient']
         self.cond_coeff = model_dict['condensation_coefficient']
         self.evap_rate = np.zeros(*fluid.array_shape)
-        self. evap_coeff_factor = 2.0 * self.evap_coeff \
-            / (2.0 - self.evap_coeff)
 
         # k_b = constants.BOLTZMANN
         # m = self.mw / constants.AVOGADRO_NUMBER
