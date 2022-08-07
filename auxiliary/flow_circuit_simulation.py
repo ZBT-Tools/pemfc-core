@@ -7,8 +7,8 @@ import matplotlib.pyplot as plt
 import matplotlib
 
 # local module imports
-from pemfc import channel as chl
-from pemfc import fluid as fluid
+from pemfc.src import channel as chl
+from pemfc.src import fluid as fluid
 from pemfc.src import flow_circuit as flow_circuit
 from pemfc.src import interpolation as ip
 

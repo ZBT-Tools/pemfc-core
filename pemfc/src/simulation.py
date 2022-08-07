@@ -66,7 +66,7 @@ class Simulation:
         self.average_cell_voltage = dict_simulation['average_cell_voltage']
         if self.current_control and self.current_density is None:
             raise ValueError('parameter current_density must be provided')
-        elif not self.current_density and self.average_cell_voltage is None:
+        elif self.current_density is None and self.average_cell_voltage is None:
             raise ValueError('parameter average_cell_voltage must be provided')
         stack_dict = self.settings['stack']
         cell_number = stack_dict['cell_number']
@@ -210,7 +210,7 @@ class Simulation:
             self.output.write_data(current_densities, cell_voltages,
                                    'Current Density [A/m²]', 'Cell Voltage',
                                    units='V', directory=self.output.output_dir,
-                                   save_csv=True, save_plot=True,
+                                   # save_csv=True, save_plot=True,
                                    write_mode='w')
 
         output_stop_time = timeit.default_timer()

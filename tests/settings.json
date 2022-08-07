@@ -12,6 +12,7 @@
     "maximum_iteration": 100,
     "minimum_iteration": 3,
     "convergence_criteria": 1e-07,
+    "underrelaxation_factor": 0.7,
     "current_control": true,
     "operation_control": "Current",
     "elements": 10,
@@ -22,7 +23,6 @@
   "cell": {
     "width": 0.1,
     "length": 0.5,
-    "underrelaxation_factor": 0.7,
     "open_circuit_voltage": 1.0,
     "thermoneutral_voltage": 1.25,
     "channel_land_discretization": false,

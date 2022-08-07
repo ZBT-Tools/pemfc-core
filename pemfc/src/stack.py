@@ -56,6 +56,9 @@ class Stack:
         # switch for cell discretizsation
         cell_dict['channel_land_discretization'] = \
             settings['simulation']['channel_land_discretization']
+        # add underrelaxation factor to cell settings
+        cell_dict['underrelaxation_factor'] = \
+            settings['simulation']['underrelaxation_factor']
 
         # Initialize fluid channels
         fluids, channels = [], []

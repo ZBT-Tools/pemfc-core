@@ -53,7 +53,7 @@ class HalfCell:
 
         self.faraday = constants.FARADAY
 
-        self.is_cathode = halfcell_dict['is_cathode']
+        # self.is_cathode = halfcell_dict['is_cathode']
 
         self.calc_act_loss = halfcell_dict['calc_act_loss']
         self.calc_cl_diff_loss = halfcell_dict['calc_cl_diff_loss']

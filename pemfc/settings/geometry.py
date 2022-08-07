@@ -2,7 +2,7 @@
 
 """Stack Settings"""
 # number of cells in the stack
-cell_number = 1
+cell_number = 10
 
 """"Cell Geometry """
 # length of the cell, a side of the active area [m]
@@ -81,9 +81,9 @@ coolant_bend_pressure_loss_coefficient = 0.1
 
 """Manifold Geometry"""
 # set boolean for calculation of the flow distribution
-calc_cathode_distribution = True
-calc_anode_distribution = True
-calc_coolant_distribution = True
+calc_cathode_distribution = False
+calc_anode_distribution = False
+calc_coolant_distribution = False
 
 # Configuration: U- or Z-shape
 anode_manifold_configuration = 'U'
