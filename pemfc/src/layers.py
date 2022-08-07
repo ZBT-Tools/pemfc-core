@@ -42,3 +42,11 @@ class SolidLayer(oo.OutputObject):
             conductance_x *= (1.0 - self.porosity) ** self.bruggeman_exponent
         return np.asarray([conductance_z, conductance_x])
 
+    def calc_voltage_loss(self, current_density, area=None, **kwargs):
+        if area is None:
+            current = current_density * self.area_dx
+        else:
+            current = current_density * area
+        return current / self.electrical_conductance[0]
+
+

@@ -46,49 +46,55 @@
     "underrelaxation_factor": 0.7,
     "name": "Membrane"
   },
-  "cathode": {
-    "name": "Cathode",
-    "flow_direction": 1,
-    "channel_number": 50,
-    "stoichiometry": 1.5,
-    "is_cathode": true,
-    "charge_number": 4.0,
-    "reaction_stoichiometry": [
-      -1.0,
-      0.0,
-      2.0
-    ],
-    "electrical_conductivity_bpp": [
-      60000.0,
-      60000.0
-    ],
-    "electrical_conductivity_gde": [
-      500.0,
-      500.0
-    ],
-    "thermal_conductivity_bpp": [
-      100.0,
-      100.0
-    ],
-    "thermal_conductivity_gde": [
-      1.0,
-      1.0
-    ],
-    "thickness_cl": 1e-05,
-    "thickness_gdl": 0.0002,
-    "thickness_bpp": 0.002,
-    "porosity_cl": 0.5,
-    "porosity_gdl": 0.8,
-    "tafel_slope": 0.035,
-    "prot_con_cl": 3.5,
-    "vol_ex_cd": 800000.0,
-    "diff_coeff_cl": 1e-07,
-    "diff_coeff_gdl": 6e-06,
-    "calc_act_loss": true,
-    "calc_cl_diff_loss": true,
-    "calc_gdl_diff_loss": true,
-    "c_eps": 0.1,
-    "delta_i": 5.0,
+    "cathode": {
+        "name": "Cathode",
+        "channel_number": 50,
+        "stoichiometry": 1.5,
+        "reaction_stoichiometry": [
+            -1.0,
+            0.0,
+            2.0
+        ],
+        "bpp": {
+            "thickness":
+                    0.002,
+            "electrical_conductivity": [
+                60000.0,
+                60000.0
+            ],
+            "thermal_conductivity": [
+                100.0,
+                100.0
+            ]
+        },
+        "gde": {
+            "porosity":
+                    0.8,
+            "electrical_conductivity": [
+                500.0,
+                500.0
+            ],
+            "thermal_conductivity": [
+                1.0,
+                1.0
+            ]
+        },
+        "electrochemistry":
+        {
+            "charge_number": 4.0,
+            "tafel_slope": 0.035,
+            "prot_con_cl": 3.5,
+            "vol_ex_cd": 800000.0,
+            "diff_coeff_cl": 1e-07,
+            "diff_coeff_gdl": 6e-06,
+            "thickness_cl": 1e-05,
+            "thickness_gdl": 0.0002,
+            "calc_act_loss": true,
+            "calc_cl_diff_loss": true,
+            "calc_gdl_diff_loss": true,
+            "c_eps": 0.1,
+            "delta_i": 5.0
+        },
     "channel": {
       "name": "Cathode Channel",
       "fluid": {
@@ -163,49 +169,55 @@
       }
     }
   },
-  "anode": {
-    "name": "Anode",
-    "flow_direction": -1,
-    "channel_number": 50,
-    "stoichiometry": 1.5,
-    "is_cathode": false,
-    "charge_number": 4.0,
-    "reaction_stoichiometry": [
-      -2.0,
-      0.0,
-      0.0
-    ],
-    "electrical_conductivity_bpp": [
-      60000.0,
-      60000.0
-    ],
-    "electrical_conductivity_gde": [
-      500.0,
-      500.0
-    ],
-    "thermal_conductivity_bpp": [
-      100.0,
-      100.0
-    ],
-    "thermal_conductivity_gde": [
-      1.0,
-      1.0
-    ],
-    "thickness_cl": 1e-05,
-    "thickness_gdl": 0.0002,
-    "thickness_bpp": 0.002,
-    "porosity_cl": 0.5,
-    "porosity_gdl": 0.8,
-    "tafel_slope": 0.035,
-    "prot_con_cl": 3.5,
-    "vol_ex_cd": 500000000.0,
-    "diff_coeff_cl": 1e-06,
-    "diff_coeff_gdl": 0.0001,
-    "calc_act_loss": true,
-    "calc_cl_diff_loss": true,
-    "calc_gdl_diff_loss": true,
-    "c_eps": 0.1,
-    "delta_i": 5.0,
+    "anode": {
+        "name": "Anode",
+        "channel_number": 50,
+        "stoichiometry": 1.5,
+        "reaction_stoichiometry": [
+            -2.0,
+            0.0,
+            0.0
+        ],
+        "bpp": {
+            "thickness":
+                    0.002,
+            "electrical_conductivity": [
+                60000.0,
+                60000.0
+            ],
+            "thermal_conductivity": [
+                100.0,
+                100.0
+            ]
+        },
+        "gde": {
+            "porosity":
+                    0.8,
+            "electrical_conductivity": [
+                500.0,
+                500.0
+            ],
+            "thermal_conductivity": [
+                1.0,
+                1.0
+            ]
+        },
+        "electrochemistry":
+        {
+            "charge_number": 4.0,
+            "tafel_slope": 0.035,
+            "prot_con_cl": 3.5,
+            "vol_ex_cd": 500000000.0,
+            "diff_coeff_cl": 1e-06,
+            "diff_coeff_gdl": 0.0001,
+            "thickness_cl": 1e-05,
+            "thickness_gdl": 0.0002,
+            "calc_act_loss": true,
+            "calc_cl_diff_loss": true,
+            "calc_gdl_diff_loss": true,
+            "c_eps": 0.1,
+            "delta_i": 5.0
+        },
     "channel": {
       "name": "Anode Channel",
       "fluid": {
