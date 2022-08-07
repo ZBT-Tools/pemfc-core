@@ -138,10 +138,7 @@ class ElectrochemistryModel(ABC):
         Calculates the diffusion voltage loss in the gas diffusion layer
         according to (Kulikovsky, 2013).
         """
-        try:
-            v_loss_gdl_diff = -self.tafel_slope * np.log10(var)
-        except FloatingPointError:
-            raise
+        v_loss_gdl_diff = -self.tafel_slope * np.log10(var)
         # nan_list = np.isnan(self.v_loss_gdl_diff)
         # if nan_list.any():
         #     v_loss_gdl_diff[np.argwhere(nan_list)[0, 0]:] = 1.e50
