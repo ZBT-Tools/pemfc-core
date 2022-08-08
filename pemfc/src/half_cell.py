@@ -220,7 +220,9 @@ class HalfCell:
 
     def update_voltage_loss(self, current_density: np.ndarray):
         area = self.flow_field.active_area_dx
+        bpp_loss = self.bpp.calc_voltage_loss(current_density, area)
+        gde_loss = self.gde.calc_voltage_loss(current_density, area)
         self.v_loss[:] = self.electrochemistry.v_loss \
-            + self.bpp.calc_voltage_loss(current_density, area) \
-            # + self.gde.calc_voltage_loss(current_density, area)
+            + bpp_loss \
+            # + gde_loss
 
