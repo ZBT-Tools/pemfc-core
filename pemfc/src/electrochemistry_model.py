@@ -19,8 +19,7 @@ class ElectrochemistryModel(ABC):
         self.id_fuel = input_dict['fuel_index']
         # charge number of reaction
         self.n_charge = input_dict['charge_number']
-        # exchange current density
-        vol_ex_cd = input_dict['vol_ex_cd']
+
         # proton conductivity of the catalyst layer
         self.prot_con_cl = input_dict['prot_con_cl']
         # diffusion coefficient of the reactant in the catalyst layer
@@ -33,10 +32,11 @@ class ElectrochemistryModel(ABC):
         self.th_cl = input_dict['thickness_cl']
         # could use a better name see (Kulikovsky, 2013) not sure if 2-D
         # exchange current density
+        vol_ex_cd = input_dict['vol_ex_cd']
         self.i_sigma = np.sqrt(2. * vol_ex_cd * self.prot_con_cl
                                * self.tafel_slope)
         # index of the first element with negative cell voltage
-        self.index_cat = nodes - 1
+        self.index_cat = self.n_ele
         # characteristic current density, see (Kulikovsky, 2013)
         self.i_star = self.prot_con_cl * self.tafel_slope / self.th_cl
         # concentration at channel inlet
@@ -44,15 +44,19 @@ class ElectrochemistryModel(ABC):
         # limiting current density due to diffusion through the gdl
         # at channel inlet (calculated when inlet concentration is known)
         self.i_lim_star = None
-        # numerical parameter for tangent line extension at limiting current
+        # numerical parameters for tangent line extension at limiting current
         self.conc_eps = input_dict['c_eps']
         self.delta_i = input_dict['delta_i']
         # critical local current density where Kulikovsky model transitions
         # into linear tangent line near limiting current
         self.i_crit = np.zeros(self.n_ele)
-
+        # switch to include activation contribution to voltage losses
         self.calc_act_loss = input_dict['calc_act_loss']
+        # switch to include catalyst layer diffusion contribution to voltage
+        # losses
         self.calc_cl_diff_loss = input_dict['calc_cl_diff_loss']
+        # switch to include gas diffusion layer diffusion contribution to
+        # voltage losses
         self.calc_gdl_diff_loss = input_dict['calc_gdl_diff_loss']
 
         # cell voltage loss

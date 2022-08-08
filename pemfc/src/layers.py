@@ -12,7 +12,7 @@ class SolidLayer(oo.OutputObject):
         self.width = layer_dict['width']
         self.length = layer_dict['length']
         self.porosity = layer_dict.get('porosity', 0.0)
-        self.bruggeman_exponent = layer_dict.get('Bruggeman exponent', 1.5)
+        self.bruggeman_exponent = layer_dict.get('bruggeman_exponent', 1.5)
         self.thermal_conductivity = \
             layer_dict.get('thermal_conductivity', 0.0)
         self.electrical_conductivity = \
