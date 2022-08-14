@@ -71,6 +71,7 @@
         },
         "electrochemistry":
         {
+            "type": "Kulikovsky",
             "charge_number": 4.0,
             "tafel_slope": 0.035,
             "prot_con_cl": 3.5,
@@ -191,6 +192,7 @@
         },
         "electrochemistry":
         {
+            "type": "Kulikovsky",
             "charge_number": 4.0,
             "tafel_slope": 0.035,
             "prot_con_cl": 3.5,

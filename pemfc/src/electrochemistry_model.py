@@ -8,10 +8,19 @@ from . import interpolation as ip, constants, channel as chl
 
 
 class ElectrochemistryModel(ABC):
+    """
+    Abstract base class for the calculation of electrode overpotentials,
+    possibly including activation and mass-transport losses
+    """
+
+    def __new__(cls, input_dict: dict, nodes: int):
+        model_type = input_dict.get('type', 'Kulikovsky')
+        if model_type == 'Kulikovsky':
+            return super(ElectrochemistryModel, cls).__new__(KulikovskyModel)
+        else:
+            raise NotImplementedError
 
     def __init__(self, input_dict: dict, nodes: int):
-        
-        """voltage loss parameter, (Kulikovsky, 2013)"""
 
         self.n_ele = nodes - 1
         self.faraday = constants.FARADAY
@@ -19,6 +28,57 @@ class ElectrochemistryModel(ABC):
         self.id_fuel = input_dict['fuel_index']
         # charge number of reaction
         self.n_charge = input_dict['charge_number']
+
+        # cell voltage loss
+        self.v_loss = np.zeros(self.n_ele)
+
+        # update flag
+        self.updated_v_loss = False
+        # corrected current density for voltage controlled simulations
+        self.corrected_current_density = None
+
+    @abstractmethod
+    def calc_electrode_loss(self, current_density: np.ndarray,
+                            channel: chl.Channel):
+        pass
+
+    def update_voltage_loss(self, current_density: np.ndarray,
+                            channel: chl.Channel):
+        eta = self.calc_electrode_loss(current_density, channel)
+        self.v_loss[:] = eta
+        self.updated_v_loss = True
+
+    def calc_current_density(self, current_density: np.ndarray,
+                             channel: chl.Channel, v_loss: np.ndarray):
+        def func(curr_den: np.ndarray, over_pot: np.ndarray):
+            return self.calc_electrode_loss(curr_den, channel) - over_pot
+        return np.asarray(optimize.newton(func, current_density,
+                                          args=(v_loss,)))
+
+    def update(self, current_density: np.ndarray, channel: chl.Channel,
+               current_control: bool = True):
+        """
+        This function coordinates the program sequence
+        """
+        # self.calc_temp_fluid_ele()
+        # mole_flow_in, mole_source = self.calc_mass_balance(current_density)
+        if np.any(current_density < 0.0):
+            raise ValueError('current density became smaller 0')
+        if not current_control and self.updated_v_loss:
+            self.corrected_current_density = \
+                self.calc_current_density(current_density, channel, self.v_loss)
+        if current_control or self.corrected_current_density is None:
+            corrected_current_density = current_density
+        else:
+            corrected_current_density = self.corrected_current_density
+        self.update_voltage_loss(corrected_current_density, channel)
+
+
+class KulikovskyModel(ElectrochemistryModel):
+
+    def __init__(self, input_dict: dict, nodes: int):
+        super().__init__(input_dict, nodes)
+        """voltage loss parameter, (Kulikovsky, 2013)"""
 
         # proton conductivity of the catalyst layer
         self.prot_con_cl = input_dict['prot_con_cl']
@@ -58,36 +118,6 @@ class ElectrochemistryModel(ABC):
         # switch to include gas diffusion layer diffusion contribution to
         # voltage losses
         self.calc_gdl_diff_loss = input_dict['calc_gdl_diff_loss']
-
-        # cell voltage loss
-        self.v_loss = np.zeros(self.n_ele)
-        self.updated_v_loss = False
-        self.corrected_current_density = None
-
-    def update(self, current_density: np.ndarray, channel: chl.Channel,
-               current_control: bool = True):
-        """
-        This function coordinates the program sequence
-        """
-        # self.calc_temp_fluid_ele()
-        # mole_flow_in, mole_source = self.calc_mass_balance(current_density)
-        if np.any(current_density < 0.0):
-            raise ValueError('current density became smaller 0')
-        if not current_control and self.updated_v_loss:
-            self.corrected_current_density = \
-                self.calc_current_density(current_density, channel, self.v_loss)
-        if current_control or self.corrected_current_density is None:
-            corrected_current_density = current_density
-        else:
-            corrected_current_density = self.corrected_current_density
-        self.update_voltage_loss(corrected_current_density, channel)
-
-    def update_voltage_loss(self, current_density: np.ndarray,
-                            channel: chl.Channel):
-        eta = self.calc_electrode_loss(current_density, channel)
-        self.v_loss[:] = eta # \
-                         # + self.calc_plate_loss(current_density)
-        self.updated_v_loss = True
 
     def calc_activation_loss(self, current_density: np.ndarray,
                              conc: np.ndarray):
@@ -236,9 +266,4 @@ class ElectrochemistryModel(ABC):
             #     self.v_loss_cl_diff[:] = v_loss_cl_diff
         return v_loss
 
-    def calc_current_density(self, current_density: np.ndarray,
-                             channel: chl.Channel, v_loss: np.ndarray):
-        def func(curr_den: np.ndarray, over_pot: np.ndarray):
-            return self.calc_electrode_loss(curr_den, channel) - over_pot
-        return np.asarray(optimize.newton(func, current_density,
-                                          args=(v_loss,)))
+
