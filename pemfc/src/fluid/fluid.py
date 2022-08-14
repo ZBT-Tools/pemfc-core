@@ -4,15 +4,11 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 # local module imports
-from .output_object import OutputObject
-from . import constants, global_functions as gf, species
-from .global_functions import move_axis
+from pemfc.src.output_object import OutputObject
+from pemfc.src import constants, global_functions as gf
+from . import species
+from pemfc.src.global_functions import move_axis
 from collections import OrderedDict
-
-if 'main_app.py' in sys.argv[0]:
-    from data import water_properties as water_props
-else:
-    from pemfc.data import water_properties as water_props
 
 try:
     import cantera as ct
@@ -21,7 +17,7 @@ except ImportError:
     FOUND_CANTERA = False
 
 
-class OneDimensionalFluid(ABC, OutputObject):
+class DiscreteFluid(ABC, OutputObject):
 
     PROPERTY_NAMES = ['density', 'specific_heat', 'viscosity',
                       'thermal_conductivity']
@@ -176,6 +172,7 @@ class OneDimensionalFluid(ABC, OutputObject):
 
                         if rescaled is not None:
                             setattr(self, name, rescaled)
+            self.array_shape = new_array_shape
         self.add_print_variables(self.print_variables)
 
     def _rescale_attribute(self, attribute, new_nx):
@@ -207,7 +204,7 @@ class OneDimensionalFluid(ABC, OutputObject):
                     'argument array must be of type numpy.ndarray')
 
 
-class ConstantFluid(OneDimensionalFluid):
+class ConstantFluid(DiscreteFluid):
 
     TYPE_NAME = 'Constant Fluid'
 
@@ -234,7 +231,7 @@ class ConstantFluid(OneDimensionalFluid):
         pass
 
 
-class IncompressibleFluid(OneDimensionalFluid):
+class IncompressibleFluid(DiscreteFluid):
 
     TYPE_NAME = 'Incompressible Fluid'
 
@@ -274,7 +271,7 @@ class IncompressibleFluid(OneDimensionalFluid):
                 self.calc_property(prop, temperature)
 
 
-class GasMixture(OneDimensionalFluid):
+class GasMixture(DiscreteFluid):
 
     TYPE_NAME = 'Gas Mixture'
 
@@ -295,6 +292,8 @@ class GasMixture(OneDimensionalFluid):
         self.gas_constant = constants.GAS_CONSTANT
         self.species = species.GasProperties(species_names)
         self.n_species = len(self.species.names)
+        self.species_id = \
+            dict(zip(self.species.names, list(range(self.n_species))))
         self.species_viscosity = self.species.calc_viscosity(self._temperature)
 
         mole_fractions = gf.ensure_list(mole_fractions)
@@ -366,8 +365,8 @@ class GasMixture(OneDimensionalFluid):
                              'number of species')
         if np.max(mole_composition) > constants.SMALL:
             mole_composition[mole_composition < constants.SMALL] = 0.0
-        self._mole_fraction[:] = self._calc_mole_fraction(mole_composition)
-        self._calc_molar_mass()
+        self._mole_fraction[:] = self.calc_mole_fraction(mole_composition)
+        self.calc_molar_mass()
         self._mass_fraction[:] = \
             self.calc_mass_fraction(self._mole_fraction)
         self._calc_properties(self._temperature, self._pressure, method)
@@ -381,13 +380,13 @@ class GasMixture(OneDimensionalFluid):
             / (self.gas_constant * self._temperature)
         return self._mole_fraction * total_mol_conc
 
-    def _calc_mole_fraction(self, mole_composition):
+    def calc_mole_fraction(self, mole_composition):
         if np.min(mole_composition) < 0.0:
             raise ValueError('mole_composition must not be smaller zero')
         mole_fraction = self._calc_fraction(mole_composition)
         return mole_fraction
 
-    def _calc_molar_mass(self, mole_fraction=None):
+    def calc_molar_mass(self, mole_fraction=None):
         if mole_fraction is None:
             self.mw[:] = np.sum(gf.array_vector_multiply(self._mole_fraction,
                                                          self.species.mw),
@@ -439,14 +438,14 @@ class GasMixture(OneDimensionalFluid):
         for i in range(self.n_species):
             beta = []
             for j in range(self.n_species):
-                a = np.power((1. + np.power((visc[i] / visc[j]), 0.5)
-                             * np.power(mw[j] / mw[i], 0.25)),  2.0)
-                b = np.power(np.sqrt(8.) * (1. + mw[j] / mw[i]), -0.5)
-                beta.append(a/b)
+                a = (1. + np.sqrt((visc[i] / visc[j]))
+                     * (mw[j] / mw[i]) ** 0.25) ** 2.0
+                b = (np.sqrt(8.) * (1. + mw[j] / mw[i])) ** -0.5
+                beta.append(a / b)
             alpha.append(beta)
         return np.asarray(alpha)
 
-    def calc_thermal_conductivity(self, temperature, pressure):
+    def _calc_thermal_conductivity(self, temperature, pressure):
         """
         Calculates the heat conductivity of a gas mixture,
         according to Wilkes equation.
@@ -494,7 +493,7 @@ class GasMixture(OneDimensionalFluid):
         elif property_name == 'viscosity':
             return self._calc_viscosity(temperature)
         elif property_name == 'thermal_conductivity':
-            return self.calc_thermal_conductivity(temperature, pressure)
+            return self._calc_thermal_conductivity(temperature, pressure)
         elif property_name == 'density':
             return self._calc_density(temperature, pressure, method)
         else:
@@ -514,7 +513,7 @@ class GasMixture(OneDimensionalFluid):
                 self._calc_property(prop, temperature, pressure, method)
 
 
-class CanteraGasMixture(OneDimensionalFluid):
+class CanteraGasMixture(DiscreteFluid):
     """
     Wrapper for discrete fluid properties calculated by Cantera library
     """
@@ -605,7 +604,7 @@ class CanteraGasMixture(OneDimensionalFluid):
         self.solution_array.concentrations[:, self.species_ids] = value * 1000.0
 
 
-class TwoPhaseMixture(OneDimensionalFluid):
+class TwoPhaseMixture(DiscreteFluid):
 
     TYPE_NAME = 'Two-Phase Mixture'
 
@@ -656,18 +655,16 @@ class TwoPhaseMixture(OneDimensionalFluid):
         all_ids = np.array(list(range(len(self.species.names))), dtype='int32')
         ids_no_pc = np.delete(all_ids, ids_pc)
         self.ids_no_pc = list(ids_no_pc)
+        self.n_species = len(species_dict)
 
         # update mole_fractions if humidity is provided
         humidity = kwargs.get('humidity', None)
         if humidity is not None:
             mole_fractions = \
-                water_props.water.calc_humid_composition(humidity, temperature,
-                                                         pressure,
-                                                         mole_fractions,
-                                                         self.id_pc)
+                self.phase_change_species.calc_humid_composition(
+                    humidity, temperature, pressure, mole_fractions, self.id_pc)
 
         # Total properties (both phases)
-        self.n_species = len(species_dict)
         self.array_shape_2d = self.gas.array_shape_2d
         self._mole_fraction = \
             gf.array_vector_multiply(np.ones(self.array_shape_2d),
@@ -684,6 +681,7 @@ class TwoPhaseMixture(OneDimensionalFluid):
         self.liquid_mole_fraction = np.zeros(self.array_shape)
         self.humidity = np.zeros(self.array_shape)
         self.saturation_pressure = np.zeros(self.array_shape)
+        self.surface_tension = np.zeros(self.array_shape)
 
         # Print data
         print_variables = \
@@ -742,6 +740,10 @@ class TwoPhaseMixture(OneDimensionalFluid):
         return self.gas.species
 
     @property
+    def species_id(self):
+        return self.gas.species_id
+
+    @property
     def species_mw(self):
         return self.gas.species_mw
 
@@ -762,9 +764,9 @@ class TwoPhaseMixture(OneDimensionalFluid):
             if np.max(mole_composition) > constants.SMALL:
                 mole_composition[mole_composition < constants.SMALL] = 0.0
                 self._mole_fraction[:] = \
-                    self.gas._calc_mole_fraction(mole_composition)
+                    self.gas.calc_mole_fraction(mole_composition)
 
-        self.mw[:] = self.gas._calc_molar_mass(self.mole_fraction)
+        self.mw[:] = self.gas.calc_molar_mass(self.mole_fraction)
         test = self.mw[0]
         self._mass_fraction[:] = \
             self.gas.calc_mass_fraction(self._mole_fraction, self.mw)
@@ -786,6 +788,7 @@ class TwoPhaseMixture(OneDimensionalFluid):
             np.sum(mole_composition * self.mw, axis=0) \
             - np.sum(gas_mole_composition * self.gas.mw, axis=0)
         self.liquid_mass_fraction[self.liquid_mass_fraction < 0.0] = 0.0
+        self.surface_tension[:] = self.calc_surface_tension()
 
         # dry_conc = np.copy(gas_conc)
         # dry_conc[self.id_pc] = 0.0
@@ -807,6 +810,11 @@ class TwoPhaseMixture(OneDimensionalFluid):
 
         self._calc_properties(temperature, pressure, method)
         self._calc_humidity()
+
+    def calc_surface_tension(self, temperature=None):
+        if temperature is None:
+            temperature = self.temperature
+        return self.phase_change_species.calc_surface_tension(temperature)
 
     def _calc_property(self, property_name, temperature, pressure=101325.0,
                        method='ideal'):
@@ -970,10 +978,10 @@ class CanteraTwoPhaseMixture(CanteraGasMixture):
             self.water_base.TP = temperature[i], pressure[i]
             sat_pressure[i] = self.water_base.P_sat
         # self.saturation_pressure[:] = sat_pressure.reshape(self.array_shape)
-        self.calc_humidity()
+        self._calc_humidity()
         # self.water.TP = self._temperature, self._pressure
 
-    def calc_humidity(self):
+    def _calc_humidity(self):
         """
         Calculates the relative humidity of the fluid.
         """
@@ -1086,10 +1094,12 @@ def factory(fluid_dict, **kwargs):
     if any(key in fluid_dict for key in prop_names):
         props_dict = {key: fluid_dict[key] for key in prop_names}
         fluid_props = species.ConstantProperties(name, **props_dict)
-        return ConstantFluid(array_shape, name, fluid_props, temperature, pressure)
+        return ConstantFluid(array_shape, name, fluid_props,
+                             temperature, pressure)
     else:
         return arg_factory(
-            array_shape, name, liquid_props=liquid_props, species_dict=species_dict,
+            array_shape, name, liquid_props=liquid_props,
+            species_dict=species_dict,
             mole_fractions=mole_fractions, temperature=temperature,
             pressure=pressure, humidity=humidity, backend=backend,
             fluid_dict=fluid_dict)

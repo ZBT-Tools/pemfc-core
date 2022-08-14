@@ -3,7 +3,8 @@ import numpy as np
 
 # local module imports
 from . import electrical_coupling as el_cpl, flow_circuit as flow_circuit, \
-    cell as cl, temperature_system as therm_cpl, fluid as fluid, channel as chl
+    cell as cl, temperature_system as therm_cpl, channel as chl
+from .fluid import fluid as fluid
 # from data import input_dicts
 # from ..gui import data_transfer
 

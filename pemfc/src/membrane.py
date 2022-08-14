@@ -51,7 +51,7 @@ class Membrane(ABC, layers.SolidLayer):
     def calc_ionic_resistance(self, *args):
         pass
 
-    def calc_voltage_loss(self, current_density):
+    def calc_voltage_loss(self, current_density, **kwargs):
         """
         Calculates the voltage loss at the membrane.
         """

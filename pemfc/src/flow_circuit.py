@@ -4,7 +4,8 @@ from abc import ABC, abstractmethod
 
 # local module imports
 from . import interpolation as ip, global_functions as g_func, \
-    channel as chl, output_object as oo, fluid as fluids
+    channel as chl, output_object as oo
+from .fluid import fluid as fluids
 
 
 class ParallelFlowCircuit(ABC, oo.OutputObject):

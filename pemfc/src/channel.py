@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 
 # local modul imports
 from . import interpolation as ip, global_functions as g_func, \
-    fluid as fluids, flow_resistance as fr, output_object as oo
-
+    flow_resistance as fr, output_object as oo
+from .fluid import fluid as fluids
 try:
     import pemfc.src.cython.channel_heat_transfer as cht
     CHT_FOUND = True
