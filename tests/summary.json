@@ -1,0 +1,45 @@
+{
+  "Stack Voltage": {
+    "value": 3.9492759089226936,
+    "units": "V"
+  },
+  "Average Cell Voltage": {
+    "value": 0.39492759089226936,
+    "units": "V"
+  },
+  "Minimum Cell Voltage": {
+    "value": 0.2501517973830266,
+    "units": "V"
+  },
+  "Maximum Cell Voltage": {
+    "value": 0.41513645000270455,
+    "units": "V"
+  },
+  "Average Current Density": {
+    "value": 19949.087693216694,
+    "units": "A/m\u00b2"
+  },
+  "Stack Power Density": {
+    "value": 78784.45143180688,
+    "units": "W/m\u00b2"
+  },
+  "Stack Power": {
+    "value": 3939.222571590344,
+    "units": "W"
+  },
+  "Cooling Mass Flow Rate:": {
+    "value": 0.6005095355752252,
+    "units": "kg/s",
+    "format": ".4E"
+  },
+  "Cathode Mass Flow Rate:": {
+    "value": 0.005944177348450225,
+    "units": "kg/s",
+    "format": ".4E"
+  },
+  "Anode Mass Flow Rate:": {
+    "value": 0.0004102270212494338,
+    "units": "kg/s",
+    "format": ".4E"
+  }
+}

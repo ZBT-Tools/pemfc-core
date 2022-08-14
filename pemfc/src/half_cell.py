@@ -224,5 +224,5 @@ class HalfCell:
         gde_loss = self.gde.calc_voltage_loss(current_density, area)
         self.v_loss[:] = self.electrochemistry.v_loss \
             + bpp_loss \
-            # + gde_loss
+            + gde_loss
 
