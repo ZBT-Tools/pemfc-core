@@ -4,16 +4,18 @@ import sys
 import numpy as np
 import cProfile
 import timeit
+import inspect
+import json
 
 # local module imports
 from . import stack
 from . import output
 # from data import input_dicts
 
-if 'main_app.py' in sys.argv[0]:
-    from data import input_dicts
-else:
-    from pemfc.data import input_dicts
+# if 'main_app.py' in sys.argv[0]:
+#     from data import input_dicts
+# else:
+#     from pemfc.data import input_dicts
 # from ..gui import data_transfer
 
 
@@ -35,7 +37,13 @@ class Simulation:
     def __init__(self, settings=None):
         # dict_simulation = input_dicts.dict_simulation
         if settings is None:
-            self.settings = input_dicts.sim_dict
+            base_dir = \
+                os.path.dirname(
+                    os.path.abspath(inspect.getsourcefile(lambda: 0)))
+            with open(os.path.join(base_dir, '..', 'settings',
+                                   'settings.json')) as file:
+                self.settings = json.load(file)
+            # self.settings = input_dicts.sim_dict
         else:
             self.settings = settings
 
