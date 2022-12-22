@@ -5,11 +5,13 @@ from pemfc.main_app import main
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Variation of membrane thickness
-membrane_thickness_array = np.linspace(10e-6, 30e-6, 3)
+# Variation of HFR
+hfr_factor = [1.0, 1.5/10.0]
+# membrane_thickness_array = np.linspace(10e-6, 30e-6, 3)
+# membrane_conductivity_array = np.asarray([15.0, 15.0/6.67])
 
 # Current density array (for simulation of polarization curve)
-current_density_array = np.linspace(1000, 20000, 10)
+current_density_array = np.linspace(100, 20000, 40)
 
 # Load settings file
 base_dir = \
@@ -22,16 +24,33 @@ settings['output']['save_csv'] = False
 settings['output']['save_plot'] = False
 # Adjust stack parameters
 settings['stack']['cell_number'] = 1
+settings['membrane']['type'] = 'Constant'
+
 
 # Initialize result stores
 stack_power_list = []
 average_voltage_list = []
 global_data = None
 
+membrane_conductivity = settings['membrane']['ionic_conductivity']
+cat_bpp_conductivity = settings['cathode']['electrical_conductivity_bpp']
+cat_gde_conductivity = settings['cathode']['electrical_conductivity_gde']
+ano_bpp_conductivity = settings['anode']['electrical_conductivity_bpp']
+ano_gde_conductivity = settings['anode']['electrical_conductivity_gde']
+
 # Loop for parameter variation simulation
-for membrane_thickness in membrane_thickness_array:
-    # Adjust membrane thickness in settings dictionary
-    settings['membrane']['thickness'] = membrane_thickness
+for i in range(len(hfr_factor)):
+    # Adjust parameters
+    settings['membrane']['ionic_conductivity'] = \
+        membrane_conductivity * hfr_factor[i]
+    settings['cathode']['electrical_conductivity_bpp'] = \
+        [item * hfr_factor[i] for item in cat_bpp_conductivity]
+    settings['cathode']['electrical_conductivity_gde'] = \
+        [item * hfr_factor[i] for item in cat_gde_conductivity]
+    settings['anode']['electrical_conductivity_bpp'] = \
+        [item * hfr_factor[i] for item in ano_bpp_conductivity]
+    settings['anode']['electrical_conductivity_gde'] = \
+        [item * hfr_factor[i] for item in ano_gde_conductivity]
     # Set current density array for polarization curve simulation
     settings['simulation']['current_density'] = current_density_array
 
@@ -51,7 +70,7 @@ voltage_unit = global_data[0]['Average Cell Voltage']['units']
 fig, ax = plt.subplots()
 colors = ['k', 'r', 'b']
 linestyles = ['solid', 'dashed']
-labels = ['{:.2f} µm'.format(item * 1e6) for item in membrane_thickness_array]
+labels = ['HFR Factor: {:.2f}'.format(1.0/item) for item in hfr_factor]
 for i in range(len(average_voltage_list)):
     ax.plot(current_density_array / 1e4, average_voltage_list[i],
             label=labels[i], color=colors[i], linestyle=linestyles[0])
