@@ -12,7 +12,7 @@ class SolidLayer(oo.OutputObject):
         self.width = layer_dict['width']
         self.length = layer_dict['length']
         self.porosity = layer_dict.get('porosity', 0.0)
-        self.bruggeman_exponent = layer_dict.get('Bruggeman exponent', 1.5)
+        self.bruggeman_exponent = layer_dict.get('bruggeman_exponent', 1.5)
         self.thermal_conductivity = \
             layer_dict.get('thermal_conductivity', 0.0)
         self.electrical_conductivity = \
@@ -41,4 +41,12 @@ class SolidLayer(oo.OutputObject):
             conductance_z *= (1.0 - self.porosity) ** self.bruggeman_exponent
             conductance_x *= (1.0 - self.porosity) ** self.bruggeman_exponent
         return np.asarray([conductance_z, conductance_x])
+
+    def calc_voltage_loss(self, current_density, area=None, **kwargs):
+        if area is None:
+            current = current_density * self.area_dx
+        else:
+            current = current_density * area
+        return current / self.electrical_conductance[0]
+
 

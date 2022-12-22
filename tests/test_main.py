@@ -11,7 +11,7 @@ with open(os.path.join('pemfc', 'settings', 'settings.json')) as file:
     main_settings = json.load(file)
 
 # load reference results
-with open(os.path.join('tests', 'results.json')) as file:
+with open(os.path.join('tests', 'summary.json')) as file:
     ref_results = json.load(file)
 
 
