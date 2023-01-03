@@ -132,7 +132,7 @@ class SpringerMembrane(WaterTransportMembrane):
         Calculates the water cross flux through the membrane based on
         Springer et al. (1991). Water content on each membrane side is
         predicted by the channel humidities on each side, which probably
-        overpedicts the difference significantly resulting in unreasonably
+        overpredicts the difference significantly resulting in unreasonably
         high cross water fluxes and de-stabilizing the solution. For now, the
         humidities itself are used as the diffusion driving gradient,
         which should be reviewed further. More detailed resolution for
@@ -198,14 +198,14 @@ class SpringerMembrane(WaterTransportMembrane):
         # # water_content[0]: lambda at cathode side,
         # # water_content[1]: lambda at anode side
         # # negative diffusion flux mean from anode to cathode
-        # water_flux_diff = - rho_m / mw_m * diff_coeff \
-        #     * (water_content[1] - water_content[0]) / self.thickness
+        water_flux_diff = - rho_m / mw_m * diff_coeff \
+            * (water_content[1] - water_content[0]) / self.thickness
 
         # Predicting the water content on each membrane side seems to be
         # overpredicting the gradient significantly, thus the humidities are
         # used for now
-        water_flux_diff = - rho_m / mw_m * diff_coeff \
-            * (humidity[1] - humidity[0]) / self.thickness
+        # water_flux_diff = - rho_m / mw_m * diff_coeff \
+        #     * (humidity[1] - humidity[0]) / self.thickness
 
         # Total water flux (diffusion based on temperature difference could be
         # added in the future)

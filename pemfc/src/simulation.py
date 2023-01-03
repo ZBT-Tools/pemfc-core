@@ -78,9 +78,9 @@ class Simulation:
             raise ValueError('parameter average_cell_voltage must be provided')
         stack_dict = self.settings['stack']
         cell_number = stack_dict['cell_number']
-        if self.current_control:
-            stack_dict['init_current_density'] = self.current_density
-        else:
+
+        stack_dict['init_current_density'] = self.current_density
+        if not self.current_control:
             stack_dict['voltage'] = self.average_cell_voltage * cell_number
 
         self.stack = stack.Stack(self.settings, n_nodes,
