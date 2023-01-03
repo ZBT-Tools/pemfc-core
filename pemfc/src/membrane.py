@@ -198,14 +198,14 @@ class SpringerMembrane(WaterTransportMembrane):
         # # water_content[0]: lambda at cathode side,
         # # water_content[1]: lambda at anode side
         # # negative diffusion flux mean from anode to cathode
-        water_flux_diff = - rho_m / mw_m * diff_coeff \
-            * (water_content[1] - water_content[0]) / self.thickness
+        # water_flux_diff = - rho_m / mw_m * diff_coeff \
+        #     * (water_content[1] - water_content[0]) / self.thickness
 
         # Predicting the water content on each membrane side seems to be
         # overpredicting the gradient significantly, thus the humidities are
         # used for now
-        # water_flux_diff = - rho_m / mw_m * diff_coeff \
-        #     * (humidity[1] - humidity[0]) / self.thickness
+        water_flux_diff = - rho_m / mw_m * diff_coeff \
+            * (humidity[1] - humidity[0]) / self.thickness
 
         # Total water flux (diffusion based on temperature difference could be
         # added in the future)
