@@ -217,6 +217,7 @@ class Output:
         plt.tight_layout()
         if filepath:
             fig.savefig(filepath, format=kwargs.get('fileformat', 'png'))
+            plt.close()
         return fig
 
     @staticmethod
