@@ -54,19 +54,22 @@ This model is versioned using Zenodo:
 
 If you use this tool as part of a scholarly work, please cite using:
 
-Feierabend, L. (2023). PEM Fuel Cell Stack Model (Version v1.0.0) [Computer software]. https://doi.org/10.5281/zenodo.7611662
+> Feierabend, L. (2023). PEM Fuel Cell Stack Model (Version v1.0.0) [Computer software]. https://doi.org/10.5281/zenodo.7611662
 
 A BibTeX entry for LaTeX users is
 
-@software{Feierabend_PEM_Fuel_Cell_2023,
-author = {Feierabend, Lukas},
-doi = {10.5281/zenodo.7611662},
-month = {2},
-title = {PEM Fuel Cell Stack Model},
-url = {https://github.com/zbt-tools/pemfc-core},
-version = {v1.0.0},
-year = {2023}
+```TeX
+@software{  
+    Feierabend_PEM_Fuel_Cell_2023,  
+    author = {Feierabend, Lukas},  
+    doi = {10.5281/zenodo.7611662},  
+    month = {2},  
+    title = {{PEM Fuel Cell Stack Model}},  
+    url = {https://github.com/zbt-tools/pemfc-core},  
+    version = {v1.0.0},  
+    year = {2023}  
 }
+```
 
 # References
 
