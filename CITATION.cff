@@ -4,6 +4,8 @@ authors:
   - family-names: Feierabend
     given-names: Lukas
     orcid: https://orcid.org/0000-0001-8940-8077
-title: ZBT-Tools/pemfc-core: v1.0.0
+title: "PEM Fuel Cell Stack Model"
 version: v1.0.0
+doi: 10.5281/zenodo.7611662
+url: "https://github.com/zbt-tools/pemfc-core"
 date-released: 2023-02-06
