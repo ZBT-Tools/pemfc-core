@@ -47,6 +47,20 @@ plots, if specified in the settings file (bottom).
 
 ![alt text](./data/class_structure.svg "Class Structure")
 
+# Citing the Model
+
+This model is versioned using Zenodo: 
+[![DOI](https://zenodo.org/badge/448911658.svg)](https://zenodo.org/badge/latestdoi/448911658)
+
+If you use this tool as part of a scholarly work, please cite using:
+
+
+A BibTeX entry for LaTeX users is
+
+
+
+In both cases, please update the entry with the version used. The DOI for the latest version is given in the badge at the top, or alternately ... will take you to the latest version (and generally represents all versions).
+
 # References
 
 #### Stack discretization, temperature coupling, reactant transport according to:  
