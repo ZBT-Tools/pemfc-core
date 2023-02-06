@@ -62,7 +62,7 @@ A BibTeX entry for LaTeX users is
 author = {Feierabend, Lukas},
 doi = {10.5281/zenodo.7611662},
 month = {2},
-title = {{PEM Fuel Cell Stack Model}},
+title = {PEM Fuel Cell Stack Model},
 url = {https://github.com/zbt-tools/pemfc-core},
 version = {v1.0.0},
 year = {2023}
