@@ -128,9 +128,9 @@ class Channel(ABC, oo.OutputObject):
         self.heat = np.zeros(self.n_ele)
         self.wall_temp = g_func.full(self.n_ele, temp_in)
 
-        # self.add_print_data(self.temp, 'Fluid Temperature', 'K')
+        self.add_print_data(self.temperature, 'Fluid Temperature', 'K')
         self.add_print_data(self.wall_temp, 'Wall Temperature', 'K')
-        # self.add_print_data(self.p, 'Fluid Pressure', 'Pa')
+        self.add_print_data(self.pressure, 'Fluid Pressure', 'Pa')
 
     def calculate_geometry(self):
         self.x = np.linspace(0.0, self._length, self.n_nodes)
