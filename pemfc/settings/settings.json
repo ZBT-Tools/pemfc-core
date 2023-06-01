@@ -1,9 +1,9 @@
 {
     "stack": {
-        "cell_number": 30,
+        "cell_number": 10,
         "heat_power": 0.0,
         "cool_flow": true,
-        "calc_temperature": false,
+        "calc_temperature": true,
         "calc_current_density": true
     },
     "simulation": {
@@ -241,7 +241,7 @@
             "name": "Anode Flow Circuit",
             "type": "UpdatedKoh",
             "shape": "U",
-            "calc_distribution": false,
+            "calc_distribution": true,
             "tolerance": 1e-07,
             "min_iter": 3,
             "max_iter": 100,
@@ -300,7 +300,7 @@
         "name": "Coolant Flow Circuit",
         "type": "UpdatedKoh",
         "shape": "U",
-        "calc_distribution": false,
+        "calc_distribution": true,
         "tolerance": 1e-07,
         "min_iter": 3,
         "max_iter": 100,
