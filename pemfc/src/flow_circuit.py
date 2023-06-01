@@ -104,9 +104,7 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
         Update the flow circuit
         """
         if inlet_mass_flow is not None:
-            id_in = self.manifolds[0].id_in
-            self.vol_flow_in = \
-                inlet_mass_flow / self.manifolds[0].fluid.density[id_in]
+            self.vol_flow_in = self.calc_volume_flow(mass_flow=inlet_mass_flow)
             if self.initialize:
                 # homogeneous distribution
                 self.channel_mass_flow[:] = inlet_mass_flow / self.n_channels
@@ -187,14 +185,21 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
         channel_enthalpy_out = \
             np.asarray([ch.g_fluid[ch.id_out] * ch.temperature[ch.id_out]
                         for ch in self.channels]) * self.n_subchannels
-        self.manifolds[1].update(mass_flow_in=0.0, mass_source=mass_source,
-                                 update_mass=True, update_flow=True,
-                                 update_heat=False, update_fluid=update_fluid,
-                                 enthalpy_source=channel_enthalpy_out)
+
+        p_channel_out = np.zeros(len(self.manifolds[1].pressure) - 1)
+        if self.calc_distribution:
+            self.manifolds[1].update(
+                mass_flow_in=0.0, mass_source=mass_source,
+                update_mass=True, update_flow=True,
+                update_heat=False, update_fluid=update_fluid,
+                enthalpy_source=channel_enthalpy_out)
+            p_channel_out[:] = ip.interpolate_1d(self.manifolds[1].pressure)
+        else:
+            p_channel_out[:] = self.manifolds[1].p_out
 
         # Channel update
         for i, channel in enumerate(self.channels):
-            channel.p_out = ip.interpolate_1d(self.manifolds[1].pressure)[i]
+            channel.p_out = p_channel_out[i]
             channel.temperature[channel.id_in] = self.manifolds[0].temp_ele[i]
             channel.update(mass_flow_in=
                            channel_mass_flow_in[i] / self.n_subchannels,
@@ -209,13 +214,26 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
         else:
             mass_fraction = 1.0
         mass_source = -self.channel_mass_flow * mass_fraction
-        self.manifolds[0].update(mass_flow_in=self.mass_flow_in,  # * 1.00000,
-                                 mass_source=mass_source,
-                                 update_mass=True, update_flow=True,
-                                 update_heat=False, update_fluid=update_fluid)
-        id_in = self.manifolds[0].id_in
-        self.vol_flow_in = \
-            self.mass_flow_in / self.manifolds[0].fluid.density[id_in]
+        if self.calc_distribution:
+            self.manifolds[0].update(
+                mass_flow_in=self.mass_flow_in,  # * 1.00000,
+                mass_source=mass_source,
+                update_mass=True, update_flow=True,
+                update_heat=False, update_fluid=update_fluid)
+        self.vol_flow_in = self.calc_volume_flow()
+
+
+    def calc_volume_flow(self, mass_flow=None):
+        if mass_flow is None:
+            mass_flow = self.mass_flow_in
+        if self.calc_distribution:
+            id_in = self.manifolds[0].id_in
+            density = self.manifolds[0].fluid.density[id_in]
+        else:
+            density = \
+                np.average([channel.fluid.density[channel.id_in]
+                            for channel in self.channels])
+        return mass_flow / density
 
 
 class KohFlowCircuit(ParallelFlowCircuit):

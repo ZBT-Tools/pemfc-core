@@ -1,9 +1,9 @@
 {
     "stack": {
-        "cell_number": 10,
+        "cell_number": 30,
         "heat_power": 0.0,
         "cool_flow": true,
-        "calc_temperature": true,
+        "calc_temperature": false,
         "calc_current_density": true
     },
     "simulation": {
@@ -121,7 +121,7 @@
             "name": "Cathode Flow Circuit",
             "type": "UpdatedKoh",
             "shape": "U",
-            "calc_distribution": false,
+            "calc_distribution": true,
             "tolerance": 1e-07,
             "min_iter": 3,
             "max_iter": 100,
@@ -129,7 +129,7 @@
             "inlet_manifold": {
                 "name": "Cathode Inlet Manifold",
                 "length": null,
-                "p_out": 101325.0,
+                "p_out": 250000.0,
                 "temp_in": 343.15,
                 "flow_direction": 1,
                 "cross_sectional_shape": "circular",
@@ -143,7 +143,7 @@
             "outlet_manifold": {
                 "name": "Cathode Outlet Manifold",
                 "length": null,
-                "p_out": 101325.0,
+                "p_out": 250000.0,
                 "temp_in": 343.15,
                 "flow_direction": 1,
                 "cross_sectional_shape": "circular",
@@ -263,7 +263,7 @@
             "outlet_manifold": {
                 "name": "Anode Outlet Manifold",
                 "length": null,
-                "p_out": 101325.0,
+                "p_out": 250000.0,
                 "temp_in": 343.15,
                 "flow_direction": 1,
                 "cross_sectional_shape": "circular",
