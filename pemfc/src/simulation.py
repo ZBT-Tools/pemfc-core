@@ -183,7 +183,10 @@ class Simulation:
             else:
                 cool_mass_flow = self.stack.coolant_circuit.mass_flow_in
             global_data = \
-                {'Stack Voltage': {'value': self.stack.v_stack, 'units': 'V'},
+                {
+                 'Convergence':
+                     {'value': convergence_flag, 'units': ' '},
+                 'Stack Voltage': {'value': self.stack.v_stack, 'units': 'V'},
                  'Average Cell Voltage':
                      {'value': self.stack.v_stack / self.stack.n_cells,
                       'units': 'V'},
@@ -209,8 +212,6 @@ class Simulation:
                  'Anode Mass Flow Rate:':
                      {'value': self.stack.fuel_circuits[1].mass_flow_in,
                       'units': 'kg/s', 'format': '.4E'},
-                 'Convergence':
-                     {'value': convergence_flag, 'units': ' '}
                  }
             global_data_list.append(global_data)
             output_stop_time = timeit.default_timer()
