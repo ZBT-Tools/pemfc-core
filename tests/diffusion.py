@@ -26,7 +26,7 @@ fluid_dict = \
         "nodes": (1)
     }
 
-humid_air = fluid.factory(fluid_dict, backend='pemfc')
+humid_air = fluid.create(fluid_dict, backend='pemfc')
 humid_air.update()
 surface_tension = humid_air.phase_change_species.calc_surface_tension(
     humid_air.temperature)

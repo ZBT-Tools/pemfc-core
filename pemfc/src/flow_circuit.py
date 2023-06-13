@@ -609,8 +609,8 @@ def factory(dict_circuit, dict_in_manifold, dict_out_manifold,
             and isinstance(channels[0].fluid, fluids.CanteraGasMixture):
         fluid_dict = channels[0].fluid.dict
         fluid_dict['nodes'] = n_channels + 1
-        in_manifold_fluid = fluids.factory(fluid_dict)
-        out_manifold_fluid = fluids.factory(fluid_dict)
+        in_manifold_fluid = fluids.create(fluid_dict)
+        out_manifold_fluid = fluids.create(fluid_dict)
     else:
         in_manifold_fluid = channels[0].fluid.copy()
         in_manifold_fluid.rescale(n_channels + 1)

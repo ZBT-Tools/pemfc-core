@@ -27,10 +27,10 @@ fluid_dict = \
         "nodes": (1)
     }
 
-humid_air_pemfc = fluid.factory(fluid_dict, backend='pemfc')
+humid_air_pemfc = fluid.create(fluid_dict, backend='pemfc')
 humid_air_pemfc.update()
 
-humid_air_ct = fluid.factory(fluid_dict, backend='cantera')
+humid_air_ct = fluid.create(fluid_dict, backend='cantera')
 humid_air_ct.update()
 # print(humid_air_pemfc.mole_fraction)
 # print(humid_air_pemfc.gas.concentration)

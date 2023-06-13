@@ -27,7 +27,7 @@ fluid_dict = \
         "nodes": n
     }
 
-humid_air = fluid.factory(fluid_dict, backend='pemfc')
+humid_air = fluid.create(fluid_dict, backend='pemfc')
 temp = np.linspace(0, 400, n)
 temp += 273.15
 humid_air.update(temperature=temp, pressure=101325)
