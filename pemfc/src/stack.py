@@ -311,7 +311,8 @@ class Stack:
             v_loss = 0.5 * self.n_cells
         else:
             v_loss = self.v_loss
-        heat = self.i_cd_avg * self.cells[0].active_area * v_loss
+        v_heat = self.temp_sys.e_tn - self.e_0 + v_loss
+        heat = self.i_cd_avg * self.cells[0].active_area * v_heat
         cp_cool = \
             np.average([np.average(channel.fluid.specific_heat)
                         for channel in self.coolant_circuit.channels])
