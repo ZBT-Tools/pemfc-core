@@ -72,7 +72,7 @@ class Stack:
             fluid_dicts[i]['nodes'] = n_nodes
             # fluids.append(fluid.factory2(fluid_dicts[i]))
             channels.append([chl.Channel(channel_dicts[i],
-                                         fluid.factory(fluid_dicts[i]))
+                                         fluid.create(fluid_dicts[i]))
                              for j in range(self.n_cells)])
 
         # Initialize fuel cells
@@ -148,7 +148,7 @@ class Stack:
             for i in range(n_cool):
                 cool_channels.append(
                     chl.Channel(coolant_channel_dict,
-                                fluid.factory(coolant_dict),
+                                fluid.create(coolant_dict),
                                 number=str(i)))
                 cool_channels[i].extend_data_names(cool_channels[i].name)
                 cool_channels[i].fluid.name = \
@@ -311,7 +311,8 @@ class Stack:
             v_loss = 0.5 * self.n_cells
         else:
             v_loss = self.v_loss
-        heat = self.i_cd_avg * self.cells[0].active_area * v_loss
+        v_heat = self.temp_sys.e_tn * self.n_cells - self.e_0 + v_loss
+        heat = self.i_cd_avg * self.cells[0].active_area * v_heat
         cp_cool = \
             np.average([np.average(channel.fluid.specific_heat)
                         for channel in self.coolant_circuit.channels])

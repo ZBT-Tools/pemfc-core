@@ -17,6 +17,18 @@ except ImportError:
     FOUND_CANTERA = False
 
 
+# class Fluid(ABC, OutputObject):
+#     """
+#     Abstract factory class to retrieve concrete implementations of the fluid
+#     classes.
+#     """
+#     def __new__(cls, fluid_dict, **kwargs):
+#         _get_fluid(fluid_dict, **kwargs)
+#
+#     def __init__(self, fluid_dict, **kwargs):
+#         super().__init__()
+
+
 class DiscreteFluid(ABC, OutputObject):
 
     PROPERTY_NAMES = ['density', 'specific_heat', 'viscosity',
@@ -1019,9 +1031,9 @@ def liquid_factory(nx, name, liquid_props, temperature, pressure):
                         'ConstantProperties or IncompressibleProperties')
 
 
-def arg_factory(array_shape, name, liquid_props=None, species_dict=None,
-                mole_fractions=None, temperature=293.15,
-                pressure=101325.0, backend='pemfc', **kwargs):
+def _arg_factory(array_shape, name, liquid_props=None, species_dict=None,
+                 mole_fractions=None, temperature=293.15,
+                 pressure=101325.0, backend='pemfc', **kwargs):
     if species_dict is None:
         return liquid_factory(array_shape, name, liquid_props,
                               temperature, pressure)
@@ -1056,7 +1068,7 @@ def arg_factory(array_shape, name, liquid_props=None, species_dict=None,
             raise NotImplementedError
 
 
-def factory(fluid_dict, **kwargs):
+def create(fluid_dict, **kwargs):
 
     backend = kwargs.pop('backend', 'pemfc')
     if not FOUND_CANTERA and backend == 'cantera':
@@ -1097,7 +1109,7 @@ def factory(fluid_dict, **kwargs):
         return ConstantFluid(array_shape, name, fluid_props,
                              temperature, pressure)
     else:
-        return arg_factory(
+        return _arg_factory(
             array_shape, name, liquid_props=liquid_props,
             species_dict=species_dict,
             mole_fractions=mole_fractions, temperature=temperature,
