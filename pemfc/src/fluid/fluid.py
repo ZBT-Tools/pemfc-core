@@ -124,7 +124,25 @@ class DiscreteFluid(ABC, OutputObject):
     def temperature(self, value):
         self._write_input_to_array(value, self._temperature)
 
+    @pressure.setter
+    def pressure(self, value):
+        self._write_input_to_array(value, self._pressure)
 
+    @property
+    def density(self):
+        return self.property['density']
+
+    @property
+    def viscosity(self):
+        return self.property['viscosity']
+
+    @property
+    def thermal_conductivity(self):
+        return self.property['thermal_conductivity']
+
+    @property
+    def specific_heat(self):
+        return self.property['specific_heat']
 
     # @density.setter
     # def density(self, value):
