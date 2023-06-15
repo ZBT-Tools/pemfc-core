@@ -108,6 +108,7 @@ class Simulation:
         for i, tar_value in enumerate(target_value):
             current_errors = []
             temp_errors = []
+            convergence_flags = []
             self.timing['simulation'] = 0.0
             self.timing['output'] = 0.0
             simulation_start_time = timeit.default_timer()
@@ -131,6 +132,11 @@ class Simulation:
                 if ((current_error < self.it_crit and temp_error < self.it_crit)
                         and counter > self.min_it) or counter > self.max_it:
                     break
+            if counter > self.max_it:
+                convergence_flag = False
+            else:
+                convergence_flag = True
+            convergence_flags.append(convergence_flag)
             simulation_stop_time = timeit.default_timer()
             simulation_time = simulation_stop_time - simulation_start_time
             self.timing['simulation'] += simulation_time
@@ -177,7 +183,10 @@ class Simulation:
             else:
                 cool_mass_flow = self.stack.coolant_circuit.mass_flow_in
             global_data = \
-                {'Stack Voltage': {'value': self.stack.v_stack, 'units': 'V'},
+                {
+                 'Convergence':
+                     {'value': convergence_flag, 'units': ' '},
+                 'Stack Voltage': {'value': self.stack.v_stack, 'units': 'V'},
                  'Average Cell Voltage':
                      {'value': self.stack.v_stack / self.stack.n_cells,
                       'units': 'V'},
@@ -202,7 +211,7 @@ class Simulation:
                       'units': 'kg/s', 'format': '.4E'},
                  'Anode Mass Flow Rate:':
                      {'value': self.stack.fuel_circuits[1].mass_flow_in,
-                      'units': 'kg/s', 'format': '.4E'}
+                      'units': 'kg/s', 'format': '.4E'},
                  }
             global_data_list.append(global_data)
             output_stop_time = timeit.default_timer()
@@ -223,6 +232,7 @@ class Simulation:
 
         output_stop_time = timeit.default_timer()
         self.timing['output'] += output_stop_time - output_start_time
+
         return global_data_list, local_data_list
 
     @staticmethod

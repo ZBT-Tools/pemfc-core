@@ -2,7 +2,7 @@ import sys
 
 # local module imports
 if 'main_app.py' in sys.argv[0]:
-    from settings import simulation as sim, operating_conditions as op_con, \
+    from ..settings import simulation as sim, operating_conditions as op_con, \
     output as out, geometry as geom, physical_properties as phy_prop
 else:
     from pemfc.settings import simulation as sim, operating_conditions as \
