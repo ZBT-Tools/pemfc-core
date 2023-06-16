@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 # local module imports
 from . import interpolation as ip, global_functions as g_func, \
-    channel as chl, output_object as oo
+    channel as chl, output_object as oo, flow_resistance as fr
 from .fluid import fluid as fluids
 
 
@@ -24,6 +24,9 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
         elif circuit_type == 'Wang':
             return super(ParallelFlowCircuit, cls).\
                 __new__(WangFlowCircuit)
+        elif circuit_type == 'VariableResistance':
+            return super(ParallelFlowCircuit, cls).\
+                __new__(VariableResistanceFlowCircuit)
         else:
             raise NotImplementedError
 
@@ -221,7 +224,6 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
                 update_mass=True, update_flow=True,
                 update_heat=False, update_fluid=update_fluid)
         self.vol_flow_in = self.calc_volume_flow()
-
 
     def calc_volume_flow(self, mass_flow=None):
         if mass_flow is None:
@@ -614,6 +616,66 @@ class WangFlowCircuit(ParallelFlowCircuit):
         #     self.channel_vol_flow)/self.n_channels))
 
 
+class VariableResistanceFlowCircuit(KohFlowCircuit):
+
+    def __init__(self, dict_flow_circuit, manifolds, channels,
+                 n_subchannels=1.0):
+        super().__init__(dict_flow_circuit, manifolds, channels,
+                         n_subchannels)
+        self.urf = dict_flow_circuit.get('underrelaxation_factor', 0.5)
+
+        # manifold to channel resistance
+        flow_res_dict = {'type': 'Junction',
+                         'coefficients': [1.02, 0.53, 33.67]}
+        self.mfd_to_chl_res = fr.FlowResistance(manifolds[0], flow_res_dict)
+
+        # manifold to channel resistance
+        flow_res_dict['coefficients'] = [1.02, 0.53, 33.67]
+
+        self.chl_to_mfd_res = fr.FlowResistance(manifolds[1], flow_res_dict)
+
+    def single_loop(self, inlet_mass_flow=None, update_channels=True):
+        """
+        Update the flow circuit
+        """
+        if inlet_mass_flow is not None:
+            self.mass_flow_in = inlet_mass_flow
+        if update_channels:
+            self.update_channels()
+            self.dp_channel[:] = \
+                np.array([channel.pressure[channel.id_in]
+                          - channel.pressure[channel.id_out]
+                          for channel in self.channels])
+            self.channel_vol_flow[:] = \
+                np.array([np.average(channel.vol_flow)
+                          for channel in self.channels])
+        if np.any(self.channel_vol_flow == 0.0):
+            raise ValueError('zero flow rates detected, '
+                             'check boundary conditions')
+        # velocity = np.array([np.average(channel.velocity)
+        #                      for channel in self.channels])
+        p_junction_in = self.manifolds[0].pressure[:-1]
+        p_junction_out = self.manifolds[1].pressure[:-1]
+
+        # update t-junction branching flow resistances
+        self.mfd_to_chl_res.update()
+        self.chl_to_mfd_res.update()
+        # and calculate the pressure drops
+        dp_mfd_to_chl = self.mfd_to_chl_res.calc_pressure_drop()
+        dp_chl_to_mfd = self.chl_to_mfd_res.calc_pressure_drop()
+        p_in = p_junction_in - dp_mfd_to_chl
+        p_out = p_junction_out + dp_chl_to_mfd
+
+        self.alpha[:] = (p_in - p_out) / self.dp_channel
+        self.channel_vol_flow[:] *= (self.urf + (1.0 - self.urf) * self.alpha)
+        density = np.array([channel.fluid.density[channel.id_in]
+                            for channel in self.channels])
+        self.channel_mass_flow[:] = self.channel_vol_flow * density
+        mass_flow_correction = \
+            self.mass_flow_in / np.sum(self.channel_mass_flow)
+        self.channel_mass_flow[:] *= mass_flow_correction
+
+
 def factory(dict_circuit, dict_in_manifold, dict_out_manifold,
             channels, channel_multiplier=1.0):
     if not isinstance(channels, (list, tuple)):
@@ -633,6 +695,12 @@ def factory(dict_circuit, dict_in_manifold, dict_out_manifold,
         in_manifold_fluid = channels[0].fluid.copy()
         in_manifold_fluid.rescale(n_channels + 1)
         out_manifold_fluid = in_manifold_fluid.copy()
+
+    if dict_circuit['type'] == 'VariableResistance':
+        dict_in_manifold['friction_coefficients'] = \
+            [0.566, -7.819, 29.996, -55.140, 50.862, -17.656]
+        dict_out_manifold['friction_coefficients'] = \
+            [0.304, 8.811, 32.915]
 
     manifolds = [chl.Channel(dict_in_manifold, in_manifold_fluid),
                  chl.Channel(dict_out_manifold, out_manifold_fluid)]

@@ -106,13 +106,14 @@ class Channel(ABC, oo.OutputObject):
                 {'type': 'Constant', 'value': n_bends * zeta_bends / self.n_ele}
             self.zetas.append(fr.FlowResistance(self, zeta_dict))
         # additional resistances (constant or flow splitting)
-        zeta_split = channel_dict.get('flow_split_factor', 0.0)
-        zeta_const = channel_dict.get('constant_friction_factor', 0.0)
-        if zeta_split > 0.0:
+        if 'friction_coefficients' in channel_dict:
             zeta_dict = \
-                {'type': 'Junction', 'value': zeta_const, 'factor': zeta_split}
+                {'type': 'Junction', 'coefficients':
+                    channel_dict['friction_coefficients']}
             self.zetas.append(fr.FlowResistance(self, zeta_dict))
-        elif zeta_const > 0.0:
+
+        zeta_const = channel_dict.get('constant_friction_factor', 0.0)
+        if zeta_const > 0.0:
             self.zetas.append(fr.FlowResistance(self, {'type': 'Constant',
                                                        'value': zeta_const}))
 

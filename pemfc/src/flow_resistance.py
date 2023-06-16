@@ -1,5 +1,5 @@
 # general imports
-from abc import ABC
+from abc import ABC, abstractmethod
 import numpy as np
 
 # local module imports
@@ -29,6 +29,7 @@ class FlowResistance(ABC):
     def update(self):
         pass
 
+    @abstractmethod
     def calc_pressure_drop(self):
         pass
 
@@ -111,9 +112,48 @@ class WallFrictionFlowResistance(FlowResistance):
 class JunctionFlowResistance(FlowResistance):
     def __init__(self, channel, zeta_dict, **kwargs):
         super().__init__(channel, zeta_dict, **kwargs)
-        self.zeta_const = zeta_dict.get('value', 0.0)
-        self.factor = zeta_dict['factor']
+        self.coeffs = zeta_dict['coefficients']
         self.value = np.zeros(self.channel.n_ele)
+        self.branch_combined_ratio = np.zeros(self.channel.n_ele)
+        self.velocity = np.zeros(self.channel.n_ele)
 
     def update(self):
-        pass
+        if hasattr(self.channel.fluid, 'species'):
+            mass_source = np.sum(self.channel.mass_source, axis=0)
+        else:
+            mass_source = self.channel.mass_source
+        mass_flow = self.channel.mass_flow_total
+        if self.channel.flow_direction == 1:
+            mass_flow_in = mass_flow[:-1]
+            mass_flow_out = mass_flow[1:]
+            velocity_in = self.channel.velocity[:-1]
+            velocity_out = self.channel.velocity[1:]
+        else:
+            mass_flow_out = mass_flow[:-1]
+            mass_flow_in = mass_flow[1:]
+            velocity_out = self.channel.velocity[:-1]
+            velocity_in = self.channel.velocity[1:]
+        mass_source_sign = np.sign(np.sum(mass_source))
+        mass_source_abs = np.abs(mass_source)
+        if mass_source_sign < 0:
+            # self.branch_combined_ratio[:] = mass_source_abs / mass_flow_in
+            self.branch_combined_ratio[:] = \
+                np.divide(mass_source_abs, mass_flow_in,
+                          out=np.zeros(mass_source_abs.shape),
+                          where=mass_flow_in != 0)
+            self.velocity[:] = velocity_in
+        else:
+            # self.branch_combined_ratio[:] = mass_source_abs / mass_flow_out
+            self.branch_combined_ratio[:] = \
+                np.divide(mass_source_abs, mass_flow_out,
+                          out=np.zeros(mass_source_abs.shape),
+                          where=mass_flow_out != 0)
+            self.velocity[:] = velocity_out
+
+        self.value[:] = \
+            np.polynomial.polynomial.polyval(self.branch_combined_ratio,
+                                             self.coeffs)
+
+    def calc_pressure_drop(self):
+        return 0.5 * ip.interpolate_1d(self.channel.fluid.density) * \
+               self.value * self.velocity ** 2.0
