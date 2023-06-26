@@ -32,7 +32,7 @@ def do_c_profile(func):
     return profiled_func
 
 
-n_chl = 10
+n_chl = 50
 n_subchl = 1
 
 temperature = 293.15
@@ -41,11 +41,11 @@ nodes = 10
 
 channel_dict = {
     'name': 'Channel',
-    'length': 0.400,
+    'length': 0.400*5,
     'cross_sectional_shape': 'circular',
     'width': 2.4e-3,
     'height': 2e-3,
-    'diameter': 0.012,
+    'diameter': 0.006,
     'p_out': pressure,
     'temp_in': temperature,
     'flow_direction': 1,
