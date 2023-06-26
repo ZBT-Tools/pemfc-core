@@ -35,7 +35,10 @@ def full(shape, value):
 
 def zeros_like(array):
     """faster than native numpy version"""
-    return np.zeros(array.shape)
+    if isinstance(array, np.ndarray):
+        return np.zeros(array.shape)
+    else:
+        return 0.0
 
 
 def fill_transposed(in_array, shape):
@@ -88,6 +91,30 @@ def add_source(var, source, direction=1, tri_mtx=None):
     else:
         raise ValueError('parameter direction must be either 1 or -1')
     return var
+
+
+def np_log(array):
+    """
+    Use numpy log function and set zero values where solution is not defined
+    """
+    return np.log(array, out=zeros_like(array), where=(array != 0))
+
+
+def np_div(array1, array2):
+    """
+    Use numpy divide function and set zero values where solution is not defined
+    """
+    if isinstance(array1, np.ndarray):
+        return np.divide(array1, array2, out=zeros_like(array1),
+                         where=(array2 != 0))
+    elif isinstance(array2, np.ndarray):
+        return np.divide(array1, array2, out=zeros_like(array2),
+                         where=(array2 != 0))
+    else:
+        if array2 == 0.0:
+            return 0.0
+        else:
+            return array1 / array2
 
 
 def exponential_distribution(y_avg, nx, a=1.0, b=0.0):

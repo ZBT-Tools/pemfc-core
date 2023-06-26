@@ -227,7 +227,7 @@ class Channel(ABC, oo.OutputObject):
                              enthalpy_source=enthalpy_source,
                              channel_factor=kwargs.get('channel_factor', 1.0))
 
-    def flow_resistance_sum(self):
+    def calculate_flow_resistance_sum(self):
         """ Update and return the sum of flow resistances (zeta-values) """
         zeta_sum = 0.0
         for zeta in self.zetas:
