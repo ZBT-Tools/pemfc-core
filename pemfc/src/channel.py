@@ -57,7 +57,7 @@ class Channel(ABC, oo.OutputObject):
         self.id_out = None
         self.flow_direction = channel_dict['flow_direction']
 
-        self.pressure_recovery = False
+        self.pressure_recovery_factor = np.ones(self.n_ele) * 0.5
 
         # Geometry
         if channel_dict.keys() >= {'width', 'height'}:
@@ -350,14 +350,30 @@ class Channel(ABC, oo.OutputObject):
                                      'adequate for flow conditions in {}'.
                                      format(self.name))
 
-        # calculate influence of dynamic pressure variation due to velocity
+        # Calculate influence of dynamic pressure variation due to velocity
         # changes on static pressure drop
+
+        # pressure_recovery_factor: k = (2 - beta) / 2,
+        # default: k = 0.5 for pure Bernoulli assumption
+        # as in Equation 4a in:
+        # Wang, Junye. "Theory of Flow Distribution in Manifolds".
+        # Chemical Engineering Journal 168, Nr. 3 (April 2011): 1331–45.
+        # https://doi.org/10.1016/j.cej.2011.02.050.
+
+        # and k = theta / 2 = (2 * beta - gamma) / 2
+        # as in Equation 5 and 7 in
+        # Bajura, R. A., und E. H. Jones. "Flow Distribution Manifolds".
+        # Journal of Fluids Engineering 98, Nr. 4 (1. Dezember 1976): 654–65.
+        # https://doi.org/10.1115/1.3448441.
+        # theta = 1.05 for inlet manifold and 2.60 for outlet manifold was used
+        # to compare to experimental data in above reference (equations 29 and 30)
+
         rho1 = self.fluid.density[:-1]
         rho2 = self.fluid.density[1:]
         v1 = self.velocity[:-1]
         v2 = self.velocity[1:]
-        dp_dyn = 0.5 * (rho2 * v2 ** 2.0 - rho1 * v1 ** 2.0) \
-            * self.flow_direction
+        dp_dyn = self.pressure_recovery_factor \
+            * (rho2 * v2 ** 2.0 - rho1 * v1 ** 2.0) * self.flow_direction
         return dp_res + dp_dyn
 
     def calc_pressure(self):
