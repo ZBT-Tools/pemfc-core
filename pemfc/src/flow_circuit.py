@@ -609,6 +609,14 @@ class WangFlowCircuit(ParallelFlowCircuit):
         # print('avg_condition: ', avg_condition)
         # print('condition: ', condition)
         w = 1.0
+        print('condition: ', condition)
+        alpha = np.zeros(self.n_channels)
+        if condition[0] < 0.0:
+            switch_case = 1
+        elif condition[0] == 0.0:
+            switch_case = 2
+        else:
+            switch_case = 3
         for i in range(self.n_channels):
             condition_i = condition[i]
             R_i = R[i]
