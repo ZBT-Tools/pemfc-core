@@ -1,6 +1,7 @@
 # general imports
 import numpy as np
 from abc import ABC, abstractmethod
+import math
 
 # local module imports
 from . import interpolation as ip, global_functions as g_func, \
@@ -114,8 +115,11 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
                 self.channel_vol_flow[:] = self.vol_flow_in / self.n_channels
             else:
                 # use previous distribution scaled to new mass flow
-                self.channel_mass_flow[:] *= inlet_mass_flow / self.mass_flow_in
-                self.channel_vol_flow[:] *= inlet_mass_flow / self.mass_flow_in
+                if self.mass_flow_in > 0.0:
+                    self.channel_mass_flow[:] *= \
+                        inlet_mass_flow / self.mass_flow_in
+                    self.channel_vol_flow[:] *= \
+                        inlet_mass_flow / self.mass_flow_in
             # set new mass and volume flows
             self.mass_flow_in = inlet_mass_flow
 
@@ -149,8 +153,8 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
                     print('maximum number of iterations n = {} '
                           'with error = {} in update() of {} '
                           'reached'.format(self.max_iter, error, self))
-        else:
-            self.initialize = False
+        # else:
+        #     self.initialize = False
         # final channel updates within flow circuit iteration
         self.update_channels(update_fluid=True)
         try:
@@ -158,6 +162,9 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
                 self.channel_mass_flow / np.average(self.channel_mass_flow)
         except FloatingPointError:
             self.normalized_flow_distribution[:] = 0.0
+
+        # After first or any later update call, initialization is over
+        self.initialize = False
 
     @abstractmethod
     def single_loop(self, inlet_mass_flow=None, update_channels=True):
@@ -470,18 +477,32 @@ class UpdatedKohFlowCircuit(KohFlowCircuit):
 class WangFlowCircuit(ParallelFlowCircuit):
     def __init__(self, dict_flow_circuit, manifolds, channels,
                  n_subchannels=1.0):
+
+        # manifold to channel resistance
+        flow_res_dict = \
+            {'type': 'Junction', 'coefficients': [1.02, 0.53, 33.67]}
+        # flow_res_dict = {'type': 'Junction', 'coefficients': [0.0]}
+        # flow_res_dict = {'type': 'Junction', 'coefficients': [0.02, -10.67]}
+        self.mfd_to_chl_res = fr.FlowResistance(manifolds[0], flow_res_dict)
+        # manifold to channel resistance
+        # flow_res_dict['coefficients'] = [1.02, 0.53, 33.67]
+        flow_res_dict['coefficients'] = [4.5]
+        # flow_res_dict = {'type': 'Junction', 'coefficients': [-0.02, 10.67]}
+        # flow_res_dict['coefficients'] = [1.0, 3.0]
+        self.chl_to_mfd_res = fr.FlowResistance(manifolds[1], flow_res_dict)
+
         super().__init__(dict_flow_circuit, manifolds, channels,
                          n_subchannels)
 
-        # self.zeta = np.zeros(self.n_channels)
-        self.xsi = 1.0
+        self.zeta = np.zeros(self.n_channels)
+        self.xsi = 0.1
         self.H = self.manifolds[0].cross_area / self.manifolds[1].cross_area
-        F_c = np.array([np.average(channel.cross_area)
+        self.F_c = np.array([np.average(channel.cross_area)
                         for channel in self.channels])
         # print('F_c: ', F_c)
-        sum_Fc = g_func.add_source(np.copy(F_c), F_c[1:], direction=-1)
+        # sum_Fc = g_func.add_source(np.copy(F_c), F_c[1:], direction=-1)
         # print('sum_Fc: ', sum_Fc)
-        self.M = sum_Fc / np.average(self.manifolds[0].cross_area)
+        self.M = np.sum(self.F_c) / np.average(self.manifolds[0].cross_area)
         # print('self.M: ', self.M)
         # self.M = np.sum(F_c) / np.average(self.manifolds[0].cross_area)
         self.E = self.manifolds[0].length / self.manifolds[0].d_h
@@ -489,24 +510,40 @@ class WangFlowCircuit(ParallelFlowCircuit):
         self.sqr_M = self.M ** 2.0
         self.sqr_H = self.H ** 2.0
 
-        # print('M = ', self.M)
-        # print('E = ', self.E)
+        # Assign inlet and outlet manifold channel friction factors
+        # to flow circuit model
+        self.f_in = np.zeros(self.n_channels)
+        self.f_out = np.zeros(self.n_channels)
+
+    def update_manifold_friction_factors(self):
+        for zeta in self.manifolds[0].zetas:
+            if isinstance(zeta, fr.WallFrictionFlowResistance):
+                self.f_in[:] = zeta.value[:-1]
+                # self.f_in[:] = 0.0
+                # self.f_in[:] = 0.038
+        for zeta in self.manifolds[1].zetas:
+            if isinstance(zeta, fr.WallFrictionFlowResistance):
+                self.f_out[:] = zeta.value[:-1]
+                # self.f_out[:] = 0.0
+                # self.f_out[:] = 0.038
 
     def update_channels(self, **kwargs):
         super().update_channels(**kwargs)
-        if self.initialize:
-            self.f_in = np.copy(self.manifolds[0].friction_factor)
-            self.f_out = np.copy(self.manifolds[1].friction_factor)
         # if self.initialize:
-        self.zeta = np.array([channel.zeta_bends * channel.n_bends
-                                 for channel in self.channels]) \
-            + np.array([np.sum(channel.friction_factor * channel.dx /
-                               channel.d_h)
-                        for channel in self.channels])
-        self.zeta[:] += 1.0 + self.manifolds[0].zeta_other \
-            + self.manifolds[1].zeta_other
+        #     self.f_in = np.copy(self.manifolds[0].friction_factor)
+        #     self.f_out = np.copy(self.manifolds[1].friction_factor)
+        # if self.initialize:
+        self.zeta = np.array([np.sum(channel.calculate_flow_resistance_sum())
+                              for channel in self.channels])
+        # Update t-junction branching flow resistances
+        self.mfd_to_chl_res.update()
+        self.chl_to_mfd_res.update()
+        self.zeta[:] += \
+            1.0 + self.mfd_to_chl_res.value + self.chl_to_mfd_res.value
+        # # Manifold-to-Channel and Channel-to-Manifold resistance coefficients
+        # self.zeta[:] += self.manifolds[0].zeta_other + self.manifolds[1].zeta_other
         # self.zeta[:] = 10.0
-        self.initialize = False
+        # self.initialize = False
 
     def single_loop(self, inlet_mass_flow=None, update_channels=True):
         if inlet_mass_flow is not None:
@@ -514,39 +551,52 @@ class WangFlowCircuit(ParallelFlowCircuit):
             id_in = self.manifolds[0].id_in
             self.vol_flow_in = self.mass_flow_in \
                 / self.manifolds[0].fluid.density[id_in]
-        self.update_channels()
+        # self.update_channels()
 
+        self.update_manifold_friction_factors()
         mfd_in = self.manifolds[0]
         mfd_out = self.manifolds[1]
 
         k_in_0 = 0.6
         k_out_0 = 1.0
-        b_in = 0.01
-        b_out = 0.01
+        b_in = 0.1
+        b_out = 0.1
         W_0 = self.vol_flow_in / mfd_in.cross_area
         # print('W_0: ', W_0)
         # print('Re_0:', W_0 * mfd_in.fluid.density[0] * mfd_in.d_h /
         #       mfd_in.fluid.viscosity[0])
+        Re_0 = W_0 * mfd_in.fluid.density[0] * mfd_in.d_h / mfd_in.fluid.viscosity[0]
+
         # print('mfd_in.velocity[:-1]: ', mfd_in.velocity[:-1])
         # mfd_in.velocity[0] = W_0
 
         # print('zeta = ', self.zeta)
 
-        f_in = mfd_in.friction_factor
-        f_out = mfd_out.friction_factor
+        # f_in = mfd_in.friction_factor
+        # f_out = mfd_out.friction_factor
         # f_in = self.f_in
         # f_out = self.f_out
         #print('f_in: ', f_in)
         #print('f_out: ', f_out)
         # f_in[:] = 0.038
         # f_out[:] = 0.038
-        k_in = k_in_0 + b_in * np.log(mfd_in.velocity[:-1] / W_0)
-        k_out = k_out_0 + b_out * np.log(mfd_out.velocity[:-1] / W_0)
+        m = mfd_in.velocity[:-1]
+        k_in = k_in_0 + b_in * g_func.np_log(mfd_in.velocity[:-1] / W_0)
 
-        Q = 2.0 / (3.0 * self.zeta) * (k_in - k_out * self.sqr_H) \
-            * self.sqr_M
-        R = - 0.25 * self.E * self.xsi / self.zeta \
-            * (f_in + f_out * self.D_star * self.sqr_H) * self.sqr_M
+        k_out = k_out_0 + b_out * g_func.np_log(mfd_out.velocity[:-1] / W_0)
+
+        zeta = self.zeta
+        # zeta = 10.0
+
+        Q = g_func.np_div(2.0, (3.0 * zeta)) \
+            * (k_in - k_out * self.sqr_H) * self.sqr_M
+
+        R = - g_func.np_div(0.25 * self.E * self.xsi, zeta) \
+            * (self.f_in + self.f_out * self.D_star * self.sqr_H) * self.sqr_M
+
+        compare_paper = {'Re_0': Re_0, 'M': self.M, 'E': self.E,
+                         'zeta': zeta}
+
         avg_R = np.average(R)
         avg_Q = np.average(Q)
 
@@ -560,18 +610,6 @@ class WangFlowCircuit(ParallelFlowCircuit):
         # print('condition: ', condition)
         w = 1.0
         for i in range(self.n_channels):
-            # print('w_i: ', w)
-            # k_in_i = k_in_0 + b_in * np.log(w)
-            # k_out_i = k_out_0 + b_out * np.log(w * self.H)
-            # Q_i = 2.0 / (3.0 * self.zeta[i]) * (
-            #             k_in_i - k_out_i * self.sqr_H) * self.sqr_M
-            # R_i = - 0.25 * self.E * self.xsi / self.zeta[i] \
-            #     * (f_in[i] + f_out[i] * self.D_star * self.sqr_H) * self.sqr_M
-            # cube_Q_i = np.power(Q_i, 3.0)
-            # square_R_i = np.square(R_i)
-            # condition_i = square_R_i + cube_Q_i
-            # print('cube_Q_i: ', cube_Q_i)
-            # print('square_R_i: ', square_R_i)
             condition_i = condition[i]
             R_i = R[i]
             Q_i = Q[i]
@@ -582,13 +620,17 @@ class WangFlowCircuit(ParallelFlowCircuit):
                 theta = np.arccos(R_i/np.sqrt(-cube_Q_i))
                 sqrt_Q = np.sqrt(-Q_i)
                 r_1 = 2.0 * sqrt_Q * np.cos(theta * one_third)
-                r_2 = 2.0 * sqrt_Q * np.cos((theta + 2.0*np.pi) * one_third)
+                r_2 = 2.0 * sqrt_Q * np.cos((theta + 2.0 * np.pi) * one_third)
                 w = (np.exp(r_1 + r_2 * x[i+1]) - np.exp(r_2 + r_1 * x[i+1])) \
+                    / (np.exp(r_1) - np.exp(r_2))
+                alpha[i] = - (r_2 * np.exp(r_1 + r_2 * x[i+1])
+                              - r_1 * np.exp(r_2 + r_1 * x[i+1])) \
                     / (np.exp(r_1) - np.exp(r_2))
                 # print('i :', i, ', condition < 0,  w: ', w)
             elif condition_i == 0.0:
                 r = - 0.5 * np.power(R_i, one_third)
                 w = (1.0 - x[i+1]) * np.exp(r*x[i+1])
+                alpha[i] = - (r - 1.0 - r * x[i+1]) * np.exp(r * x[i+1])
                 # print('i :', i, ', condition == 0,  w: ', w)
             else:
                 sqrt_condition = np.sqrt(condition_i)
@@ -596,20 +638,28 @@ class WangFlowCircuit(ParallelFlowCircuit):
                 term_2 = np.cbrt(R_i - sqrt_condition)
                 B = term_1 + term_2
                 J = term_1 - term_2
-                sqrt3_J_by_2 = np.sqrt(3.0) * J * 0.5
+                sqrt3_J = math.sqrt(3.0) * J
+                sqrt3_J_by_2 = math.sqrt(3.0) * J * 0.5
                 w = np.exp(-B * x[i+1] * 0.5) \
                     * np.sin(sqrt3_J_by_2 * (1.0 - x[i+1])) \
                     / np.sin(sqrt3_J_by_2)
+
+                alpha[i] = 0.5 * np.exp(-B * x[i+1] * 0.5) \
+                    * ((B * np.sin(sqrt3_J_by_2 * (1.0 - x[i+1]))
+                        + sqrt3_J * np.cos(sqrt3_J_by_2 * (1.0 - x[i+1])))
+                       / np.sin(sqrt3_J_by_2))
                 # print('i :', i, ', condition > 0,  w: ', w)
-            W = w * W_0
-            mfd_in.velocity[i+1] = W
-            mfd_out.velocity[i+1] = W * self.H \
-                * mfd_in.fluid.density[i+1] / mfd_out.fluid.density[i+1]
+            # W = w * W_0
+            # mfd_in.velocity[i+1] = W
+            # mfd_out.velocity[i+1] = W * self.H \
+            #     * mfd_in.fluid.density[i+1] / mfd_out.fluid.density[i+1]
 
         # print('condition: ', condition)
         mass_flow_in = \
             mfd_in.velocity * mfd_in.fluid.density * mfd_in.cross_area
-        self.channel_mass_flow[:] = mass_flow_in[:-1] - mass_flow_in[1:]
+        # self.channel_mass_flow[:] = mass_flow_in[:-1] - mass_flow_in[1:]
+
+        self.channel_mass_flow[:] = alpha * self.mass_flow_in / self.n_channels
         self.channel_vol_flow[:] = \
             self.channel_mass_flow / ip.interpolate_1d(mfd_in.fluid.density)
         # print('distribution: ', self.channel_vol_flow/(np.sum(
@@ -625,13 +675,19 @@ class VariableResistanceFlowCircuit(KohFlowCircuit):
         self.urf = dict_flow_circuit.get('underrelaxation_factor', 0.5)
 
         # manifold to channel resistance
-        flow_res_dict = {'type': 'Junction',
-                         'coefficients': [1.02, 0.53, 33.67]}
+        flow_res_dict = \
+            {'type': 'Junction', 'coefficients': [1.02, 0.53, 33.67]}
+        # flow_res_dict = {'type': 'Junction', 'coefficients': [0.0]}
+        # flow_res_dict = {'type': 'Junction', 'coefficients': [0.02, -10.67]}
+
         self.mfd_to_chl_res = fr.FlowResistance(manifolds[0], flow_res_dict)
 
         # manifold to channel resistance
-        flow_res_dict['coefficients'] = [0.1, 0.3]
         # flow_res_dict['coefficients'] = [1.02, 0.53, 33.67]
+        flow_res_dict['coefficients'] = [4.5]
+        # flow_res_dict = {'type': 'Junction', 'coefficients': [-0.02, 10.67]}
+
+        # flow_res_dict['coefficients'] = [1.0, 3.0]
 
         self.chl_to_mfd_res = fr.FlowResistance(manifolds[1], flow_res_dict)
 
@@ -658,7 +714,7 @@ class VariableResistanceFlowCircuit(KohFlowCircuit):
         p_junction_in = self.manifolds[0].pressure[:-1]
         p_junction_out = self.manifolds[1].pressure[:-1]
 
-        # update t-junction branching flow resistances
+        # Update t-junction branching flow resistances
         self.mfd_to_chl_res.update()
         self.chl_to_mfd_res.update()
         # and calculate the pressure drops
@@ -698,14 +754,18 @@ def factory(dict_circuit, dict_in_manifold, dict_out_manifold,
         out_manifold_fluid = in_manifold_fluid.copy()
 
     if dict_circuit['type'] == 'VariableResistance':
-        # dict_in_manifold['friction_coefficients'] = \
-        #     [0.566, -7.819, 29.996, -55.140, 50.862, -17.656]
-        # dict_out_manifold['friction_coefficients'] = \
-        #     [0.304, 8.811, 32.915]
         dict_in_manifold['friction_coefficients'] = \
-            [0.2, -7.819, 29.996, -55.140, 50.862, -17.656]
+            [0.566, -7.819, 29.996, -55.140, 50.862, -17.656]
+        # dict_in_manifold['friction_coefficients'] = [0.4]
+        # dict_in_manifold['friction_coefficients'] = [0.0, 0.0]
+
         dict_out_manifold['friction_coefficients'] = \
-            [0.1, 8.811, 32.915]
+            [0.304, 8.811, 32.915]
+        # dict_out_manifold['friction_coefficients'] = [0.4]
+        # dict_out_manifold['friction_coefficients'] = [0.0, 0.0]
+
+        # [0.304, 8.811, 32.915]
+
     manifolds = [chl.Channel(dict_in_manifold, in_manifold_fluid),
                  chl.Channel(dict_out_manifold, out_manifold_fluid)]
 
