@@ -492,8 +492,8 @@ class WangFlowCircuit(ParallelFlowCircuit):
         # print('M = ', self.M)
         # print('E = ', self.E)
 
-    def update_channels(self):
-        super().update_channels()
+    def update_channels(self, **kwargs):
+        super().update_channels(**kwargs)
         if self.initialize:
             self.f_in = np.copy(self.manifolds[0].friction_factor)
             self.f_out = np.copy(self.manifolds[1].friction_factor)
@@ -630,7 +630,8 @@ class VariableResistanceFlowCircuit(KohFlowCircuit):
         self.mfd_to_chl_res = fr.FlowResistance(manifolds[0], flow_res_dict)
 
         # manifold to channel resistance
-        flow_res_dict['coefficients'] = [1.02, 0.53, 33.67]
+        flow_res_dict['coefficients'] = [0.1, 0.3]
+        # flow_res_dict['coefficients'] = [1.02, 0.53, 33.67]
 
         self.chl_to_mfd_res = fr.FlowResistance(manifolds[1], flow_res_dict)
 
@@ -697,11 +698,14 @@ def factory(dict_circuit, dict_in_manifold, dict_out_manifold,
         out_manifold_fluid = in_manifold_fluid.copy()
 
     if dict_circuit['type'] == 'VariableResistance':
+        # dict_in_manifold['friction_coefficients'] = \
+        #     [0.566, -7.819, 29.996, -55.140, 50.862, -17.656]
+        # dict_out_manifold['friction_coefficients'] = \
+        #     [0.304, 8.811, 32.915]
         dict_in_manifold['friction_coefficients'] = \
-            [0.566, -7.819, 29.996, -55.140, 50.862, -17.656]
+            [0.2, -7.819, 29.996, -55.140, 50.862, -17.656]
         dict_out_manifold['friction_coefficients'] = \
-            [0.304, 8.811, 32.915]
-
+            [0.1, 8.811, 32.915]
     manifolds = [chl.Channel(dict_in_manifold, in_manifold_fluid),
                  chl.Channel(dict_out_manifold, out_manifold_fluid)]
 

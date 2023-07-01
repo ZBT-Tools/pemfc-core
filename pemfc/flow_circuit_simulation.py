@@ -82,11 +82,11 @@ in_manifold_dict = {
     'p_out': channel_dict['p_out'],
     'temp_in': 293.15,
     'flow_direction': 1,
-    'width': 12.5e-3,
-    'height': 7.5e-3,
+    'width': 12.5e-1,
+    'height': 7.5e-1,
     'bend_number': 0,
     'bend_friction_factor': 0.0,
-    'constant_friction_factor': 0.1,
+    'constant_friction_factor': 0.0,
     'flow_split_factor': 0.0,
     'wall_friction': True
 }
@@ -96,7 +96,7 @@ out_manifold_dict['name'] = 'Outlet Manifold'
 
 flow_circuit_dict = {
     'name': 'Flow Circuit',
-    'type': 'VariableResistance',
+    'type': 'Wang',
     'shape': 'U'
     }
 
@@ -114,7 +114,7 @@ x = (ip.interpolate_1d(flow_model.manifolds[0].x)
     / (flow_model.manifolds[0].length - flow_model.manifolds[0].dx[0])
 # x = flow_model.manifolds[0].x / flow_model.manifolds[0].length
 
-flow_model.update(inlet_mass_flow=0.000449642)
+flow_model.update(inlet_mass_flow=0.000449642*2)
 q = (flow_model.normalized_flow_distribution - 1.0) * 100.0
 reynolds = flow_model.manifolds[0].reynolds[0]
 plt.plot(x, q, label='Re={0:.2f}'.format(reynolds), color='k')
