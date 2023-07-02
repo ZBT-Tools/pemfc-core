@@ -192,7 +192,7 @@ class JunctionFlowResistance(FlowResistance, ABC):
         self.main_flow_ratio = np.zeros(self.channel.n_ele)
         self.velocity = np.zeros(self.channel.n_ele)
         self.density = np.zeros(self.channel.n_ele)
-        self.mass_source_sign = np.sign(self.channel.mass_source)
+        self.mass_source_sign = np.zeros(self.channel.n_ele)
         self.pressure = np.zeros(self.channel.n_ele)
 
     def update(self):
@@ -229,12 +229,15 @@ class JunctionFlowResistance(FlowResistance, ABC):
         # Resistance values are defined with respect to the combined flow point
         self.velocity[:] = self.channel.velocity[combined_ids]
         density = self.channel.fluid.density
-        self.density = density[combined_ids]
-        self.pressure = self.channel.pressure[combined_ids]
+        self.density[:] = density[combined_ids]
+        self.pressure[:] = self.channel.pressure[combined_ids]
         mass_flow = self.channel.mass_flow_total
         combined_volume_flow = mass_flow[combined_ids] * density[combined_ids]
         reduced_volume_flow = mass_flow[reduced_ids] * density[reduced_ids]
-        self.main_flow_ratio[:] = combined_volume_flow / reduced_volume_flow
+        self.main_flow_ratio[:] = \
+            np.divide(reduced_volume_flow, combined_volume_flow,
+                      out=self.main_flow_ratio,
+                      where=combined_volume_flow != 0.0)
 
         # np.polynomial.polynomial.polyval(self.main_flow_ratio,
         #                                  self.coeffs)
@@ -327,16 +330,18 @@ class RennelsTeeMainFlowResistance(JunctionFlowResistance):
         # parameters self.C_xC and self.C_M which could be arrays as well. If
         # only the values at the required positions should be calculated,
         # the parameters should be made function inputs as well.
+        value = np.zeros(self.value.shape)
         value_dividing = \
             self.calc_dividing_junction_value(self.main_flow_ratio)
         value_combining = \
             self.calc_combining_junction_value(self.main_flow_ratio)
         # Determine indices for dividing or combining elements
-        id_dividing = np.nonzero(self.mass_source_sign < 0)
+        id_dividing = np.nonzero(self.mass_source_sign <= 0)
         id_combining = np.nonzero(self.mass_source_sign > 0)
         # Assign result values to corresponding elements
-        self.value[id_dividing] = value_dividing[id_dividing]
-        self.value[id_combining] = value_combining[id_combining]
+        value[id_dividing] = value_dividing[id_dividing]
+        value[id_combining] = value_combining[id_combining]
+        return value
 
 
 class RennelsTeeBranchFlowResistance(RennelsTeeMainFlowResistance):
@@ -405,13 +410,15 @@ class RennelsTeeBranchFlowResistance(RennelsTeeMainFlowResistance):
         # parameters self.C_xC, self.C_yC and self.C_M which could be arrays as
         # well. If only the values at the required positions should be
         # calculated, the parameters should be made function inputs as well.
+        value = np.zeros(self.value.shape)
         value_dividing = \
             self.calc_dividing_junction_value(1.0 - self.main_flow_ratio)
         value_combining = \
             self.calc_combining_junction_value(1.0 - self.main_flow_ratio)
         # Determine indices for dividing or combining elements
-        id_dividing = np.nonzero(self.mass_source_sign < 0)
+        id_dividing = np.nonzero(self.mass_source_sign <= 0)
         id_combining = np.nonzero(self.mass_source_sign > 0)
         # Assign result values to corresponding elements
-        self.value[id_dividing] = value_dividing[id_dividing]
-        self.value[id_combining] = value_combining[id_combining]
+        value[id_dividing] = value_dividing[id_dividing]
+        value[id_combining] = value_combining[id_combining]
+        return value

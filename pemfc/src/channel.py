@@ -188,7 +188,7 @@ class Channel(ABC, oo.OutputObject):
 
     @property
     def diameter(self):
-        return self._diameter
+        return self.d_h
 
     @property
     def length(self):
@@ -344,11 +344,11 @@ class Channel(ABC, oo.OutputObject):
             raise ValueError('velocity and density arrays '
                              'must be of equal shape')
         # calculate resistance based pressure drop
-        dp_res = np.zeros(self.n_ele)
+        dp_zeta = np.zeros(self.n_ele)
         try:
             for zeta in self.zetas:
                 zeta.update()
-                dp_res += zeta.calc_pressure_drop()
+                dp_zeta += zeta.calc_pressure_drop()
         except FloatingPointError:
             raise FloatingPointError('check if channel geometry is '
                                      'adequate for flow conditions in {}'.
@@ -378,7 +378,7 @@ class Channel(ABC, oo.OutputObject):
         v2 = self.velocity[1:]
         dp_dyn = self.pressure_recovery_factor \
             * (rho2 * v2 ** 2.0 - rho1 * v1 ** 2.0) * self.flow_direction
-        return dp_res + dp_dyn
+        return dp_zeta + dp_dyn
 
     def calc_pressure(self):
         """

@@ -10,6 +10,7 @@ import json
 # local module imports
 from . import stack
 from . import output
+from . import global_functions as gf
 # from data import input_dicts
 
 # if 'main_app.py' in sys.argv[0]:
@@ -283,19 +284,15 @@ class Simulation:
         """
         Calculates the convergence criteria according to (Koh, 2003)
         """
-        i_cd_vec = self.stack.i_cd.flatten()
-        current_error = \
-            np.abs(np.sum(((i_cd_vec - self.stack.i_cd_old.flatten())
-                           / i_cd_vec) ** 2.0))
+        current_error = gf.calc_rel_error(self.stack.i_cd.flatten(),
+                                          self.stack.i_cd_old.flatten())
         # self.temp_criteria =\
         #     np.abs(np.sum(((self.temp_old
         #                     - self.stack.temp_sys.temp_layer[0][0, 0]))
         #                   / self.stack.temp_sys.temp_layer[0][0, 0]))
         if self.stack.calc_temp:
-            temp_error =\
-                np.abs(np.sum(((self.stack.temp_old
-                                - self.stack.temp_sys.temp_layer_vec)
-                              / self.stack.temp_sys.temp_layer_vec) ** 2.0))
+            temp_error = gf.calc_rel_error(self.stack.temp_old,
+                                           self.stack.temp_sys.temp_layer_vec)
         else:
             temp_error = 0.0
         return current_error, temp_error

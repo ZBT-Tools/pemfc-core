@@ -233,7 +233,7 @@ def calc_temp_heat_transfer(wall_temp, fluid_temp, capacity_rate, heat_coeff,
                 delta_temp = wall_temp[i] - fluid_avg
             else:
                 temp_diff_ratio = (wall_temp[i] - fluid_avg) \
-                    / (wall_temp[i] - fluid_in)
+                                  / (wall_temp[i] - fluid_in)
                 if temp_diff_ratio > 0.0:
                     delta_temp = wall_temp[i] - fluid_avg
                 else:
@@ -294,4 +294,27 @@ def sup(char):
     return char.translate(res)
 
 
+def calc_rel_error(array1, array2):
+    """
+    Calculates relative squared error sum of array1 and array2 (same shapes)
+    :param array1: 1d array of values
+    :param array2: 1d array of values
+    :return: scalar sum of relative squared errors
+    """
+    array_diff = array1 - array2
+    average_array = (array1 + array2) / 2.0
+    rel_error_array = \
+        np.divide(array_diff, average_array, out=array_diff,
+                  where=average_array != 0.0)
+    return np.inner(array_diff, array_diff) / len(array1)
 
+
+def calc_mean_squared_error(array1, array2):
+    """
+    Calculates mean squared error of array1 and array2 (same shapes)
+    :param array1: 1d array of values
+    :param array2: 1d array of values
+    :return: scalar mean squared error
+    """
+    array_diff = array1 - array2
+    return np.inner(array_diff, array_diff) / len(array1)
