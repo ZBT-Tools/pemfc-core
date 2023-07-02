@@ -180,7 +180,7 @@ def fill_zero_sum(array, axis=-1, axis_sum=None):
 #
 #     mask_array = np.sum(np.abs(array), axis) * np.ones(array.shape)
 #     averaged = ndimage.generic_filter(array, np.nanmean, footprint=footprint,
-#                                       mode='constant', cval=np.NaN)
+#                                       reference_velocity='constant', cval=np.NaN)
 #     return np.where(mask_array < constants.SMALL, averaged, array)
 
 

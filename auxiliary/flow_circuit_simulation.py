@@ -8,7 +8,7 @@ import matplotlib
 
 # local module imports
 from pemfc.src import channel as chl
-from pemfc.src import fluid as fluid
+from pemfc.src.fluid import fluid as fluid
 from pemfc.src import flow_circuit as flow_circuit
 from pemfc.src import interpolation as ip
 
@@ -102,13 +102,13 @@ flow_circuit_dict = {
     'shape': 'U'
     }
 
-channels = [chl.Channel(channel_dict, fluid.factory(constant_fluid_dict))
+channels = [chl.Channel(channel_dict, fluid.create(constant_fluid_dict))
             for i in range(n_chl)]
 
 flow_model = \
-    flow_circuit.factory(flow_circuit_dict, in_manifold_dict,
-                         out_manifold_dict, channels,
-                         channel_multiplier=n_subchl)
+    flow_circuit.create(flow_circuit_dict, in_manifold_dict,
+                        out_manifold_dict, channels,
+                        channel_multiplier=n_subchl)
 
 
 x = (ip.interpolate_1d(flow_model.manifolds[0].x)

@@ -117,9 +117,9 @@ channels = [chl.Channel(channel_dict, fluid.create(constant_water_dict))
             for i in range(n_chl)]
 
 flow_model = \
-    flow_circuit.factory(flow_circuit_dict, in_manifold_dict,
-                         out_manifold_dict, channels,
-                         channel_multiplier=n_subchl)
+    flow_circuit.create(flow_circuit_dict, in_manifold_dict,
+                        out_manifold_dict, channels,
+                        channel_multiplier=n_subchl)
 
 
 x = (ip.interpolate_1d(flow_model.manifolds[0].x)
