@@ -28,6 +28,12 @@ class FlowResistance(ABC):
         elif zeta_type == 'RennelsTeeBranch':
             return super(FlowResistance, cls).\
                 __new__(RennelsTeeBranchFlowResistance)
+        elif zeta_type == 'BassettTeeMain':
+            return super(FlowResistance, cls).\
+                __new__(BassettTeeMainFlowResistance)
+        elif zeta_type == 'BassettTeeBranch':
+            return super(FlowResistance, cls).\
+                __new__(BassettTeeBranchFlowResistance)
         else:
             raise NotImplementedError
 
@@ -187,6 +193,7 @@ class JunctionFlowResistance(FlowResistance, ABC):
     """
     def __init__(self, channel, zeta_dict, **kwargs):
         super().__init__(channel, zeta_dict, **kwargs)
+        self.dict = zeta_dict
         # self.coeffs = zeta_dict['coefficients']
         self.value = np.zeros(self.channel.n_ele)
         self.main_flow_ratio = np.zeros(self.channel.n_ele)
@@ -242,14 +249,72 @@ class JunctionFlowResistance(FlowResistance, ABC):
         # np.polynomial.polynomial.polyval(self.main_flow_ratio,
         #                                  self.coeffs)
 
-        self.value[:] = self.calc_resistance_values()
+        self.value[:] = self.update_resistance_values()
 
     @abstractmethod
-    def calc_resistance_values(self, **kwargs):
+    def update_resistance_values(self):
+        """
+        Updates resistance values. Just a wrapper for calc_resistance values
+        where the specific flow ratio can be defined differently in concrete
+        class implementation. Must be defined in concrete class implementation
+        to enforce review of the flow_ratio definition.
+        """
+        pass
+
+    def calc_resistance_values(self, flow_ratio, *args, **kwargs):
+        """
+        Calculates resistance values based on given correlations for dividing
+        or combining flow junctions at each discrete element of the referenced
+        channel object. Local flow conditions (sign of mass flux) determine
+        whether junction is combining or dividing.
+        :param flow_ratio: volumetric flow ratio of reduced flow (either branch
+        or main run) to combined flow (array)
+        :param args: list of additional arguments for concrete implementations
+        :param kwargs: list of additional keyword arguments for concrete implementations
+        :return: vector including the calculated element-wise resistance values
+        along the channel
+        """
+        # Calculate both resistance values for generality. This is simpler when
+        # methods use additional object members, which are also arrays. If only
+        # the values at the required positions should be calculated, which was
+        # tested to be a minor speed-up, the parameters should be made function
+        # inputs as well.
+        value = np.zeros(self.value.shape)
+        value_dividing = \
+            self.calc_dividing_junction_value(flow_ratio)
+        value_combining = \
+            self.calc_combining_junction_value(flow_ratio)
+        # Determine indices for dividing or combining elements
+        id_dividing = np.nonzero(self.mass_source_sign <= 0)
+        id_combining = np.nonzero(self.mass_source_sign > 0)
+        # Assign result values to corresponding elements
+        value[id_dividing] = value_dividing[id_dividing]
+        value[id_combining] = value_combining[id_combining]
+        return value
+
+    @abstractmethod
+    def calc_dividing_junction_value(self, flow_ratio, *args, **kwargs):
         """
         Calculates resistance values based on given correlation. Must be
         defined in concrete class implementation.
-        :param kwargs:
+        :param flow_ratio: volumetric flow ratio of reduced flow (either branch
+        or main run) to combined flow (array)
+        :param args: list of additional arguments for concrete implementations
+        :param kwargs: list of additional keyword arguments for concrete implementations
+        :return: vector including the calculated element-wise resistance values
+        along the channel
+        """
+        pass
+
+    @abstractmethod
+    def calc_combining_junction_value(self, flow_ratio, *args, **kwargs):
+        """
+        Calculates resistance values based on given correlation. Must be
+        defined in concrete class implementation.
+        :param flow_ratio: volumetric flow ratio of reduced flow
+        (either branch or main run) to combined flow (array)
+        :param args: list of additional arguments for concrete implementations
+        :param kwargs: list of additional keyword arguments for concrete implementations
         :return: vector including the calculated element-wise resistance values
         along the channel
         """
@@ -269,7 +334,7 @@ class JunctionFlowResistance(FlowResistance, ABC):
 
 class RennelsTeeMainFlowResistance(JunctionFlowResistance):
     """
-    Concrete implementation of the abstract JunctionFlowResistance class  
+    Concrete implementation of the abstract JunctionFlowResistance class
     defining the "calc_resistance_values" with values from the publication:
     Rennels, Donald C., and Hobart M. Hudson. Pipe Flow: A Practical and
     Comprehensive Guide. Hoboken, NJ, USA: John Wiley & Sons, Inc., 2012.
@@ -290,8 +355,16 @@ class RennelsTeeMainFlowResistance(JunctionFlowResistance):
         self.C_xC = 0.08 + 0.56 * r_to_d - 1.75 * r_to_d ** 2.0 \
             + 1.83 * r_to_d ** 2.0
 
+    def update_resistance_values(self):
+        """
+        Updates resistance values. Just a wrapper for calc_resistance values
+        where the specific flow ratio can be defined differently in concrete
+        class implementation.
+        """
+        return self.calc_resistance_values(self.main_flow_ratio)
+
     @staticmethod
-    def calc_dividing_junction_value(flow_ratio):
+    def calc_dividing_junction_value(flow_ratio, *args, **kwargs):
         """
         Equation (16.5) from
         Rennels, Donald C., and Hobart M. Hudson. Pipe Flow: A Practical and
@@ -302,9 +375,9 @@ class RennelsTeeMainFlowResistance(JunctionFlowResistance):
         :return: zeta resistance value
         """
         return 0.36 - 0.98 * flow_ratio + 0.62 * flow_ratio ** 2.0 \
-            + 0.03 * flow_ratio ** 8
+            + 0.03 * flow_ratio ** 8.0
 
-    def calc_combining_junction_value(self, flow_ratio):
+    def calc_combining_junction_value(self, flow_ratio, *args, **kwargs):
         """
         Equation (16.22) from
         Rennels, Donald C., and Hobart M. Hudson. Pipe Flow: A Practical and
@@ -317,31 +390,6 @@ class RennelsTeeMainFlowResistance(JunctionFlowResistance):
         return 1.0 - 0.95 * flow_ratio ** 2.0 \
             - 2.0 * self.C_xC * (flow_ratio - flow_ratio ** 2.0) \
             - 2.0 * self.C_M * (1.0 - flow_ratio)
-
-    def calc_resistance_values(self, **kwargs):
-        """
-        Calculates resistance values based on given correlation. Must be
-        defined in concrete class implementation.
-        :param kwargs:
-        :return: vector including the calculated element-wise resistance values
-        along the channel
-        """
-        # Calculate both resistance values, simpler due to using the
-        # parameters self.C_xC and self.C_M which could be arrays as well. If
-        # only the values at the required positions should be calculated,
-        # the parameters should be made function inputs as well.
-        value = np.zeros(self.value.shape)
-        value_dividing = \
-            self.calc_dividing_junction_value(self.main_flow_ratio)
-        value_combining = \
-            self.calc_combining_junction_value(self.main_flow_ratio)
-        # Determine indices for dividing or combining elements
-        id_dividing = np.nonzero(self.mass_source_sign <= 0)
-        id_combining = np.nonzero(self.mass_source_sign > 0)
-        # Assign result values to corresponding elements
-        value[id_dividing] = value_dividing[id_dividing]
-        value[id_combining] = value_combining[id_combining]
-        return value
 
 
 class RennelsTeeBranchFlowResistance(RennelsTeeMainFlowResistance):
@@ -369,7 +417,7 @@ class RennelsTeeBranchFlowResistance(RennelsTeeMainFlowResistance):
             - (0.11 * r_to_d - 0.65 * r_to_d ** 2.0
                + 0.83 * r_to_d ** 3.0) * self.diameter_ratio ** 2.0
 
-    def calc_dividing_junction_value(self, flow_ratio):
+    def calc_dividing_junction_value(self, flow_ratio, *args, **kwargs):
         """
         Equation (16.13) from
         Rennels, Donald C., and Hobart M. Hudson. Pipe Flow: A Practical and
@@ -384,7 +432,7 @@ class RennelsTeeBranchFlowResistance(RennelsTeeMainFlowResistance):
                        - 1.08 * self.diameter_ratio ** 3 + self.K_9_3) *
                self.diameter_ratio ** -4.0) * flow_ratio ** 2.0
 
-    def calc_combining_junction_value(self, flow_ratio):
+    def calc_combining_junction_value(self, flow_ratio, *args, **kwargs):
         """
         Equation (16.30) from
         Rennels, Donald C., and Hobart M. Hudson. Pipe Flow: A Practical and
@@ -398,27 +446,137 @@ class RennelsTeeBranchFlowResistance(RennelsTeeMainFlowResistance):
             + ((2.0 * self.C_yC - 1.0) * (1.0 / self.diameter_ratio) ** 4.0
                + 2.0 * (self.C_xC - 1.0)) * flow_ratio ** 2.0
 
-    def calc_resistance_values(self, **kwargs):
+    def update_resistance_values(self):
         """
-        Calculates resistance values based on given correlation. Must be
-        defined in concrete class implementation.
-        :param kwargs:
-        :return: vector including the calculated element-wise resistance values
-        along the channel
+        Updates resistance values. Just a wrapper for calc_resistance_values
+        where the specific flow ratio can be defined differently in concrete
+        class implementation.
         """
-        # Calculate both resistance values, simpler due to using the
-        # parameters self.C_xC, self.C_yC and self.C_M which could be arrays as
-        # well. If only the values at the required positions should be
-        # calculated, the parameters should be made function inputs as well.
-        value = np.zeros(self.value.shape)
-        value_dividing = \
-            self.calc_dividing_junction_value(1.0 - self.main_flow_ratio)
-        value_combining = \
-            self.calc_combining_junction_value(1.0 - self.main_flow_ratio)
-        # Determine indices for dividing or combining elements
-        id_dividing = np.nonzero(self.mass_source_sign <= 0)
-        id_combining = np.nonzero(self.mass_source_sign > 0)
-        # Assign result values to corresponding elements
-        value[id_dividing] = value_dividing[id_dividing]
-        value[id_combining] = value_combining[id_combining]
-        return value
+        return self.calc_resistance_values(1.0 - self.main_flow_ratio)
+
+
+class BassettTeeMainFlowResistance(JunctionFlowResistance):
+    """
+    Concrete implementation of the abstract JunctionFlowResistance class
+    defining the "calc_resistance_values" with values from the publication:
+    Bassett, M. D., D. E. Winterbone, and R. J. Pearson.
+    “Calculation of Steady Flow Pressure Loss Coefficients for Pipe Junctions.”
+    Proceedings of the Institution of Mechanical Engineers,
+    Part C: Journal of Mechanical Engineering Science, August 1, 2001.
+    https://doi.org/10.1177/095440620121500801.
+    Equations (15) for dividing flow and Equation for Case K11 from Table 2 for
+    combining flow to calculate the resistance values in the main run are
+    implemented.The branch diameter must be provided as the parameter
+    "branch_diameter" in the zeta_dict dictionary. Optionally, a fitting angle
+    with the parameter "angle" can be supplied. The default value is 90°.
+    """
+    def __init__(self, channel, zeta_dict, **kwargs):
+        super().__init__(channel, zeta_dict, **kwargs)
+        self.branch_diameter = zeta_dict["branch_diameter"]
+        self.angle = zeta_dict.get("angle", 90.0) * np.pi / 180.0
+        self.area_ratio = self.channel.cross_area \
+            / ((0.5 * self.branch_diameter) ** 2.0 * np.pi)
+
+    def update_resistance_values(self):
+        """
+        Updates resistance values. Just a wrapper for calc_resistance values
+        where the specific flow ratio can be defined differently in concrete
+        class implementation.
+        """
+        return self.calc_resistance_values(self.main_flow_ratio)
+
+    def calc_dividing_junction_value(self, flow_ratio, *args, **kwargs):
+        """
+        Equation (15) in
+        Bassett, M. D., D. E. Winterbone, and R. J. Pearson.
+        “Calculation of Steady Flow Pressure Loss Coefficients for Pipe Junctions.”
+        Proceedings of the Institution of Mechanical Engineers,
+        Part C: Journal of Mechanical Engineering Science, August 1, 2001.
+        https://doi.org/10.1177/095440620121500801.
+        :param flow_ratio: volumetric flow ratio array in main run
+        (q = m_A / m_c in publication)
+        :return: zeta resistance value
+        """
+        return flow_ratio ** 2.0 - 1.5 * flow_ratio + 0.5
+
+    def calc_combining_junction_value(self, flow_ratio, *args, **kwargs):
+        """
+        Equation for case K11 from Table 2 in
+        Bassett, M. D., D. E. Winterbone, and R. J. Pearson.
+        “Calculation of Steady Flow Pressure Loss Coefficients for Pipe Junctions.”
+        Proceedings of the Institution of Mechanical Engineers,
+        Part C: Journal of Mechanical Engineering Science, August 1, 2001.
+        https://doi.org/10.1177/095440620121500801.
+        :param flow_ratio: volumetric flow ratio array in main run
+        (q = m_A / m_c in publication)
+        :return: zeta resistance value
+        """
+        return 2.0 * self.area_ratio / (self.area_ratio + 0.5 * np.cos(self.angle)) \
+            * (1.0 - flow_ratio ** 2.0 - (1.0 - flow_ratio) ** 2.0
+               * self.area_ratio * np.cos(self.angle)) \
+            + flow_ratio ** 2.0 - 1.0
+
+
+class BassettTeeBranchFlowResistance(BassettTeeMainFlowResistance):
+    """
+    Concrete implementation of the abstract JunctionFlowResistance class
+    defining the "calc_resistance_values" with values from the publication:
+    Bassett, M. D., D. E. Winterbone, and R. J. Pearson.
+    “Calculation of Steady Flow Pressure Loss Coefficients for Pipe Junctions.”
+    Proceedings of the Institution of Mechanical Engineers,
+    Part C: Journal of Mechanical Engineering Science, August 1, 2001.
+    https://doi.org/10.1177/095440620121500801.
+    Equation (27) for dividing flow and Equation (12) for
+    combining flow to calculate the resistance values in the main run are
+    implemented.The branch diameter must be provided as the parameter
+    "branch_diameter" in the zeta_dict dictionary. Optionally, a fitting angle
+    with the parameter "angle" can be supplied. The default value is 90°.
+    """
+    def __init__(self, channel, zeta_dict, **kwargs):
+        super().__init__(channel, zeta_dict, **kwargs)
+        self.branch_diameter = zeta_dict["branch_diameter"]
+        self.angle = zeta_dict.get("angle", 90.0) * np.pi / 180.0
+        self.area_ratio = self.channel.cross_area \
+            / ((0.5 * self.branch_diameter) ** 2.0 * np.pi)
+
+    def update_resistance_values(self):
+        """
+        Updates resistance values. Just a wrapper for calc_resistance values
+        where the specific flow ratio can be defined differently in concrete
+        class implementation.
+        """
+        return self.calc_resistance_values(1.0 - self.main_flow_ratio)
+
+    def calc_dividing_junction_value(self, flow_ratio, *args, **kwargs):
+        """
+        Equation (27) in
+        Bassett, M. D., D. E. Winterbone, and R. J. Pearson.
+        “Calculation of Steady Flow Pressure Loss Coefficients for Pipe Junctions.”
+        Proceedings of the Institution of Mechanical Engineers,
+        Part C: Journal of Mechanical Engineering Science, August 1, 2001.
+        https://doi.org/10.1177/095440620121500801.
+        :param flow_ratio: volumetric flow ratio array in main run
+        (q = m_b / m_c in publication)
+        :return: zeta resistance value
+        """
+        return 1.0 + flow_ratio ** 2.0 * self.area_ratio ** 2.0 \
+            - 2.0 * flow_ratio * self.area_ratio * np.cos(0.75 * self.angle)
+
+    def calc_combining_junction_value(self, flow_ratio, *args, **kwargs):
+        """
+        Equation (12) in
+        Bassett, M. D., D. E. Winterbone, and R. J. Pearson.
+        “Calculation of Steady Flow Pressure Loss Coefficients for Pipe Junctions.”
+        Proceedings of the Institution of Mechanical Engineers,
+        Part C: Journal of Mechanical Engineering Science, August 1, 2001.
+        https://doi.org/10.1177/095440620121500801.
+        :param flow_ratio: volumetric flow ratio array in main run
+        (q = m_b / m_c in publication)
+        :return: zeta resistance value
+        """
+        return 2.0 * self.area_ratio / (self.area_ratio + 0.5 * np.cos(self.angle)) \
+            * (1.0 - (1.0 - flow_ratio) ** 2.0
+               - flow_ratio ** 2.0 * self.area_ratio * np.cos(self.angle)) \
+            + flow_ratio ** 2.0 * self.area_ratio ** 2.0 - 1.0
+
+

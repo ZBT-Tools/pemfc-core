@@ -2,6 +2,7 @@
 import numpy as np
 from abc import ABC, abstractmethod
 import math
+import copy
 
 # local module imports
 from . import interpolation as ip, global_functions as g_func, \
@@ -137,12 +138,9 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
                 if i == 0:
                     self.initialize = False
 
-                error = \
-                    np.sum(
-                        np.divide(self.channel_vol_flow -
-                                  self.channel_vol_flow_old[:],
-                                  self.channel_vol_flow,
-                                  where=self.channel_vol_flow != 0.0) ** 2.0)
+                error = g_func.calc_mean_squared_error(
+                    self.channel_vol_flow, self.channel_vol_flow_old)
+
                 # print(channel_vol_flow_old)
                 # print(self.channel_vol_flow)
                 self.channel_vol_flow_old[:] = self.channel_vol_flow
@@ -637,40 +635,28 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
                          n_subchannels)
         self.urf = dict_flow_circuit.get('underrelaxation_factor', 0.5)
 
-        for zeta in manifolds[0].zetas:
-            if isinstance(zeta, fr.RennelsTeeMainFlowResistance):
-                self.in_mfd_to_mfd_res = zeta
-        for zeta in manifolds[1].zetas:
-            if isinstance(zeta, fr.RennelsTeeMainFlowResistance):
-                self.out_mfd_to_mfd_res = zeta
+        self.turning_resistance = []
+        # for mfd in manifolds:
+        #     for zeta in mfd.zetas:
+        #         if isinstance(zeta, fr.JunctionFlowResistance):
+        #             zeta_dict = copy.deepcopy(zeta.dict)
+        #             zeta_dict['type'] = zeta_dict['type'].replace('Main', 'Branch')
+        #             self.turning_resistance.append(
+        #                 fr.FlowResistance(mfd, zeta_dict))
 
-        self.in_mfd_to_chl_res = fr.FlowResistance(
-            manifolds[0],
-            {'type': 'RennelsTeeBranch',
-             'branch_diameter': self.in_mfd_to_mfd_res.branch_diameter,
-             'fitting_radius': self.in_mfd_to_mfd_res.fitting_radius})
-        self.chl_to_out_mfd_res = fr.FlowResistance(
-            manifolds[1],
-            {'type': 'RennelsTeeBranch',
-             'branch_diameter': self.out_mfd_to_mfd_res.branch_diameter,
-             'fitting_radius': self.out_mfd_to_mfd_res.fitting_radius})
-
-        self.dp_mfd_to_chl = np.zeros(self.n_channels)
-        self.dp_chl_to_mfd = np.zeros(self.n_channels)
-        # # Manifold-to-channel resistance
-        # flow_res_dict = \
-        #     {'type': 'Junction', 'coefficients': [1.02, 0.53, 33.67]}
-        # # flow_res_dict = {'type': 'Junction', 'coefficients': [0.0]}
-        # # flow_res_dict = {'type': 'Junction', 'coefficients': [0.02, -10.67]}
-        # self.mfd_to_chl_res = fr.FlowResistance(manifolds[0], flow_res_dict)
-        # # Channel-to-manifold resistance
-        # # flow_res_dict['coefficients'] = [1.02, 0.53, 33.67]
-        # flow_res_dict['coefficients'] = [4.5]
-        # # flow_res_dict = {'type': 'Junction', 'coefficients': [-0.02, 10.67]}
-        # # flow_res_dict['coefficients'] = [1.0, 3.0]
-        # self.chl_to_mfd_res = fr.FlowResistance(manifolds[1], flow_res_dict)
+        self.dp_turning = np.zeros((2, self.n_channels))
+        # self.dp_chl_to_mfd = np.zeros(self.n_channels)
 
     def calc_dp_ref(self, pressure_drop):
+        """
+        Calculates reference pressure drop between inlet and outlet manifold,
+        which is defined at the last junction. Given the pressure drop in the
+        channel in addition to turning losses, this function adds the
+        dynamic pressure changes, which should only be non-zero for varying fluid
+        properties and/or different cross-sectional areas between manifolds
+        :param pressure_drop:
+        :return:
+        """
         # Reference to inlet manifold
         mfd_in = self.manifolds[0]
         # Reference to outlet manifold
@@ -705,8 +691,8 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
         #                      for channel in self.channels])
 
         # Update T-junction branching flow resistances
-        assert(isinstance(self.in_mfd_to_chl_res, fr.JunctionFlowResistance))
-        assert(isinstance(self.chl_to_out_mfd_res, fr.JunctionFlowResistance))
+        for item in self.turning_resistance:
+            assert(item, fr.JunctionFlowResistance)
 
         ref_chl = self.channels[-1]
 
@@ -719,84 +705,74 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
 
             dp_ref_chl = \
                 ref_chl.pressure[ref_chl.id_in] - ref_chl.pressure[ref_chl.id_out] \
-                + self.dp_mfd_to_chl[-1] + self.dp_chl_to_mfd[-1]
+                + self.dp_turning[0, -1] + self.dp_turning[1, -1]
             dp_ref = self.calc_dp_ref(dp_ref_chl)
 
             # Update manifolds with current reference pressure drop in last channel
             self.update_manifolds(dp_ref)
 
-            # Update T-junction main-to-branch flow resistances again after manifold
-            # flows have been updated to include the correct reference flow conditions
-            self.in_mfd_to_chl_res.update()
-            self.chl_to_out_mfd_res.update()
-            # and calculate the additional pressure drops based on current flow
-            # distribution due to branching
-            self.dp_mfd_to_chl[:] = self.in_mfd_to_chl_res.calc_pressure_drop()
-            self.dp_chl_to_mfd[:] = self.chl_to_out_mfd_res.calc_pressure_drop()
+            for i, zeta in enumerate(self.turning_resistance):
+                # Update T-junction main-to-branch flow resistances again after
+                # manifold flows have been updated to include the correct
+                # reference flow conditions
+                zeta.update()
+                # and calculate the additional pressure drops based on current
+                # flow distribution due to branching
+                self.dp_turning[i, :] = zeta.calc_pressure_drop()
 
             pressure_new = \
                 np.asarray([mfd.pressure for mfd in self.manifolds]).flatten()
             error = g_func.calc_mean_squared_error(pressure_old, pressure_new)
 
-        # Calculate inlet pressures for channels according to inlet manifold
-        # T-junctions, different equations for potentially combining or dividing
-        # flow from manifold
-        chl_in_density = \
-            np.array([chl.fluid.density[chl.id_in] for chl in self.channels])
-        chl_out_density = \
-            np.array([chl.fluid.density[chl.id_out] for chl in self.channels])
-        chl_in_velocity = \
-            np.array([chl.velocity[chl.id_in] for chl in self.channels])
-        chl_out_velocity = \
-            np.array([chl.velocity[chl.id_out] for chl in self.channels])
+        if self.turning_resistance:
+            # Calculate inlet pressures for channels according to inlet manifold
+            # T-junctions, different equations for potentially combining or dividing
+            # flow from manifold
+            chl_in_density = \
+                np.array([chl.fluid.density[chl.id_in] for chl in self.channels])
+            chl_out_density = \
+                np.array([chl.fluid.density[chl.id_out] for chl in self.channels])
+            chl_in_velocity = \
+                np.array([chl.velocity[chl.id_in] for chl in self.channels])
+            chl_out_velocity = \
+                np.array([chl.velocity[chl.id_out] for chl in self.channels])
 
-        # Reference point is defined within junction flow resistance object as
-        # the point with combined flow rates of main run
-        p_ref = self.in_mfd_to_chl_res
-        id_div = np.nonzero(self.in_mfd_to_chl_res.mass_source_sign <= 0)
-        id_com = np.nonzero(self.in_mfd_to_chl_res.mass_source_sign > 0)
-        p_branch_mfd_in = np.zeros(self.dp_mfd_to_chl.shape)
+            # Reference point is defined within junction flow resistance object as
+            # the point with combined flow rates of main run
+            p_branch_mfd = np.zeros(self.dp_turning.shape)
+            for i, zeta in enumerate(self.turning_resistance):
+                id_div = np.nonzero(zeta.mass_source_sign <= 0)
+                id_com = np.nonzero(zeta.mass_source_sign > 0)
 
-        # Branch pressure for dividing tees from inlet manifold
-        p_branch_mfd_in[id_div] = p_ref.pressure[id_div] \
-            + 0.5 * p_ref.density[id_div] * p_ref.velocity[id_div] ** 2.0 \
-            - 0.5 * chl_in_density[id_div] * chl_in_velocity[id_div] ** 2.0 \
-            - self.dp_mfd_to_chl[id_div]
+                # Branch pressure for dividing tees from manifold
+                p_branch_mfd[i, id_div] = zeta.pressure[id_div] \
+                    + 0.5 * zeta.density[id_div] * zeta.velocity[id_div] ** 2.0 \
+                    - 0.5 * chl_in_density[id_div] * chl_in_velocity[id_div] ** 2.0 \
+                    - self.dp_turning[i, id_div]
 
-        # Branch pressure for combining tees with inlet manifold
-        p_branch_mfd_in[id_com] = p_ref.pressure[id_com] \
-            + 0.5 * p_ref.density[id_com] * p_ref.velocity[id_com] ** 2.0 \
-            - 0.5 * chl_out_density[id_com] * chl_out_velocity[id_com] ** 2.0 \
-            + self.dp_mfd_to_chl[id_com]
+                # Branch pressure for combining tees with manifold
+                p_branch_mfd[i, id_com] = zeta.pressure[id_com] \
+                    + 0.5 * zeta.density[id_com] * zeta.velocity[id_com] ** 2.0 \
+                    - 0.5 * chl_out_density[id_com] * chl_out_velocity[id_com] ** 2.0 \
+                    + self.dp_turning[i][id_com]
 
-        p_ref = self.chl_to_out_mfd_res
-        id_div = np.nonzero(self.chl_to_out_mfd_res.mass_source_sign <= 0)
-        id_com = np.nonzero(self.chl_to_out_mfd_res.mass_source_sign > 0)
-        p_branch_mfd_out = np.zeros(self.dp_mfd_to_chl.shape)
-        # Branch pressure for dividing tees from inlet manifold
-        p_branch_mfd_out[id_div] = p_ref.pressure[id_div] \
-            + 0.5 * p_ref.density[id_div] * p_ref.velocity[id_div] ** 2.0 \
-            - 0.5 * chl_in_density[id_div] * chl_in_velocity[id_div] ** 2.0 \
-            - self.dp_chl_to_mfd[id_div]
+            # Assign outlet pressure to channels
+            p_branch_out = np.min(p_branch_mfd, axis=0)
+            for i, chl in enumerate(self.channels):
+                chl.p_out = p_branch_out[i]
 
-        # Branch pressure for combining tees with inlet manifold
-        p_branch_mfd_out[id_com] = p_ref.pressure[id_com] \
-            + 0.5 * p_ref.density[id_com] * p_ref.velocity[id_com] ** 2.0 \
-            - 0.5 * chl_out_density[id_com] * chl_out_velocity[id_com] ** 2.0 \
-            + self.dp_chl_to_mfd[id_com]
+            dp_branches = p_branch_mfd[0] - p_branch_mfd[1]
+        else:
+            dp_branches = \
+                ip.interpolate_1d(self.manifolds[0].pressure) \
+                - ip.interpolate_1d(self.manifolds[1].pressure) \
+                + np.sum(self.dp_turning, axis=0)
 
-        # Assign outlet pressure to channels
-        p_branch_out = np.minimum(p_branch_mfd_in, p_branch_mfd_out)
-        for i, chl in enumerate(self.channels):
-            chl.p_out = p_branch_out[i]
-
-        dp_branches = p_branch_mfd_in - p_branch_mfd_out
         dp_channel = \
             np.array([channel.pressure[channel.id_in]
                       - channel.pressure[channel.id_out]
                       for channel in self.channels])
-        pressure_ratio = dp_branches / dp_channel
-        flow_correction = pressure_ratio
+        flow_correction = dp_branches / dp_channel
 
         channel_vol_flow_new = self.channel_vol_flow * flow_correction
         urf = self.urf
@@ -871,30 +847,6 @@ def create(dict_circuit, dict_in_manifold, dict_out_manifold,
         in_manifold_fluid = channels[0].fluid.copy()
         in_manifold_fluid.rescale(n_channels + 1)
         out_manifold_fluid = in_manifold_fluid.copy()
-
-    if dict_circuit['type'] == 'VariableResistance':
-        flow_resistance_dict = \
-            {'type': 'RennelsTeeMain',
-             'branch_diameter': 0.005,
-             'fitting_radius': 0.0005}
-        dict_in_manifold = \
-            add_flow_resistance(dict_in_manifold, flow_resistance_dict)
-        dict_out_manifold = \
-            add_flow_resistance(dict_out_manifold, flow_resistance_dict)
-
-
-        # Old values
-        # dict_in_manifold['friction_coefficients'] = \
-        #     [0.566, -7.819, 29.996, -55.140, 50.862, -17.656]
-        # dict_in_manifold['friction_coefficients'] = [0.4]
-        # dict_in_manifold['friction_coefficients'] = [0.0, 0.0]
-
-        # dict_out_manifold['friction_coefficients'] = \
-        #     [0.304, 8.811, 32.915]
-        # dict_out_manifold['friction_coefficients'] = [0.4]
-        # dict_out_manifold['friction_coefficients'] = [0.0, 0.0]
-
-        # [0.304, 8.811, 32.915]
 
     manifolds = [chl.Channel(dict_in_manifold, in_manifold_fluid),
                  chl.Channel(dict_out_manifold, out_manifold_fluid)]
