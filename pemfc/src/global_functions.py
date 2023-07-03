@@ -318,3 +318,4 @@ def calc_mean_squared_error(array1, array2):
     """
     array_diff = array1 - array2
     return np.inner(array_diff, array_diff) / len(array1)
+

@@ -814,9 +814,6 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
         self.channel_vol_flow[:] = channel_vol_flow
 
 
-
-
-
 def add_flow_resistance(channel_dict, resistance_dict):
     """
     Add additional flow resistance input to channel dictionary, e.g. for T-Junctions.
