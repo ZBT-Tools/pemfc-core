@@ -34,6 +34,12 @@ class FlowResistance(ABC):
         elif zeta_type == 'BassettTeeBranch':
             return super(FlowResistance, cls).\
                 __new__(BassettTeeBranchFlowResistance)
+        elif zeta_type == 'IdelchikTeeMain':
+            return super(FlowResistance, cls).\
+                __new__(IdelchikTeeMainFlowResistance)
+        elif zeta_type == 'IdelchikTeeBranch':
+            return super(FlowResistance, cls).\
+                __new__(IdelchikTeeBranchFlowResistance)
         else:
             raise NotImplementedError
 
@@ -534,10 +540,6 @@ class BassettTeeBranchFlowResistance(BassettTeeMainFlowResistance):
     """
     def __init__(self, channel, zeta_dict, **kwargs):
         super().__init__(channel, zeta_dict, **kwargs)
-        self.branch_diameter = zeta_dict["branch_diameter"]
-        self.angle = zeta_dict.get("angle", 90.0) * np.pi / 180.0
-        self.area_ratio = self.channel.cross_area \
-            / ((0.5 * self.branch_diameter) ** 2.0 * np.pi)
 
     def update_resistance_values(self):
         """
@@ -579,4 +581,122 @@ class BassettTeeBranchFlowResistance(BassettTeeMainFlowResistance):
                - flow_ratio ** 2.0 * self.area_ratio * np.cos(self.angle)) \
             + flow_ratio ** 2.0 * self.area_ratio ** 2.0 - 1.0
 
+
+class IdelchikTeeMainFlowResistance(JunctionFlowResistance):
+    """
+    Concrete implementation of the abstract JunctionFlowResistance class
+    defining the "calc_resistance_values" with values from the publication:
+    Idelchik, Isaak E. „Handbook of hydraulic resistance“. Washington, 1986.
+    Page 282 for dividing flow and page 266 for combining flow to calculate the
+    resistance values in the main run are implemented.The branch diameter must
+    be provided as the parameter "branch_diameter" in the zeta_dict dictionary.
+    Optionally, a fitting angle with the parameter "angle" can be supplied. The
+    default value is 90°.
+    """
+    def __init__(self, channel, zeta_dict, **kwargs):
+        super().__init__(channel, zeta_dict, **kwargs)
+        self.branch_diameter = zeta_dict["branch_diameter"]
+        self.angle = zeta_dict.get("angle", 90.0) * np.pi / 180.0
+        self.area_ratio = self.channel.cross_area \
+            / ((0.5 * self.branch_diameter) ** 2.0 * np.pi)
+        cross_area = self.channel.cross_area
+        if isinstance(cross_area, np.ndarray):
+            self.main_area_ratio = np.zeros(self.channel.pressure.shape)
+            self.main_area_ratio[:] = 1.0
+            self.main_area_ratio[:len(cross_area) - 1] = \
+                cross_area[:-1] / cross_area[1:]
+        else:
+            self.main_area_ratio = 1.0
+
+    def update_resistance_values(self):
+        """
+        Updates resistance values. Just a wrapper for calc_resistance values
+        where the specific flow ratio can be defined differently in concrete
+        class implementation.
+        """
+        return self.calc_resistance_values(self.main_flow_ratio)
+
+    def calc_dividing_junction_value(self, flow_ratio, *args, **kwargs):
+        """
+        Page 282 in
+        Idelchik, Isaak E. „Handbook of hydraulic resistance“. Washington, 1986.
+        :param flow_ratio: volumetric flow ratio array for branch to combined flow
+        (W_s / Q_c in publication)
+        :return: zeta resistance value
+        """
+        velocity_ratio = flow_ratio * self.main_area_ratio
+        return 0.4 * (1.0 - velocity_ratio) ** 2.0
+
+    def calc_combining_junction_value(self, flow_ratio, *args, **kwargs):
+        """
+        Page 266 in
+        Idelchik, Isaak E. „Handbook of hydraulic resistance“. Washington, 1986.
+        :param flow_ratio: volumetric flow ratio array for branch to combined flow
+        (Q_b / Q_c in publication)
+        :return: zeta resistance value
+        """
+        return 1.55 * (1.0 - flow_ratio) - (1.0 - flow_ratio) ** 2.0
+
+
+class IdelchikTeeBranchFlowResistance(BassettTeeMainFlowResistance):
+    """
+       Concrete implementation of the abstract JunctionFlowResistance class
+       defining the "calc_resistance_values" with values from the publication:
+       Idelchik, Isaak E. „Handbook of hydraulic resistance“. Washington, 1986.
+       Page 280 for dividing flow and page 266 for combining flow to calculate
+       the resistance values from the main run to the branch are implemented.
+       The branch diameter must be provided as the parameter "branch_diameter"
+       in the zeta_dict dictionary. Optionally, a fitting angle with the
+       parameter "angle" can be supplied. The default value is 90°.
+       """
+
+    def __init__(self, channel, zeta_dict, **kwargs):
+        super().__init__(channel, zeta_dict, **kwargs)
+        self.branch_diameter = zeta_dict["branch_diameter"]
+        self.angle = zeta_dict.get("angle", 90.0) * np.pi / 180.0
+        self.area_ratio = self.channel.cross_area \
+            / ((0.5 * self.branch_diameter) ** 2.0 * np.pi)
+        one_by_area_ratio = 1.0 / self.area_ratio
+        if one_by_area_ratio < 0.2:
+            self.factor = 1.0
+        elif one_by_area_ratio < 0.4:
+            self.factor = 0.75
+        elif one_by_area_ratio < 0.6:
+            self.factor = 0.7
+        elif one_by_area_ratio < 0.8:
+            self.factor = 0.65
+        else:
+            self.factor = 0.6
+
+    def update_resistance_values(self):
+        """
+        Updates resistance values. Just a wrapper for calc_resistance values
+        where the specific flow ratio can be defined differently in concrete
+        class implementation.
+        """
+        return self.calc_resistance_values(1.0 - self.main_flow_ratio)
+
+    def calc_dividing_junction_value(self, flow_ratio, *args, **kwargs):
+        """
+        Page 280 in for 0 < angle < 60 and angle = 90
+        Idelchik, Isaak E. „Handbook of hydraulic resistance“. Washington, 1986.
+        :param flow_ratio: volumetric flow ratio array for branch to combined flow
+        (w_b / w_c in publication)
+        :return: zeta resistance value
+        """
+        factor = 0.9 if flow_ratio > 0.8 else 1.0
+        velocity_ratio = flow_ratio * self.area_ratio
+        return factor * \
+            (1.0 + velocity_ratio ** 2.0 - 2.0 * velocity_ratio * np.cos(self.angle))
+
+    def calc_combining_junction_value(self, flow_ratio, *args, **kwargs):
+        """
+        Page 266 in
+        Idelchik, Isaak E. „Handbook of hydraulic resistance“. Washington, 1986.
+        :param flow_ratio: volumetric flow ratio array for branch to combined flow
+        (Q_b / Q_c in publication)
+        :return: zeta resistance value
+        """
+        return self.factor * ((.0 + (flow_ratio * self.area_ratio) ** 2.0)
+                              - 2.0 * (1.0 - flow_ratio))
 

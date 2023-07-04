@@ -110,95 +110,47 @@ flow_circuit_dict = {
     'shape': 'U'
     }
 
-constant_res_value = 0.05
-in_manifold_dict['flow_resistances'] = \
-    [{'type': 'Constant', 'value': constant_res_value}]
-out_manifold_dict = copy.deepcopy(in_manifold_dict)
-out_manifold_dict['name'] = 'Outlet Manifold'
+flow_resistance_list = [{'type': 'Constant', 'value': 0.004},
+                        # {'type': 'RennelsTeeMain', 'branch_diameter': 0.005},
+                        {'type': 'BassettTeeMain', 'branch_diameter': 0.005},
+                        {'type': 'IdelchikTeeMain', 'branch_diameter': 0.005}]
 
-flow_model = \
-    flow_circuit.create(flow_circuit_dict, in_manifold_dict,
-                        out_manifold_dict, channels,
-                        channel_multiplier=n_subchl)
+labels = [(item['type'].strip('TeeMain') + ' ' + str(item.get('value', ''))).strip()
+          for item in flow_resistance_list]
+colors = ['k', 'r', 'b', 'g']
 
-x = (ip.interpolate_1d(flow_model.manifolds[0].x)
-     - flow_model.manifolds[0].dx * 0.5) \
-    / (flow_model.manifolds[0].length - flow_model.manifolds[0].dx[0])
-# x = flow_model.manifolds[0].x / flow_model.manifolds[0].length
+fig, ax = plt.subplots()
+flow_models = []
+for i, flow_res_dict in enumerate(flow_resistance_list):
+    in_manifold_dict['flow_resistances'] = [flow_res_dict]
+    out_manifold_dict = copy.deepcopy(in_manifold_dict)
+    out_manifold_dict['name'] = 'Outlet Manifold'
 
+    flow_models.append(
+        flow_circuit.create(flow_circuit_dict, in_manifold_dict,
+                            out_manifold_dict, channels,
+                            channel_multiplier=n_subchl))
+    flow_model = flow_models[i]
 
-flow_model.update(inlet_mass_flow=mass_flow)
-q = flow_model.normalized_flow_distribution  # * 100.0
-reynolds = flow_model.manifolds[0].reynolds[0]
-plt.plot(x, q, label='Re={0:.2f} Model, Constant {1:.2f}'.format(reynolds, constant_res_value),
-         color='k')
-
-# Another flow circuit model configuration
-in_manifold_dict['flow_resistances'] = \
-    [{'type': 'RennelsTeeMain', 'branch_diameter': 0.005}]
-out_manifold_dict = copy.deepcopy(in_manifold_dict)
-out_manifold_dict['name'] = 'Outlet Manifold'
-flow_circuit_dict['type'] = 'VariableResistance'
-
-
-flow_model_2 = \
-    flow_circuit.create(flow_circuit_dict, in_manifold_dict,
-                        out_manifold_dict, channels,
-                        channel_multiplier=n_subchl)
-
-x = (ip.interpolate_1d(flow_model_2.manifolds[0].x)
-     - flow_model_2.manifolds[0].dx * 0.5) \
-    / (flow_model_2.manifolds[0].length - flow_model_2.manifolds[0].dx[0])
-# x = flow_model.manifolds[0].x / flow_model.manifolds[0].length
-
-flow_model_2.update(inlet_mass_flow=mass_flow)
-q = flow_model_2.normalized_flow_distribution  # * 100.0
-reynolds = flow_model_2.manifolds[0].reynolds[0]
-plt.plot(x, q, label='Re={0:.2f} Model, Rennels'.format(reynolds), color='r')
-
-# Another flow circuit model configuration
-in_manifold_dict['flow_resistances'] = \
-    [{'type': 'BassettTeeMain', 'branch_diameter': 0.005}]
-out_manifold_dict = copy.deepcopy(in_manifold_dict)
-out_manifold_dict['name'] = 'Outlet Manifold'
-flow_circuit_dict['type'] = 'VariableResistance'
-
-
-flow_model_3 = \
-    flow_circuit.create(flow_circuit_dict, in_manifold_dict,
-                        out_manifold_dict, channels,
-                        channel_multiplier=n_subchl)
-
-x = (ip.interpolate_1d(flow_model_2.manifolds[0].x)
-     - flow_model_3.manifolds[0].dx * 0.5) \
-    / (flow_model_3.manifolds[0].length - flow_model_2.manifolds[0].dx[0])
-
-flow_model_3.update(inlet_mass_flow=mass_flow)
-q = flow_model_3.normalized_flow_distribution  # * 100.0
-reynolds = flow_model_3.manifolds[0].reynolds[0]
-plt.plot(x, q, label='Re={0:.2f} Model, Bassett'.format(reynolds), color='b')
+    flow_model.update(inlet_mass_flow=mass_flow)
+    q = flow_model.normalized_flow_distribution  # * 100.0
+    reynolds = flow_model.manifolds[0].reynolds[0]
+    ax.plot(q, label=labels[i], color=colors[i])
+ax.set_xlabel('Cell Number / -')
+ax.set_ylabel('Normalized Flow Distribution / -')
 
 plt.legend()
 plt.show()
 
-
-m_in = flow_model.manifolds[0]
-m_out = flow_model.manifolds[1]
-m_in_2 = flow_model_2.manifolds[0]
-m_out_2 = flow_model_2.manifolds[1]
-m_in_3 = flow_model_2.manifolds[0]
-m_out_3 = flow_model_3.manifolds[1]
-plt.plot(m_in.pressure, color='k', linestyle='solid',
-         label='Inlet Manifold - Constant: {0:.2f}'.format(constant_res_value))
-plt.plot(m_out.pressure, color='k', linestyle='dashed',
-         label='Outlet Manifold - Constant: {0:.2f}'.format(constant_res_value)),
-plt.plot(m_in_2.pressure, color='r', linestyle='solid',
-         label='Inlet Manifold - Rennels')
-plt.plot(m_out_2.pressure, color='r', linestyle='dashed',
-         label='Outlet Manifold - Rennels')
-plt.plot(m_in_3.pressure, color='b', linestyle='solid',
-         label='Inlet Manifold - Bassett')
-plt.plot(m_out_3.pressure, color='b', linestyle='dashed',
-         label='Outlet Manifold - Bassett')
+fig, ax = plt.subplots()
+for i, flow_model in enumerate(flow_models):
+    m_in = flow_model.manifolds[0]
+    m_out = flow_model.manifolds[1]
+    ax.plot(m_in.pressure, color=colors[i], linestyle='solid',
+            label='Inlet Manifold - ' + labels[i])
+    ax.plot(m_out.pressure, color=colors[i], linestyle='dashed',
+            label='Outlet Manifold - ' + labels[i])
+ax.set_xlabel('Cell Number / -')
+ax.set_ylabel('Pressure / Pa')
 plt.legend()
 plt.show()
