@@ -113,7 +113,9 @@ flow_circuit_dict = {
 flow_resistance_list = [{'type': 'Constant', 'value': 0.004},
                         # {'type': 'RennelsTeeMain', 'branch_diameter': 0.005},
                         {'type': 'BassettTeeMain', 'branch_diameter': 0.005},
-                        {'type': 'IdelchikTeeMain', 'branch_diameter': 0.005}]
+                        {'type': 'IdelchikTeeMain', 'branch_diameter': 0.005},
+                        {'type': 'HuangTeeMain', 'branch_diameter': 0.005}
+                        ]
 
 labels = [(item['type'].strip('TeeMain') + ' ' + str(item.get('value', ''))).strip()
           for item in flow_resistance_list]
