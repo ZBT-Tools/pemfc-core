@@ -96,6 +96,7 @@ in_manifold_dict = {
 # Create channels instances
 channels = [chl.Channel(channel_dict, fluid.create(fluid_dict))
             for i in range(n_cells)]
+[chl.update() for chl in channels]
 
 # Calculate mass flow
 # species_mass_flow, _ = half_cell.HalfCell.calc_faraday_flow(
