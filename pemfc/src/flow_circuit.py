@@ -138,7 +138,7 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
                 if i == 0:
                     self.initialize = False
 
-                error = g_func.calc_mean_squared_error(
+                error = g_func.calc_rrmse(
                     self.channel_vol_flow, self.channel_vol_flow_old)
 
                 # print(channel_vol_flow_old)
@@ -636,15 +636,15 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
         self.urf = dict_flow_circuit.get('underrelaxation_factor', 0.5)
 
         self.turning_resistance = []
-        # for mfd in manifolds:
-        #     for zeta in mfd.zetas:
-        #         if isinstance(zeta, fr.JunctionFlowResistance):
-        #             zeta_dict = copy.deepcopy(zeta.dict)
-        #             zeta_dict['type'] = zeta_dict['type'].replace('Main', 'Branch')
-        #             self.turning_resistance.append(
-        #                 fr.FlowResistance(mfd, zeta_dict))
+        for mfd in manifolds:
+            for zeta in mfd.zetas:
+                if isinstance(zeta, fr.JunctionFlowResistance):
+                    zeta_dict = copy.deepcopy(zeta.dict)
+                    zeta_dict['type'] = zeta_dict['type'].replace('Main', 'Branch')
+                    self.turning_resistance.append(
+                        fr.FlowResistance(mfd, zeta_dict))
 
-        self.dp_turning = np.zeros((2, self.n_channels))
+        self.dp_turning = np.zeros((len(self.manifolds), self.n_channels))
         # self.dp_chl_to_mfd = np.zeros(self.n_channels)
 
     def calc_dp_ref(self, pressure_drop):
@@ -699,7 +699,7 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
         # Sub iteration loop for updating manifold pressure line including
         # last reference cell pressure drop
         error = 1e8
-        while error > 1e-3:
+        while error > 1e-4:
             pressure_old = \
                 np.asarray([mfd.pressure for mfd in self.manifolds]).flatten()
 
@@ -746,15 +746,15 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
 
                 # Branch pressure for dividing tees from manifold
                 p_branch_mfd[i, id_div] = zeta.pressure[id_div] \
+                    - self.dp_turning[i, id_div] \
                     + 0.5 * zeta.density[id_div] * zeta.velocity[id_div] ** 2.0 \
                     - 0.5 * chl_in_density[id_div] * chl_in_velocity[id_div] ** 2.0 \
-                    - self.dp_turning[i, id_div]
 
                 # Branch pressure for combining tees with manifold
                 p_branch_mfd[i, id_com] = zeta.pressure[id_com] \
+                    + self.dp_turning[i, id_com] \
                     + 0.5 * zeta.density[id_com] * zeta.velocity[id_com] ** 2.0 \
                     - 0.5 * chl_out_density[id_com] * chl_out_velocity[id_com] ** 2.0 \
-                    + self.dp_turning[i][id_com]
 
             # Assign outlet pressure to channels
             p_branch_out = np.min(p_branch_mfd, axis=0)
@@ -776,7 +776,7 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
 
         channel_vol_flow_new = self.channel_vol_flow * flow_correction
         urf = self.urf
-        urf = 0.8
+        # urf = 0.1
         channel_vol_flow = \
             self.channel_vol_flow * urf + channel_vol_flow_new * (1.0 - urf)
         density = np.array([channel.fluid.density[channel.id_in]

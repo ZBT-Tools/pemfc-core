@@ -694,7 +694,7 @@ class IdelchikTeeBranchFlowResistance(BassettTeeMainFlowResistance):
         (w_b / w_c in publication)
         :return: zeta resistance value
         """
-        factor = 0.9 if flow_ratio > 0.8 else 1.0
+        factor = np.where(flow_ratio < 0.8, 0.9, 1.0)
         velocity_ratio = flow_ratio * self.area_ratio
         return factor * \
             (1.0 + velocity_ratio ** 2.0 - 2.0 * velocity_ratio * np.cos(self.angle))

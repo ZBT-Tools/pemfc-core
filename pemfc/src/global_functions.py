@@ -309,6 +309,18 @@ def calc_rel_error(array1, array2):
     return np.inner(array_diff, array_diff) / len(array1)
 
 
+def calc_rrmse(array1, array2):
+    """
+    Calculates relative root mean squared error of array1 and array2 (same shapes)
+    :param array1: 1d array of values
+    :param array2: 1d array of values
+    :return: scalar sum of relative squared errors
+    """
+    array_diff = array1 - array2
+    diff_squared_sum = np.inner(array_diff, array_diff)
+    array2_squared_sum = np.inner(array2, array2)
+    return np.sqrt(diff_squared_sum / array2_squared_sum)
+
 def calc_mean_squared_error(array1, array2):
     """
     Calculates mean squared error of array1 and array2 (same shapes)
