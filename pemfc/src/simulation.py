@@ -284,15 +284,15 @@ class Simulation:
         """
         Calculates the convergence criteria according to (Koh, 2003)
         """
-        current_error = gf.calc_rel_error(self.stack.i_cd.flatten(),
-                                          self.stack.i_cd_old.flatten())
+        current_error = gf.calc_rrmse(self.stack.i_cd.flatten(),
+                                      self.stack.i_cd_old.flatten())
         # self.temp_criteria =\
         #     np.abs(np.sum(((self.temp_old
         #                     - self.stack.temp_sys.temp_layer[0][0, 0]))
         #                   / self.stack.temp_sys.temp_layer[0][0, 0]))
         if self.stack.calc_temp:
-            temp_error = gf.calc_rel_error(self.stack.temp_old,
-                                           self.stack.temp_sys.temp_layer_vec)
+            temp_error = gf.calc_rrmse(self.stack.temp_old,
+                                       self.stack.temp_sys.temp_layer_vec)
         else:
             temp_error = 0.0
         return current_error, temp_error
