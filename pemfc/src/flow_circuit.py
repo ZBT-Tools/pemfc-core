@@ -379,7 +379,7 @@ class UpdatedKohFlowCircuit(KohFlowCircuit):
         self.urf = dict_flow_circuit.get('underrelaxation_factor', 0.5)
         self.density_channel = np.zeros(self.visc_channel.shape)
 
-    def single_loop(self, inlet_mass_flow=None, update_channels=False):
+    def single_loop(self, inlet_mass_flow=None, update_channels=True):
         """
         Update the flow circuit
         """

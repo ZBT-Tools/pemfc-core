@@ -76,7 +76,7 @@ fluid_dict = {
 }
 
 # Stack configuration
-n_cells = 200
+n_cells = 300
 n_subchl = 40
 in_manifold_dict = {
     'name': 'Inlet Manifold',
@@ -106,20 +106,22 @@ mass_flow = np.sum(species_mass_flow)
 # First flow circuit model configuration
 flow_circuit_dict = {
     'name': 'Flow Circuit',
-    'type': 'VariableResistance',
+    'type': 'UpdatedKoh',
     'shape': 'U'
     }
 
 flow_resistance_list = [{'type': 'Constant', 'value': 0.004},
+                        {'type': 'Constant', 'value': 0.004},
+                        {'type': 'Constant', 'value': 0.004},
                         # {'type': 'RennelsTeeMain', 'branch_diameter': 0.005},
                         {'type': 'BassettTeeMain', 'branch_diameter': 0.005},
                         {'type': 'IdelchikTeeMain', 'branch_diameter': 0.005},
-                        {'type': 'HuangTeeMain', 'branch_diameter': 0.005}
+                        # {'type': 'HuangTeeMain', 'branch_diameter': 0.005}
                         ]
 
 labels = [(item['type'].strip('TeeMain') + ' ' + str(item.get('value', ''))).strip()
           for item in flow_resistance_list]
-colors = ['k', 'r', 'b', 'g']
+colors = ['k', 'r', 'k', 'b', 'g']
 
 fig, ax = plt.subplots()
 flow_models = []
@@ -137,10 +139,12 @@ for i, flow_res_dict in enumerate(flow_resistance_list):
     flow_model.update(inlet_mass_flow=mass_flow)
     q = flow_model.normalized_flow_distribution  # * 100.0
     reynolds = flow_model.manifolds[0].reynolds[0]
-    ax.plot(q, label=labels[i], color=colors[i])
+    if i > 1:
+        ax.plot(q, label=labels[i], color=colors[i])
 ax.set_xlabel('Cell Number / -')
 ax.set_ylabel('Normalized Flow Distribution / -')
-
+# ax.set_ylim([0.85, 1.3])
+plt.tight_layout()
 plt.legend()
 plt.show()
 
@@ -148,11 +152,15 @@ fig, ax = plt.subplots()
 for i, flow_model in enumerate(flow_models):
     m_in = flow_model.manifolds[0]
     m_out = flow_model.manifolds[1]
-    ax.plot(m_in.pressure, color=colors[i], linestyle='solid',
-            label='Inlet Manifold - ' + labels[i])
-    ax.plot(m_out.pressure, color=colors[i], linestyle='dashed',
-            label='Outlet Manifold - ' + labels[i])
+    if i > 1:
+        ax.plot(m_in.pressure, color=colors[i], linestyle='solid',
+                label='Inlet Manifold - ' + labels[i])
+        ax.plot(m_out.pressure, color=colors[i], linestyle='dashed',
+                label='Outlet Manifold - ' + labels[i])
 ax.set_xlabel('Cell Number / -')
 ax.set_ylabel('Pressure / Pa')
+# ax.set_ylim([250000, 254500])
+plt.tight_layout()
 plt.legend()
 plt.show()
+
