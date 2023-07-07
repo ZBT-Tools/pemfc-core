@@ -111,7 +111,7 @@ flow_circuit_dict = {
     }
 
 flow_resistance_list = [{'type': 'Constant', 'value': 0.004},
-                        # {'type': 'RennelsTeeMain', 'branch_diameter': 0.005},
+                        {'type': 'RennelsTeeMain', 'branch_diameter': 0.005},
                         {'type': 'BassettTeeMain', 'branch_diameter': 0.005},
                         {'type': 'IdelchikTeeMain', 'branch_diameter': 0.005}]
 
