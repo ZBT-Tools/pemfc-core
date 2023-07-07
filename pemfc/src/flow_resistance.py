@@ -40,6 +40,12 @@ class FlowResistance(ABC):
         elif zeta_type == 'IdelchikTeeBranch':
             return super(FlowResistance, cls).\
                 __new__(IdelchikTeeBranchFlowResistance)
+        elif zeta_type == 'HuangTeeMain':
+            return super(FlowResistance, cls).\
+                __new__(IdelchikTeeMainFlowResistance)
+        elif zeta_type == 'HuangTeeBranch':
+            return super(FlowResistance, cls).\
+                __new__(IdelchikTeeBranchFlowResistance)
         else:
             raise NotImplementedError
 
@@ -205,6 +211,7 @@ class JunctionFlowResistance(FlowResistance, ABC):
         self.main_flow_ratio = np.zeros(self.channel.n_ele)
         self.velocity = np.zeros(self.channel.n_ele)
         self.density = np.zeros(self.channel.n_ele)
+        self.viscosity = np.zeros(self.channel.n_ele)
         self.mass_source_sign = np.zeros(self.channel.n_ele)
         self.pressure = np.zeros(self.channel.n_ele)
 
@@ -243,10 +250,13 @@ class JunctionFlowResistance(FlowResistance, ABC):
         self.velocity[:] = self.channel.velocity[combined_ids]
         density = self.channel.fluid.density
         self.density[:] = density[combined_ids]
+        self.viscosity[:] = self.channel.fluid.viscosity[combined_ids]
         self.pressure[:] = self.channel.pressure[combined_ids]
         mass_flow = self.channel.mass_flow_total
         combined_volume_flow = mass_flow[combined_ids] * density[combined_ids]
         reduced_volume_flow = mass_flow[reduced_ids] * density[reduced_ids]
+        # Flow ratio in the main run of T-Junction
+        # (always the reduced flow over the combined flow)
         self.main_flow_ratio[:] = \
             np.divide(reduced_volume_flow, combined_volume_flow,
                       out=self.main_flow_ratio,
@@ -287,9 +297,9 @@ class JunctionFlowResistance(FlowResistance, ABC):
         # inputs as well.
         value = np.zeros(self.value.shape)
         value_dividing = \
-            self.calc_dividing_junction_value(flow_ratio)
+            self.calc_dividing_junction_value(flow_ratio, *args, **kwargs)
         value_combining = \
-            self.calc_combining_junction_value(flow_ratio)
+            self.calc_combining_junction_value(flow_ratio, *args, **kwargs)
         # Determine indices for dividing or combining elements
         id_dividing = np.nonzero(self.mass_source_sign <= 0)
         id_combining = np.nonzero(self.mass_source_sign > 0)
@@ -640,15 +650,15 @@ class IdelchikTeeMainFlowResistance(JunctionFlowResistance):
 
 class IdelchikTeeBranchFlowResistance(BassettTeeMainFlowResistance):
     """
-       Concrete implementation of the abstract JunctionFlowResistance class
-       defining the "calc_resistance_values" with values from the publication:
-       Idelchik, Isaak E. „Handbook of hydraulic resistance“. Washington, 1986.
-       Page 280 for dividing flow and page 266 for combining flow to calculate
-       the resistance values from the main run to the branch are implemented.
-       The branch diameter must be provided as the parameter "branch_diameter"
-       in the zeta_dict dictionary. Optionally, a fitting angle with the
-       parameter "angle" can be supplied. The default value is 90°.
-       """
+   Concrete implementation of the abstract JunctionFlowResistance class
+   defining the "calc_resistance_values" with values from the publication:
+   Idelchik, Isaak E. „Handbook of hydraulic resistance“. Washington, 1986.
+   Page 280 for dividing flow and page 266 for combining flow to calculate
+   the resistance values from the main run to the branch are implemented.
+   The branch diameter must be provided as the parameter "branch_diameter"
+   in the zeta_dict dictionary. Optionally, a fitting angle with the
+   parameter "angle" can be supplied. The default value is 90°.
+   """
 
     def __init__(self, channel, zeta_dict, **kwargs):
         super().__init__(channel, zeta_dict, **kwargs)
@@ -684,7 +694,7 @@ class IdelchikTeeBranchFlowResistance(BassettTeeMainFlowResistance):
         (w_b / w_c in publication)
         :return: zeta resistance value
         """
-        factor = 0.9 if flow_ratio > 0.8 else 1.0
+        factor = np.where(flow_ratio < 0.8, 0.9, 1.0)
         velocity_ratio = flow_ratio * self.area_ratio
         return factor * \
             (1.0 + velocity_ratio ** 2.0 - 2.0 * velocity_ratio * np.cos(self.angle))
@@ -699,4 +709,145 @@ class IdelchikTeeBranchFlowResistance(BassettTeeMainFlowResistance):
         """
         return self.factor * ((.0 + (flow_ratio * self.area_ratio) ** 2.0)
                               - 2.0 * (1.0 - flow_ratio))
+
+
+class HuangTeeMainFlowResistance(JunctionFlowResistance):
+    """
+    Concrete implementation of the abstract JunctionFlowResistance class
+    defining the "calc_resistance_values" with values from the publication:
+    Huang, Fuxiang, Diankai Qiu, Zhutian Xu, Linfa Peng, und Xinmin Lai.
+    "Analysis and Improvement of Flow Distribution in Manifold for Proton
+    Exchange Membrane Fuel Cell Stacks". Energy 226 (Juli 2021): 120427.
+    https://doi.org/10.1016/j.energy.2021.120427.
+    Equation (30) for dividing flow and equation (31) for combining flow to
+    calculate the resistance values in the main run are implemented.The branch
+    diameter must be provided as the parameter "branch_diameter" in the
+    zeta_dict dictionary.
+    """
+    def __init__(self, channel, zeta_dict, **kwargs):
+        super().__init__(channel, zeta_dict, **kwargs)
+        self.branch_diameter = zeta_dict["branch_diameter"]
+        self.area_ratio = self.channel.cross_area \
+            / ((0.5 * self.branch_diameter) ** 2.0 * np.pi)
+        cross_area = self.channel.cross_area
+        if isinstance(cross_area, np.ndarray):
+            self.main_area_ratio = np.zeros(self.channel.pressure.shape)
+            self.main_area_ratio[:] = 1.0
+            if self.channel.flow_direction == 1:
+                self.main_area_ratio[:len(cross_area) - 1] = \
+                    cross_area[:-1] / cross_area[1:]
+            else:
+                self.main_area_ratio[-len(cross_area) - 1:] = \
+                    cross_area[1:] / cross_area[:-1]
+        else:
+            self.main_area_ratio = 1.0
+
+    def update_resistance_values(self):
+        """
+        Updates resistance values. Just a wrapper for calc_resistance values
+        where the specific flow ratio can be defined differently in concrete
+        class implementation.
+        """
+        return self.calc_resistance_values(self.main_flow_ratio)
+
+    def calc_dividing_junction_value(self, flow_ratio, *args, **kwargs):
+        """
+        Equation (30) in
+        Huang, Fuxiang, Diankai Qiu, Zhutian Xu, Linfa Peng, und Xinmin Lai.
+        "Analysis and Improvement of Flow Distribution in Manifold for Proton
+        Exchange Membrane Fuel Cell Stacks". Energy 226 (Juli 2021): 120427.
+        https://doi.org/10.1016/j.energy.2021.120427.
+        :param flow_ratio: volumetric flow ratio array for branch to combined flow
+        (u_in,j / u_in,j-1 in publication)
+        :return: zeta resistance value
+        """
+        # Velocity ratio: u_in,j / u_in,j-1 in publication
+        velocity_ratio = flow_ratio * self.main_area_ratio
+        n_in = 1.0
+        return n_in * (1.5 * velocity_ratio - velocity_ratio ** 2.0 - 0.5)
+
+    def calc_combining_junction_value(self, flow_ratio, *args, **kwargs):
+        """
+        Equation (31) in
+        Huang, Fuxiang, Diankai Qiu, Zhutian Xu, Linfa Peng, und Xinmin Lai.
+        "Analysis and Improvement of Flow Distribution in Manifold for Proton
+        Exchange Membrane Fuel Cell Stacks". Energy 226 (Juli 2021): 120427.
+        https://doi.org/10.1016/j.energy.2021.120427.
+        :param flow_ratio: volumetric flow ratio array for branch to combined flow
+        (u_out,j / u_out,j-1 in publication)
+        :return: zeta resistance value
+        """
+        # Velocity ratio: u_out,j / u_out,j-1 in publication
+        velocity_ratio = flow_ratio * self.main_area_ratio
+        n_out = 0.6
+        return n_out * (1.0 - velocity_ratio) ** 2.0
+
+
+class HuangTeeBranchFlowResistance(HuangTeeMainFlowResistance):
+    """
+    Concrete implementation of the abstract JunctionFlowResistance class
+    defining the "calc_resistance_values" with values from the publication:
+    Huang, Fuxiang, Diankai Qiu, Zhutian Xu, Linfa Peng, und Xinmin Lai.
+    "Analysis and Improvement of Flow Distribution in Manifold for Proton
+    Exchange Membrane Fuel Cell Stacks". Energy 226 (Juli 2021): 120427.
+    https://doi.org/10.1016/j.energy.2021.120427.
+    Equation (33) for dividing flow and equation (34) for combining flow to
+    calculate the resistance values in the main run are implemented.The branch
+    diameter must be provided as the parameter "branch_diameter" in the
+    zeta_dict dictionary.
+    """
+
+    def __init__(self, channel, zeta_dict, **kwargs):
+        super().__init__(channel, zeta_dict, **kwargs)
+
+    def update_resistance_values(self):
+        """
+        Updates resistance values. Just a wrapper for calc_resistance values
+        where the specific flow ratio can be defined differently in concrete
+        class implementation.
+        """
+        flow_ratio = 1.0 - self.main_flow_ratio
+        reynolds_branch = \
+            flow_ratio * self.area_ratio * self.velocity * self.density * \
+                self.branch_diameter / self.viscosity
+        args = (reynolds_branch)
+        return self.calc_resistance_values(flow_ratio, reynolds_branch)
+
+    def calc_dividing_junction_value(self, flow_ratio, *args, **kwargs):
+        """
+        Equation (33) in
+         Huang, Fuxiang, Diankai Qiu, Zhutian Xu, Linfa Peng, und Xinmin Lai.
+        "Analysis and Improvement of Flow Distribution in Manifold for Proton
+        Exchange Membrane Fuel Cell Stacks". Energy 226 (Juli 2021): 120427.
+        https://doi.org/10.1016/j.energy.2021.120427.
+        :param flow_ratio: volumetric flow ratio array for branch to combined flow
+        :return: zeta resistance value
+        """
+        # Velocity ratio: u_c,j / u_in,j in publication
+        # According to the exact equation velocity ratio will be between branch
+        # and reduced main flow
+        reynolds_branch = args[0]
+        area_ratio = self.area_ratio * self.main_area_ratio
+        velocity_ratio = flow_ratio * area_ratio
+
+        return 276.0 / reynolds_branch * velocity_ratio ** 2.0
+
+    def calc_combining_junction_value(self, flow_ratio, *args, **kwargs):
+        """
+        Equation (34) in
+        Huang, Fuxiang, Diankai Qiu, Zhutian Xu, Linfa Peng, und Xinmin Lai.
+        "Analysis and Improvement of Flow Distribution in Manifold for Proton
+        Exchange Membrane Fuel Cell Stacks". Energy 226 (Juli 2021): 120427.
+        https://doi.org/10.1016/j.energy.2021.120427.
+        :param flow_ratio: volumetric flow ratio array for branch to combined flow
+        :return: zeta resistance value
+        """
+        # Velocity ratio: u_c,j / u_in,j in publication
+        # According to the exact equation velocity ratio will be between branch
+        # and reduced main flow
+        reynolds_branch = args[0]
+        area_ratio = self.area_ratio * self.main_area_ratio
+        velocity_ratio = flow_ratio * area_ratio
+
+        return 72.0 / reynolds_branch * velocity_ratio ** 2.0
 
