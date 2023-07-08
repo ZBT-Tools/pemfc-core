@@ -106,7 +106,7 @@ mass_flow = np.sum(species_mass_flow)
 # First flow circuit model configuration
 flow_circuit_dict = {
     'name': 'Flow Circuit',
-    'type': 'VariableResistance',
+    'type': 'UpdatedKoh',
     'shape': 'U',
     # 'max_iter': 200,
     # 'tolerance': 1e-10

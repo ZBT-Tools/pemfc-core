@@ -531,10 +531,10 @@ class BassettTeeMainFlowResistance(JunctionFlowResistance):
         (q = m_A / m_c in publication)
         :return: zeta resistance value
         """
-        return 2.0 * self.area_ratio / (self.area_ratio + 0.5 * np.cos(self.angle)) \
+        return 0.6 * (2.0 * self.area_ratio / (self.area_ratio + 0.5 * np.cos(self.angle)) \
             * (1.0 - flow_ratio ** 2.0 - (1.0 - flow_ratio) ** 2.0
                * self.area_ratio * np.cos(self.angle)) \
-            + flow_ratio ** 2.0 - 1.0
+            + flow_ratio ** 2.0 - 1.0)
 
 
 class BassettTeeBranchFlowResistance(BassettTeeMainFlowResistance):
