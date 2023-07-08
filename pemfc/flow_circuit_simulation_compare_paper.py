@@ -129,7 +129,8 @@ colors = [
     # 'k',
     'r',
     'b',
-    'g']
+    'g',
+    'm']
 
 fig, ax = plt.subplots()
 flow_models = []
