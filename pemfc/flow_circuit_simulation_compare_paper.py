@@ -106,7 +106,7 @@ mass_flow = np.sum(species_mass_flow)
 # First flow circuit model configuration
 flow_circuit_dict = {
     'name': 'Flow Circuit',
-    'type': 'VariableResistance',
+    'type': 'UpdatedKoh',
     'shape': 'U',
     # 'max_iter': 200,
     # 'tolerance': 1e-10
@@ -115,7 +115,7 @@ flow_circuit_dict = {
 flow_resistance_list = [{'type': 'Constant', 'value': 0.004},
                         # {'type': 'Constant', 'value': 0.004},
                         # {'type': 'Constant', 'value': 0.004},
-                        # {'type': 'RennelsTeeMain', 'branch_diameter': 0.005},
+                        {'type': 'RennelsTeeMain', 'branch_diameter': 0.005},
                         {'type': 'BassettTeeMain', 'branch_diameter': 0.005},
                         {'type': 'IdelchikTeeMain', 'branch_diameter': 0.005},
                         {'type': 'HuangTeeMain', 'branch_diameter': 0.005}
