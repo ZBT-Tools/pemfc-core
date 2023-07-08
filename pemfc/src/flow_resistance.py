@@ -783,7 +783,7 @@ class HuangTeeMainFlowResistance(JunctionFlowResistance):
         """
         # Velocity ratio: u_out,j / u_out,j-1 in publication
         velocity_ratio = flow_ratio * self.main_area_ratio
-        n_out = 0.6
+        n_out = 1.0
         return n_out * (1.0 - velocity_ratio) ** 2.0
 
 

@@ -720,6 +720,9 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
                         self.manifold_wall_friction[i].value[zeta_turn.combined_ids]
                     dp_wall[i, :] = 0.5 * zeta_turn.density * zeta_wall \
                         * zeta_turn.velocity ** 2.0
+                    # Only pressure drops for interior nodes need to be split
+                    # in half, because outer nodes are already dx/2 long
+                    dp_wall[i, 1:-2] *= 0.5
 
             dp_ref_chl = \
                 ref_chl.pressure[ref_chl.id_in] - ref_chl.pressure[ref_chl.id_out] \
