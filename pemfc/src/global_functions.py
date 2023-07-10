@@ -303,9 +303,7 @@ def calc_rel_error(array1, array2):
     """
     array_diff = array1 - array2
     average_array = (array1 + array2) / 2.0
-    rel_error_array = \
-        np.divide(array_diff, average_array, out=array_diff,
-                  where=average_array != 0.0)
+    rel_error_array = np_div(array_diff, average_array)
     return np.inner(array_diff, array_diff) / len(array1)
 
 
@@ -319,7 +317,8 @@ def calc_rrmse(array1, array2):
     array_diff = array1 - array2
     diff_squared_sum = np.inner(array_diff, array_diff)
     array2_squared_sum = np.inner(array2, array2)
-    return np.sqrt(diff_squared_sum / array2_squared_sum)
+    return np.sqrt(np_div(diff_squared_sum, array2_squared_sum))
+
 
 def calc_mean_squared_error(array1, array2):
     """
