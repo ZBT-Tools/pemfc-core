@@ -692,7 +692,7 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
 
         # Update T-junction branching flow resistances
         for item in self.turning_resistance:
-            assert(item, fr.JunctionFlowResistance)
+            assert(item == fr.JunctionFlowResistance)
 
         dp_turning = np.zeros((len(self.manifolds), self.n_channels))
         dp_wall = np.zeros((len(self.manifolds), self.n_channels))

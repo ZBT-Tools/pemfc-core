@@ -5,6 +5,7 @@ import numpy as np
 # local module imports
 from . import interpolation as ip
 from . import constants
+from . import global_functions as gf
 
 
 class FlowResistance(ABC):
@@ -833,8 +834,7 @@ class HuangTeeBranchFlowResistance(HuangTeeMainFlowResistance):
         area_ratio = self.area_ratio * self.main_area_ratio
         velocity_ratio = flow_ratio * area_ratio
 
-        return np.divide(276.0, reynolds_branch, out=np.zeros(reynolds_branch.shape),
-                         where=reynolds_branch != 0.0) * velocity_ratio ** 2.0
+        return gf.np_div(276.0, reynolds_branch) * velocity_ratio ** 2.0
 
     def calc_combining_junction_value(self, flow_ratio, *args, **kwargs):
         """
@@ -853,6 +853,5 @@ class HuangTeeBranchFlowResistance(HuangTeeMainFlowResistance):
         area_ratio = self.area_ratio * self.main_area_ratio
         velocity_ratio = flow_ratio * area_ratio
 
-        return np.divide(72.0, reynolds_branch, out=np.zeros(reynolds_branch.shape),
-                         where=reynolds_branch != 0.0) * velocity_ratio ** 2.0
+        return gf.np_div(72.0, reynolds_branch) * velocity_ratio ** 2.0
 
