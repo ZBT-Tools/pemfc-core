@@ -42,10 +42,10 @@ class FlowResistance(ABC):
                 __new__(IdelchikTeeBranchFlowResistance)
         elif zeta_type == 'HuangTeeMain':
             return super(FlowResistance, cls).\
-                __new__(IdelchikTeeMainFlowResistance)
+                __new__(HuangTeeMainFlowResistance)
         elif zeta_type == 'HuangTeeBranch':
             return super(FlowResistance, cls).\
-                __new__(IdelchikTeeBranchFlowResistance)
+                __new__(HuangTeeBranchFlowResistance)
         else:
             raise NotImplementedError
 
@@ -214,6 +214,8 @@ class JunctionFlowResistance(FlowResistance, ABC):
         self.viscosity = np.zeros(self.channel.n_ele)
         self.mass_source_sign = np.zeros(self.channel.n_ele)
         self.pressure = np.zeros(self.channel.n_ele)
+        self.combined_ids = None
+        self.reduced_ids = None
 
     def update(self):
         """
@@ -238,23 +240,25 @@ class JunctionFlowResistance(FlowResistance, ABC):
         flow_direction = self.channel.flow_direction
         self.mass_source_sign[:] = np.sign(mass_source)
         # List of indices in vector which determine the combined flow
-        combined_ids = np.arange(1, nodes) \
+        self.combined_ids = np.arange(1, nodes) \
             - np.where(np.int64(self.mass_source_sign * flow_direction) <= 0,
                        1, 0)
         # List of indices in vector which determine the reduced flow
-        reduced_ids = np.arange(1, nodes) \
+        self.reduced_ids = np.arange(1, nodes) \
             - np.where(np.int64(self.mass_source_sign * -flow_direction) <= 0,
                        1, 0)
 
         # Resistance values are defined with respect to the combined flow point
-        self.velocity[:] = self.channel.velocity[combined_ids]
+        self.velocity[:] = self.channel.velocity[self.combined_ids]
         density = self.channel.fluid.density
-        self.density[:] = density[combined_ids]
-        self.viscosity[:] = self.channel.fluid.viscosity[combined_ids]
-        self.pressure[:] = self.channel.pressure[combined_ids]
+        self.density[:] = density[self.combined_ids]
+        self.viscosity[:] = self.channel.fluid.viscosity[self.combined_ids]
+        self.pressure[:] = self.channel.pressure[self.combined_ids]
         mass_flow = self.channel.mass_flow_total
-        combined_volume_flow = mass_flow[combined_ids] * density[combined_ids]
-        reduced_volume_flow = mass_flow[reduced_ids] * density[reduced_ids]
+        combined_volume_flow = \
+            mass_flow[self.combined_ids] * density[self.combined_ids]
+        reduced_volume_flow = \
+            mass_flow[self.reduced_ids] * density[self.reduced_ids]
         # Flow ratio in the main run of T-Junction
         # (always the reduced flow over the combined flow)
         self.main_flow_ratio[:] = \
@@ -707,7 +711,7 @@ class IdelchikTeeBranchFlowResistance(BassettTeeMainFlowResistance):
         (Q_b / Q_c in publication)
         :return: zeta resistance value
         """
-        return self.factor * ((.0 + (flow_ratio * self.area_ratio) ** 2.0)
+        return self.factor * ((1.0 + (flow_ratio * self.area_ratio) ** 2.0)
                               - 2.0 * (1.0 - flow_ratio))
 
 
@@ -779,7 +783,7 @@ class HuangTeeMainFlowResistance(JunctionFlowResistance):
         """
         # Velocity ratio: u_out,j / u_out,j-1 in publication
         velocity_ratio = flow_ratio * self.main_area_ratio
-        n_out = 0.6
+        n_out = 1.0
         return n_out * (1.0 - velocity_ratio) ** 2.0
 
 
@@ -808,9 +812,8 @@ class HuangTeeBranchFlowResistance(HuangTeeMainFlowResistance):
         """
         flow_ratio = 1.0 - self.main_flow_ratio
         reynolds_branch = \
-            flow_ratio * self.area_ratio * self.velocity * self.density * \
-                self.branch_diameter / self.viscosity
-        args = (reynolds_branch)
+            flow_ratio * self.area_ratio * self.velocity * self.density \
+            * self.branch_diameter / self.viscosity
         return self.calc_resistance_values(flow_ratio, reynolds_branch)
 
     def calc_dividing_junction_value(self, flow_ratio, *args, **kwargs):
@@ -830,7 +833,8 @@ class HuangTeeBranchFlowResistance(HuangTeeMainFlowResistance):
         area_ratio = self.area_ratio * self.main_area_ratio
         velocity_ratio = flow_ratio * area_ratio
 
-        return 276.0 / reynolds_branch * velocity_ratio ** 2.0
+        return np.divide(276.0, reynolds_branch, out=np.zeros(reynolds_branch.shape),
+                         where=reynolds_branch != 0.0) * velocity_ratio ** 2.0
 
     def calc_combining_junction_value(self, flow_ratio, *args, **kwargs):
         """
@@ -849,5 +853,6 @@ class HuangTeeBranchFlowResistance(HuangTeeMainFlowResistance):
         area_ratio = self.area_ratio * self.main_area_ratio
         velocity_ratio = flow_ratio * area_ratio
 
-        return 72.0 / reynolds_branch * velocity_ratio ** 2.0
+        return np.divide(72.0, reynolds_branch, out=np.zeros(reynolds_branch.shape),
+                         where=reynolds_branch != 0.0) * velocity_ratio ** 2.0
 
