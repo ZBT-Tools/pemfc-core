@@ -133,14 +133,14 @@ def fill_last_zeros(array, axis=-1, axis_sum=None):
         axis_sum = np.abs(np.sum(array, axis=0))
     shape = array.shape
     prev = np.arange(shape[-1])
-    prev[axis_sum < constants.SMALL] = 0
+    prev[np.nonzero(axis_sum < constants.SMALL)] = 0
     prev = np.maximum.accumulate(prev)
     return array[:, prev]
 
 
 def fill_first_zeros(array, axis=-1, axis_sum=None):
     array = np.flip(array, axis)
-    return np.flip(fill_last_zeros(array, axis), axis, axis_sum)
+    return np.flip(fill_last_zeros(array, axis, np.flip(axis_sum, axis)), axis)
 
 
 def fill_zero_sum(array, axis=-1, axis_sum=None):

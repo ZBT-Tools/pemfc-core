@@ -218,6 +218,13 @@ class Channel(ABC, oo.OutputObject):
                wall_temp=None, heat_flux=None, update_mass=True,
                update_flow=True, update_heat=True, update_fluid=True,
                enthalpy_source=None, **kwargs):
+        if mass_flow_in is not None:
+            if np.sum(mass_flow_in) < 0.0:
+                id_in = int(self.id_in)
+                id_out = int(self.id_out)
+                self.id_in = id_out
+                self.id_out = id_in
+                mass_flow_in = np.abs(mass_flow_in)
 
         if update_mass or mass_flow_in is not None or mass_source is not None:
             self.update_mass(mass_flow_in=mass_flow_in, mass_source=mass_source)
