@@ -76,7 +76,7 @@ fluid_dict = {
 }
 
 # Stack configuration
-n_cells = 200
+n_cells = 300
 n_subchl = 40
 in_manifold_dict = {
     'name': 'Inlet Manifold',
@@ -107,23 +107,31 @@ mass_flow = np.sum(species_mass_flow)
 flow_circuit_dict = {
     'name': 'Flow Circuit',
     'type': 'VariableResistance',
-    'shape': 'Z',
+    'shape': 'U',
     # 'max_iter': 200,
     # 'tolerance': 1e-10
     }
 
-flow_resistance_list = [
-    # {'type': 'Constant', 'value': 0.004},
+manifold_update_list = [
+    {'flow_resistances': [{'type': 'Constant', 'value': 0.000}],
+     'wall_friction': False},
+    {'flow_resistances': [{'type': 'Constant', 'value': 0.000}],
+     'wall_friction': True},
+    {'flow_resistances': [{'type': 'Constant', 'value': 0.004}],
+     'wall_friction': True},
+    {'flow_resistances': [{'type': 'BassettTeeMain', 'branch_diameter': 0.005}],
+     'wall_friction': True}
     # {'type': 'Constant', 'value': 0.004},
     # {'type': 'Constant', 'value': 0.004},
     # {'type': 'RennelsTeeMain', 'branch_diameter': 0.005},
-    {'type': 'BassettTeeMain', 'branch_diameter': 0.005},
-    {'type': 'IdelchikTeeMain', 'branch_diameter': 0.005},
+    # {'type': 'BassettTeeMain', 'branch_diameter': 0.005},
+    # {'type': 'IdelchikTeeMain', 'branch_diameter': 0.005},
     # {'type': 'HuangTeeMain', 'branch_diameter': 0.005}
     ]
 
-labels = [(item['type'].strip('TeeMain') + ' ' + str(item.get('value', ''))).strip()
-          for item in flow_resistance_list]
+labels = ['A', 'B', 'C', 'D', 'E'
+]
+
 colors = [
     'k',
     # 'r',
@@ -135,8 +143,8 @@ colors = [
 
 fig, ax = plt.subplots()
 flow_models = []
-for i, flow_res_dict in enumerate(flow_resistance_list):
-    in_manifold_dict['flow_resistances'] = [flow_res_dict]
+for i, sub_dict in enumerate(manifold_update_list):
+    in_manifold_dict.update(sub_dict)
     out_manifold_dict = copy.deepcopy(in_manifold_dict)
     out_manifold_dict['name'] = 'Outlet Manifold'
 
