@@ -101,6 +101,7 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
         self.normalized_flow_distribution = \
             np.zeros(self.channel_vol_flow.shape)
         self.iteration = 0
+        self.error = 1e8
         self.add_print_variables(self.print_variables)
 
     def update(self, inlet_mass_flow=None, calc_distribution=None,
@@ -125,8 +126,9 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
             self.mass_flow_in = inlet_mass_flow
 
         if self.initialize:
-            self.update_channels(update_fluid=True)
+            # self.update_channels(update_fluid=True)
             self.channel_vol_flow_old[:] = 1e8
+        self.update_channels(update_fluid=True)
         # channel_vol_flow_old = np.zeros(self.channel_vol_flow.shape)
         if calc_distribution is None:
             calc_distribution = self.calc_distribution
@@ -134,27 +136,33 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
             for i in range(self.max_iter):
                 # print(self.name + ' Iteration # ', str(i+1))
                 self.iteration = i
-                self.single_loop()
+                self.single_loop(update_channels=True)
                 if i == 0:
                     self.initialize = False
 
-                error = g_func.calc_rrmse(
+                self.error = g_func.calc_rrmse(
                     self.channel_vol_flow, self.channel_vol_flow_old)
 
                 # print(channel_vol_flow_old)
                 # print(self.channel_vol_flow)
                 self.channel_vol_flow_old[:] = self.channel_vol_flow
                 # print(error)
-                if error < self.tolerance and i >= self.min_iter:
+                if self.error < self.tolerance and i >= self.min_iter:
+                    # print('number of iterations n = {} '
+                    #       'with error = {} in update() of {} '
+                    #       .format(self.iteration, self.error, self.name))
                     break
+
                 if i == (self.max_iter - 1):
                     print('maximum number of iterations n = {} '
                           'with error = {} in update() of {} '
-                          'reached'.format(self.max_iter, error, self))
+                          'reached'.format(self.max_iter, self.error, self))
+
         # else:
         #     self.initialize = False
         # final channel updates within flow circuit iteration
         self.update_channels(update_fluid=True)
+
         try:
             self.normalized_flow_distribution[:] = \
                 self.channel_mass_flow / np.average(self.channel_mass_flow)
@@ -633,7 +641,7 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
                  n_subchannels=1.0):
         super().__init__(dict_flow_circuit, manifolds, channels,
                          n_subchannels)
-        self.urf = dict_flow_circuit.get('underrelaxation_factor', 0.5)
+        self.urf = dict_flow_circuit.get('underrelaxation_factor', 0.3)
 
         self.turning_resistance = []
         self.manifold_wall_friction = []
@@ -680,7 +688,7 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
         if inlet_mass_flow is not None:
             self.mass_flow_in = inlet_mass_flow
         if update_channels:
-            self.update_channels()
+            self.update_channels(update_fluid=False)
         self.channel_vol_flow[:] = \
             np.array([np.average(channel.vol_flow)
                       for channel in self.channels])
@@ -692,7 +700,7 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
 
         # Update T-junction branching flow resistances
         for item in self.turning_resistance:
-            assert(isinstance(item, fr.JunctionFlowResistance))
+            assert isinstance(item, fr.JunctionFlowResistance)
 
         dp_turning = np.zeros((len(self.manifolds), self.n_channels))
         dp_wall = np.zeros((len(self.manifolds), self.n_channels))
@@ -787,11 +795,13 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
             np.array([channel.pressure[channel.id_in]
                       - channel.pressure[channel.id_out]
                       for channel in self.channels])
+        if np.any(dp_channel == 0.0):
+            print(self.iteration)
         flow_correction = dp_branches / dp_channel
 
         channel_vol_flow_new = self.channel_vol_flow * flow_correction
         urf = self.urf
-        urf = 0.5
+        # urf = 0.3
         channel_vol_flow = \
             self.channel_vol_flow * urf + channel_vol_flow_new * (1.0 - urf)
         density = np.array([channel.fluid.density[channel.id_in]

@@ -80,12 +80,12 @@ n_cells = 300
 n_subchl = 40
 in_manifold_dict = {
     'name': 'Inlet Manifold',
-    'length': 1.435e-3 * n_cells,
+    'length': 1.435e-3 * n_cells * 20.0,
     'cross_sectional_shape': 'circular',
     'p_out': channel_dict['p_out'],
     'temp_in': temperature,
     'flow_direction': 1,
-    'diameter': 23e-3,
+    'diameter': 2.0 * 26.3e-3,
     'bend_number': 0,
     'bend_friction_factor': 0.0,
     'flow_split_factor': 0.0,
@@ -119,8 +119,8 @@ manifold_update_list = [
      'wall_friction': True},
     {'flow_resistances': [{'type': 'Constant', 'value': 0.004}],
      'wall_friction': True},
-    {'flow_resistances': [{'type': 'BassettTeeMain', 'branch_diameter': 0.005}],
-     'wall_friction': True}
+    # {'flow_resistances': [{'type': 'BassettTeeMain', 'branch_diameter': 0.005}],
+    #  'wall_friction': True}
     # {'type': 'Constant', 'value': 0.004},
     # {'type': 'Constant', 'value': 0.004},
     # {'type': 'RennelsTeeMain', 'branch_diameter': 0.005},
