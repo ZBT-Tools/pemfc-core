@@ -795,8 +795,6 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
             np.array([channel.pressure[channel.id_in]
                       - channel.pressure[channel.id_out]
                       for channel in self.channels])
-        if np.any(dp_channel == 0.0):
-            print(self.iteration)
         flow_correction = dp_branches / dp_channel
 
         channel_vol_flow_new = self.channel_vol_flow * flow_correction
