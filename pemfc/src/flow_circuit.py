@@ -155,8 +155,8 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
 
                 if i == (self.max_iter - 1):
                     print('maximum number of iterations n = {} '
-                          'with error = {} in update() of {} '
-                          'reached'.format(self.max_iter, self.error, self))
+                          'with error = {} in update() of {} reached'
+                          .format(self.max_iter, self.error, self.name))
 
         # else:
         #     self.initialize = False
