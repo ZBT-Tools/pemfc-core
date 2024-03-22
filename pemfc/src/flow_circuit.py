@@ -160,8 +160,8 @@ class ParallelFlowCircuit(ABC, oo.OutputObject):
 
         # else:
         #     self.initialize = False
-        # final channel updates within flow circuit iteration
-        self.update_channels(update_fluid=True)
+            # Final channel updates within flow circuit iteration
+            self.update_channels(update_fluid=True)
 
         try:
             self.normalized_flow_distribution[:] = \
@@ -786,10 +786,11 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
 
             dp_branches = p_branch_mfd[0] - p_branch_mfd[1]
         else:
-            dp_branches = \
-                ip.interpolate_1d(self.manifolds[0].pressure) \
-                - ip.interpolate_1d(self.manifolds[1].pressure) \
-                + np.sum(dp_turning, axis=0)
+            p_in = ip.interpolate_1d(self.manifolds[0].pressure)
+            p_out = ip.interpolate_1d(self.manifolds[1].pressure)
+            for i, chl in enumerate(self.channels):
+                chl.p_out = p_out[i]
+            dp_branches = p_in - p_out + np.sum(dp_turning, axis=0)
 
         dp_channel = \
             np.array([channel.pressure[channel.id_in]

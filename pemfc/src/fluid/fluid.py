@@ -930,6 +930,9 @@ class TwoPhaseMixture(DiscreteFluid):
         self.humidity[:] = \
             self._mole_fraction[self.id_pc] * self._pressure / p_sat
 
+        # Simplification of limiting humidity to 100%
+        self.humidity[self.humidity > 1.0] = 1.0
+
     def calc_vaporization_enthalpy(self, temperature=None):
         if temperature is None:
             temperature = self._temperature

@@ -712,7 +712,7 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         self.mole_flow_gas_total[:] = \
             self.mole_flow_total - np.sum(self.mole_flow_liq, axis=0)
         self.mass_flow_gas_total[:] = \
-            self.mass_flow_total - - np.sum(self.mass_flow_liq, axis=0)
+            self.mass_flow_total - np.sum(self.mass_flow_liq, axis=0)
         # self.mole_flow_gas[:] = \
         #     self.mole_flow_gas_total * self.fluid.gas.mole_fraction
         # self.mass_flow_gas[:] = \

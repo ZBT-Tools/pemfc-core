@@ -66,7 +66,7 @@ class Cell(OutputObject):
         membrane_dict['length'] = \
             self.cathode.flow_field.length_straight_channels
 
-        membrane_dict['underrelaxation_factor'] = self.urf
+        # membrane_dict['underrelaxation_factor'] = self.urf
         self.membrane = membrane.Membrane(membrane_dict, self.dx)
 
         self.thickness = self.cathode.thickness + self.membrane.thickness \
