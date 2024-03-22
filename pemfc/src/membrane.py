@@ -108,6 +108,7 @@ class WaterTransportMembrane(Membrane, ABC):
 
         # Water cross flux through the membrane
         self.water_content = np.zeros((2, len(self.dx)))
+        self.avg_water_content = np.zeros(self.dx.shape)
         self.water_flux = np.zeros(self.dx.shape)
         self.diff_coeff = np.zeros(self.dx.shape)
         # Electro-osmotic drag coefficient
@@ -115,7 +116,9 @@ class WaterTransportMembrane(Membrane, ABC):
         self.eod[:] = membrane_dict.get('electro-osmotic_drag_coeff', 1.07)
 
         self.add_print_data(self.water_flux,
-                            'Membrane Water Flux', 'mol/(s-m²')
+                            'Membrane Water Flux', 'mol/(s-m²)')
+        self.add_print_data(self.avg_water_content,
+                            'Membrane Water Content', '-')
 
     @abstractmethod
     def calc_water_content(self, humidity):
@@ -161,7 +164,8 @@ class SpringerMembrane(WaterTransportMembrane):
                      0.043 + 17.81 * humidity
                      - 39.85 * humidity ** 2. + 36. * humidity ** 3.0,
                      14.0 + 1.4 * (humidity - 1.0))
-        return self.water_content
+        self.avg_water_content[:] = np.average(self.water_content, axis=0)
+        return self.water_content, self.avg_water_content
 
     def calc_diffusion_coefficient(self, *args):
         # Based on Springer et al. (1991);
@@ -169,10 +173,8 @@ class SpringerMembrane(WaterTransportMembrane):
         # function results in instabilities. Thus, the other formulation as
         # provided by Nguyen and White (1993) is used below.
 
-        # Average water content for the diffusion coefficient calculation
-        wc_avg = np.average(self.water_content, axis=0)
-        # Minimum water content of the cathode and anode side
-        wc_min = np.min(self.water_content, axis=0)
+        wc_avg = self.avg_water_content
+
         diff_coeff_star = \
             np.where(wc_avg <= 2.0, 1.0,
                      np.where(wc_avg <= 3.0, 1.0 + 2.0 * (wc_avg - 2.0),
@@ -208,10 +210,9 @@ class SpringerMembrane(WaterTransportMembrane):
         Calculates the membrane resistivity for Nafion 117
         according to Springer et al. (1991).
         """
-        avg_water_content = np.average(self.water_content, axis=0)
         # water_content[water_content < 1.0] = 1.0
         # Membrane conductivity [S/m]
-        mem_cond = (0.005139 * avg_water_content - 0.00326) \
+        mem_cond = (0.005139 * self.avg_water_content - 0.00326) \
             * np.exp(1268.0 * (0.0033 - 1. / self.temp)) * 1e2
         # Area-specific membrane resistance [Ohm-m²]
         self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
@@ -288,7 +289,7 @@ class YeWang2007Membrane(SpringerMembrane):
         # Under-relaxation factor for water flux update
         self.urf = membrane_dict.get('underrelaxation_factor', 0.8)
 
-    def calc_ionic_resistance(self, *args):
+    def calc_ionic_resistance(self, humidity, *args):
         """
         Equation 13 in:
         X. Ye, C.-Y. Wang. „Measurement of Water Transport Properties Through
@@ -296,10 +297,10 @@ class YeWang2007Membrane(SpringerMembrane):
         Electrochemical Society 154, Nr. 7 (21. Mai 2007): B676.
         https://doi.org/10.1149/1.2737379.
         """
-        avg_water_content = np.average(self.water_content, axis=0)
+        avg_humidity = np.average(humidity, axis=0)
         # water_content[water_content < 1.0] = 1.0
         # Membrane conductivity [S/m]
-        mem_cond = 0.12 * avg_water_content ** 2.80 * 1e2
+        mem_cond = 0.12 * avg_humidity ** 2.80 * 1e2
         # Area-specific membrane resistance [Ohm-m²]
         self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
         # Absolute resistance [Ohm]

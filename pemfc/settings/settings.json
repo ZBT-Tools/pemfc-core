@@ -1,6 +1,6 @@
 {
     "stack": {
-        "cell_number": 10,
+        "cell_number": 1,
         "heat_power": 0.0,
         "cool_flow": true,
         "calc_temperature": true,
@@ -13,7 +13,7 @@
         "underrelaxation_factor": 0.5,
         "current_control": true,
         "operation_control": "Current",
-        "elements": 20,
+        "elements": 50,
         "current_density": 20000.0,
         "average_cell_voltage": 0.5,
         "channel_land_discretization": false
@@ -27,7 +27,7 @@
     "membrane": {
         "type": "YeWang2007",
         "thickness": 1.5e-05,
-        "underrelaxation_factor": 0.95,
+        "underrelaxation_factor": 0.8,
         "ionic_conductivity": 15.0,
         "basic_resistance": 4.3e-05,
         "temperature_coefficient": 7e-08,
