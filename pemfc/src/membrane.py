@@ -105,8 +105,7 @@ class WaterTransportMembrane(Membrane, ABC):
 
         # self.vapour_coeff = membrane_dict['vapour_transport_coefficient']
         # self.acid_group_conc = membrane_dict['acid_group_concentration']
-        # Under-relaxation factor for water flux update
-        self.urf = membrane_dict.get('underrelaxation_factor', 0.95)
+
         # Water cross flux through the membrane
         self.water_content = np.zeros((2, len(self.dx)))
         self.water_flux = np.zeros(self.dx.shape)
@@ -153,6 +152,8 @@ class SpringerMembrane(WaterTransportMembrane):
     """
     def __init__(self, membrane_dict, dx, **kwargs):
         super().__init__(membrane_dict, dx, **kwargs)
+        # Under-relaxation factor for water flux update
+        self.urf = membrane_dict.get('underrelaxation_factor', 0.95)
 
     def calc_water_content(self, humidity):
         self.water_content[:] = \
@@ -284,6 +285,8 @@ class YeWang2007Membrane(SpringerMembrane):
     """
     def __init__(self, membrane_dict, dx, **kwargs):
         super().__init__(membrane_dict, dx, **kwargs)
+        # Under-relaxation factor for water flux update
+        self.urf = membrane_dict.get('underrelaxation_factor', 0.8)
 
     def calc_ionic_resistance(self, *args):
         """
