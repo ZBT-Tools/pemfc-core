@@ -7,7 +7,7 @@ from . import layers as layers, constants, \
     global_functions as g_func, flow_field as ff, \
     channel as chl
 from .fluid import fluid as fluids
-from . import electrochemistry_model as electrochem
+from . import electrochemistry as electrochem
 
 warnings.filterwarnings("ignore")
 
@@ -225,4 +225,37 @@ class HalfCell:
         self.v_loss[:] = self.electrochemistry.v_loss \
             + bpp_loss \
             + gde_loss
+
+    @staticmethod
+    def calc_faraday_flow(fluid, current, stoichiometry, reaction_stoichiometry,
+                          charge_number, reactant_index=0):
+        """
+        Calculates the corresponding species mass and molar flows
+        :param fluid: object of type GasMixture, CanteraGasMixture, TwoPhaseMixture,
+        or CanteraTwoPhaseMixture from module pemfc.fluid.fluid
+        :param current: scalar value providing electrical current (A)
+        :param stoichiometry: scalar for flow stoichiometry
+        :param reaction_stoichiometry: scalar for reaction stoichiometry,
+        moles of reactants used in reaction balance
+        :param charge_number: number of electron charges transferred in reaction balance
+        :param reactant_index: index in species array for the reactant species
+        :return: mass_flow, mole_flow (species array according to fluid object)
+        """
+        if not isinstance(fluid, (fluids.GasMixture, fluids.TwoPhaseMixture,
+                                  fluids.CanteraGasMixture, fluids.CanteraTwoPhaseMixture)):
+            raise TypeError('Parameter "fluid" must be object of type GasMixture, '
+                            ' TwoPhaseMixture, CanteraGasMixture, or CanteraTwoPhaseMixture '
+                            'from module pemfc.fluid.fluid')
+        mole_flow = np.zeros(fluid.n_species)
+
+        mole_flow[reactant_index] = current * stoichiometry \
+                                    * abs(reaction_stoichiometry) / (
+                                                charge_number * constants.FARADAY)
+        composition = fluid.mole_fraction[:, 0]
+        for i in range(len(mole_flow)):
+            if i != reactant_index:
+                mole_flow[i] = mole_flow[reactant_index] \
+                               * composition[i] / composition[reactant_index]
+        mass_flow = mole_flow * fluid.species_mw
+        return mass_flow, mole_flow
 

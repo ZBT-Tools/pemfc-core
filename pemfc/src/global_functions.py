@@ -35,7 +35,10 @@ def full(shape, value):
 
 def zeros_like(array):
     """faster than native numpy version"""
-    return np.zeros(array.shape)
+    if isinstance(array, np.ndarray):
+        return np.zeros(array.shape)
+    else:
+        return 0.0
 
 
 def fill_transposed(in_array, shape):
@@ -90,6 +93,30 @@ def add_source(var, source, direction=1, tri_mtx=None):
     return var
 
 
+def np_log(array):
+    """
+    Use numpy log function and set zero values where solution is not defined
+    """
+    return np.log(array, out=zeros_like(array), where=(array != 0))
+
+
+def np_div(array1, array2):
+    """
+    Use numpy divide function and set zero values where solution is not defined
+    """
+    if isinstance(array1, np.ndarray):
+        return np.divide(array1, array2, out=zeros_like(array1),
+                         where=(array2 != 0))
+    elif isinstance(array2, np.ndarray):
+        return np.divide(array1, array2, out=zeros_like(array2),
+                         where=(array2 != 0))
+    else:
+        if array2 == 0.0:
+            return 0.0
+        else:
+            return array1 / array2
+
+
 def exponential_distribution(y_avg, nx, a=1.0, b=0.0):
     n_nodes = nx + 1
     x = np.linspace(0, 1, n_nodes)
@@ -106,14 +133,14 @@ def fill_last_zeros(array, axis=-1, axis_sum=None):
         axis_sum = np.abs(np.sum(array, axis=0))
     shape = array.shape
     prev = np.arange(shape[-1])
-    prev[axis_sum < constants.SMALL] = 0
+    prev[np.nonzero(axis_sum < constants.SMALL)] = 0
     prev = np.maximum.accumulate(prev)
     return array[:, prev]
 
 
 def fill_first_zeros(array, axis=-1, axis_sum=None):
     array = np.flip(array, axis)
-    return np.flip(fill_last_zeros(array, axis), axis, axis_sum)
+    return np.flip(fill_last_zeros(array, axis, np.flip(axis_sum, axis)), axis)
 
 
 def fill_zero_sum(array, axis=-1, axis_sum=None):
@@ -153,7 +180,7 @@ def fill_zero_sum(array, axis=-1, axis_sum=None):
 #
 #     mask_array = np.sum(np.abs(array), axis) * np.ones(array.shape)
 #     averaged = ndimage.generic_filter(array, np.nanmean, footprint=footprint,
-#                                       mode='constant', cval=np.NaN)
+#                                       reference_velocity='constant', cval=np.NaN)
 #     return np.where(mask_array < constants.SMALL, averaged, array)
 
 
@@ -206,7 +233,7 @@ def calc_temp_heat_transfer(wall_temp, fluid_temp, capacity_rate, heat_coeff,
                 delta_temp = wall_temp[i] - fluid_avg
             else:
                 temp_diff_ratio = (wall_temp[i] - fluid_avg) \
-                    / (wall_temp[i] - fluid_in)
+                                  / (wall_temp[i] - fluid_in)
                 if temp_diff_ratio > 0.0:
                     delta_temp = wall_temp[i] - fluid_avg
                 else:
@@ -267,4 +294,40 @@ def sup(char):
     return char.translate(res)
 
 
+def calc_rel_error(array1, array2):
+    """
+    Calculates relative squared error sum of array1 and array2 (same shapes)
+    :param array1: 1d array of values
+    :param array2: 1d array of values
+    :return: scalar sum of relative squared errors
+    """
+    array_diff = array1 - array2
+    average_array = (array1 + array2) / 2.0
+    rel_error_array = np_div(array_diff, average_array)
+    return np.inner(array_diff, array_diff) / len(array1)
+
+
+def calc_rrmse(array1, array2):
+    """
+    Calculates relative root mean squared error of array1 and array2 (same shapes)
+    :param array1: 1d array of values
+    :param array2: 1d array of values
+    :return: scalar sum of relative squared errors
+    """
+    array_diff = array1 - array2
+    diff_squared_sum = np.inner(array_diff, array_diff)
+    array2_squared_sum = np.inner(array2, array2)
+    return np.sqrt(np_div(diff_squared_sum, array2_squared_sum))
+
+
+
+def calc_mean_squared_error(array1, array2):
+    """
+    Calculates mean squared error of array1 and array2 (same shapes)
+    :param array1: 1d array of values
+    :param array2: 1d array of values
+    :return: scalar mean squared error
+    """
+    array_diff = array1 - array2
+    return np.inner(array_diff, array_diff) / len(array1)
 

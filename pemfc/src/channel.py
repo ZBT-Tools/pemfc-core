@@ -57,7 +57,7 @@ class Channel(ABC, oo.OutputObject):
         self.id_out = None
         self.flow_direction = channel_dict['flow_direction']
 
-        self.pressure_recovery = False
+        self.pressure_recovery_factor = np.ones(self.n_ele) * 0.5
 
         # Geometry
         if channel_dict.keys() >= {'width', 'height'}:
@@ -105,16 +105,21 @@ class Channel(ABC, oo.OutputObject):
             zeta_dict = \
                 {'type': 'Constant', 'value': n_bends * zeta_bends / self.n_ele}
             self.zetas.append(fr.FlowResistance(self, zeta_dict))
-        # additional resistances (constant or flow splitting)
-        zeta_split = channel_dict.get('flow_split_factor', 0.0)
-        zeta_const = channel_dict.get('constant_friction_factor', 0.0)
-        if zeta_split > 0.0:
-            zeta_dict = \
-                {'type': 'Junction', 'value': zeta_const, 'factor': zeta_split}
-            self.zetas.append(fr.FlowResistance(self, zeta_dict))
-        elif zeta_const > 0.0:
-            self.zetas.append(fr.FlowResistance(self, {'type': 'Constant',
-                                                       'value': zeta_const}))
+        # Additional resistances (constant or flow splitting)
+        if 'flow_resistances' in channel_dict:
+            if isinstance(channel_dict['flow_resistances'], (list, tuple)):
+                for zeta_dict in channel_dict['flow_resistances']:
+                    self.zetas.append(fr.FlowResistance(self, zeta_dict))
+        # if 'friction_coefficients' in channel_dict:
+        #     zeta_dict = \
+        #         {'type': 'Junction', 'coefficients':
+        #             channel_dict['friction_coefficients']}
+        #     self.zetas.append(fr.FlowResistance(self, zeta_dict))
+        #
+        # zeta_const = channel_dict.get('constant_friction_factor', 0.0)
+        # if zeta_const > 0.0:
+        #     self.zetas.append(fr.FlowResistance(self, {'type': 'Constant',
+        #                                                'value': zeta_const}))
 
         # Flow
         self.velocity = np.zeros(self.n_nodes)
@@ -183,7 +188,7 @@ class Channel(ABC, oo.OutputObject):
 
     @property
     def diameter(self):
-        return self._diameter
+        return self.d_h
 
     @property
     def length(self):
@@ -213,6 +218,13 @@ class Channel(ABC, oo.OutputObject):
                wall_temp=None, heat_flux=None, update_mass=True,
                update_flow=True, update_heat=True, update_fluid=True,
                enthalpy_source=None, **kwargs):
+        if mass_flow_in is not None:
+            if np.sum(mass_flow_in) < 0.0:
+                id_in = int(self.id_in)
+                id_out = int(self.id_out)
+                self.id_in = id_out
+                self.id_out = id_in
+                mass_flow_in = np.abs(mass_flow_in)
 
         if update_mass or mass_flow_in is not None or mass_source is not None:
             self.update_mass(mass_flow_in=mass_flow_in, mass_source=mass_source)
@@ -226,7 +238,7 @@ class Channel(ABC, oo.OutputObject):
                              enthalpy_source=enthalpy_source,
                              channel_factor=kwargs.get('channel_factor', 1.0))
 
-    def flow_resistance_sum(self):
+    def calculate_flow_resistance_sum(self):
         """ Update and return the sum of flow resistances (zeta-values) """
         zeta_sum = 0.0
         for zeta in self.zetas:
@@ -339,25 +351,41 @@ class Channel(ABC, oo.OutputObject):
             raise ValueError('velocity and density arrays '
                              'must be of equal shape')
         # calculate resistance based pressure drop
-        dp_res = np.zeros(self.n_ele)
+        dp_zeta = np.zeros(self.n_ele)
         try:
             for zeta in self.zetas:
                 zeta.update()
-                dp_res += zeta.calc_pressure_drop()
+                dp_zeta += zeta.calc_pressure_drop()
         except FloatingPointError:
             raise FloatingPointError('check if channel geometry is '
                                      'adequate for flow conditions in {}'.
                                      format(self.name))
 
-        # calculate influence of dynamic pressure variation due to velocity
+        # Calculate influence of dynamic pressure variation due to velocity
         # changes on static pressure drop
+
+        # pressure_recovery_factor: k = (2 - beta) / 2,
+        # default: k = 0.5 for pure Bernoulli assumption
+        # as in Equation 4a in:
+        # Wang, Junye. "Theory of Flow Distribution in Manifolds".
+        # Chemical Engineering Journal 168, Nr. 3 (April 2011): 1331–45.
+        # https://doi.org/10.1016/j.cej.2011.02.050.
+
+        # and k = theta / 2 = (2 * beta - gamma) / 2
+        # as in Equation 5 and 7 in
+        # Bajura, R. A., und E. H. Jones. "Flow Distribution Manifolds".
+        # Journal of Fluids Engineering 98, Nr. 4 (1. Dezember 1976): 654–65.
+        # https://doi.org/10.1115/1.3448441.
+        # theta = 1.05 for inlet manifold and 2.60 for outlet manifold was used
+        # to compare to experimental data in above reference (equations 29 and 30)
+
         rho1 = self.fluid.density[:-1]
         rho2 = self.fluid.density[1:]
         v1 = self.velocity[:-1]
         v2 = self.velocity[1:]
-        dp_dyn = 0.5 * (rho2 * v2 ** 2.0 - rho1 * v1 ** 2.0) \
-            * self.flow_direction
-        return dp_res + dp_dyn
+        dp_dyn = self.pressure_recovery_factor \
+            * (rho2 * v2 ** 2.0 - rho1 * v1 ** 2.0) * self.flow_direction
+        return dp_zeta + dp_dyn
 
     def calc_pressure(self):
         """
@@ -684,7 +712,7 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         self.mole_flow_gas_total[:] = \
             self.mole_flow_total - np.sum(self.mole_flow_liq, axis=0)
         self.mass_flow_gas_total[:] = \
-            self.mass_flow_total - - np.sum(self.mass_flow_liq, axis=0)
+            self.mass_flow_total - np.sum(self.mass_flow_liq, axis=0)
         # self.mole_flow_gas[:] = \
         #     self.mole_flow_gas_total * self.fluid.gas.mole_fraction
         # self.mass_flow_gas[:] = \

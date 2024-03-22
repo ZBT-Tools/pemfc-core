@@ -4,11 +4,16 @@ import os
 import shutil
 from itertools import cycle, islice
 import matplotlib
+# configure matplotlib backend here
+import sys
+main_name = sys.argv[0]
+if 'main_app.py' in main_name:
+    matplotlib.use('Agg')
+
 import matplotlib.pyplot as plt
 import timeit
 import json
 from json import JSONEncoder
-import sys
 
 # local module imports
 from . import interpolation as ip
@@ -16,10 +21,7 @@ from . import global_functions as g_func
 from . import stack as stack
 # from ..data import input_dicts
 
-# configure backend here
-main_name = sys.argv[0]
-if 'main_app.py' in main_name:
-    matplotlib.use('TkAgg')
+
 
 # globals
 FONT_SIZE = 14
@@ -458,12 +460,12 @@ class Output:
         plot_path = os.path.join(case_path, 'plots')
         if not os.path.exists(csv_path):
             os.makedirs(csv_path)
-        # else:
-        #     self.clean_directory(csv_path)
+        else:
+            self.clean_directory(csv_path)
         if not os.path.exists(plot_path):
             os.makedirs(plot_path)
-        # else:
-        #     self.clean_directory(plot_path)
+        else:
+            self.clean_directory(plot_path)
 
         def save_oo_collection(oo_collection, x_values, x_label, **kwargs):
             # data_dict = kwargs.get('data_dict', {})

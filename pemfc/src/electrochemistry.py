@@ -242,3 +242,5 @@ class ElectrochemistryModel(ABC):
             return self.calc_electrode_loss(curr_den, channel) - over_pot
         return np.asarray(optimize.newton(func, current_density,
                                           args=(v_loss,)))
+
+

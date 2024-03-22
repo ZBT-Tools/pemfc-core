@@ -1,3 +1,4 @@
-matplotlib>=3.5.2
-numpy>=1.22.4
-scipy>=1.8.1
+matplotlib>=3.8.0
+numpy>=1.26.3
+scipy>=1.11.4
+setuptools>=68.2.2

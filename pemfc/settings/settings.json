@@ -7,13 +7,13 @@
         "calc_current_density": true
     },
     "simulation": {
-        "maximum_iteration": 100,
+        "maximum_iteration": 500,
         "minimum_iteration": 3,
         "convergence_criteria": 1e-07,
-        "underrelaxation_factor": 0.7,
+        "underrelaxation_factor": 0.5,
         "current_control": true,
         "operation_control": "Current",
-        "elements": 10,
+        "elements": 20,
         "current_density": 20000.0,
         "average_cell_voltage": 0.5,
         "channel_land_discretization": false
@@ -25,8 +25,9 @@
         "thermoneutral_voltage": 1.25
     },
     "membrane": {
-        "type": "Springer",
+        "type": "YeWang2007",
         "thickness": 1.5e-05,
+        "underrelaxation_factor": 0.95,
         "ionic_conductivity": 15.0,
         "basic_resistance": 4.3e-05,
         "temperature_coefficient": 7e-08,
@@ -119,7 +120,7 @@
         },
         "flow_circuit": {
             "name": "Cathode Flow Circuit",
-            "type": "UpdatedKoh",
+            "type": "VariableResistance",
             "shape": "U",
             "calc_distribution": true,
             "tolerance": 1e-07,
@@ -239,7 +240,7 @@
         },
         "flow_circuit": {
             "name": "Anode Flow Circuit",
-            "type": "UpdatedKoh",
+            "type": "VariableResistance",
             "shape": "U",
             "calc_distribution": true,
             "tolerance": 1e-07,
@@ -298,7 +299,7 @@
     },
     "coolant_flow_circuit": {
         "name": "Coolant Flow Circuit",
-        "type": "UpdatedKoh",
+        "type": "VariableResistance",
         "shape": "U",
         "calc_distribution": true,
         "tolerance": 1e-07,
