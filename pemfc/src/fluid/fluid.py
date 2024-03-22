@@ -74,6 +74,13 @@ class DiscreteFluid(ABC, OutputObject):
 
     @abstractmethod
     def update(self, temperature, pressure, *args, **kwargs):
+        """
+        Update local fluid properties depending on temperature and pressure input
+        :param temperature: one-dimensional temperature array
+        :param pressure: one-dimensional pressure array
+        :param args: additional args for concrete implementations
+        :param kwargs: additional keyword arguments for concrete implementations
+        """
         if temperature is None:
             temperature = self._temperature
         if pressure is None:
@@ -235,6 +242,7 @@ class ConstantFluid(DiscreteFluid):
             self.property['thermal_conductivity'][:] = \
                 fluid_props.thermal_conductivity
         self.add_print_variables(self.print_variables)
+        self.update(self._temperature, self._pressure)
 
     def update(self, temperature=None, pressure=None, *args, **kwargs):
         super().update(temperature, pressure)
@@ -257,6 +265,7 @@ class IncompressibleFluid(DiscreteFluid):
                             'IncompressibleProperties')
         super().__init__(array_shape, name, temperature, pressure, **kwargs)
         self.add_print_variables(self.print_variables)
+        self.update(self._temperature, self._pressure)
 
     def update(self, temperature=None, pressure=None, *args, **kwargs):
         super().update(temperature, pressure)
@@ -335,13 +344,14 @@ class GasMixture(DiscreteFluid):
             gf.array_vector_multiply(np.ones(self.array_shape_2d),
                                      mass_fraction_init)
         self._concentration = np.zeros(self.array_shape_2d)
-        if isinstance(type(self), GasMixture):
-            self._calc_properties(self._temperature, self._pressure,
-                                  method='ideal')
-            self._concentration[:] = self._calc_concentration()
-        # self.add_print_data(self.mole_fraction, 'Mole Fraction',
-        #                     sub_names=self.species.names)
-        # self.add_print_variables(self.print_variables)
+
+        self.update(self._temperature, self._pressure,)
+
+        print_data = kwargs.get('print_data', True)
+        if print_data:
+            self.add_print_data(self.mole_fraction, 'Mole Fraction',
+                                sub_names=self.species.names)
+            self.add_print_variables(self.print_variables)
 
     @property
     def mole_fraction(self):
@@ -560,6 +570,7 @@ class CanteraGasMixture(DiscreteFluid):
             self.solution.molecular_weights[self.species_ids] * 1e-3
         self._mole_fraction = self._get_composition()
         self._mass_fraction = self._get_composition(mole_fractions=False)
+        self.update(temperature=self._temperature, pressure=self._pressure)
 
     def update(self, temperature=None, pressure=None, mole_composition=None,
                *args, **kwargs):
@@ -648,16 +659,14 @@ class TwoPhaseMixture(DiscreteFluid):
                             'can only be provided as dictionary with species '
                             'name as key and FluidProperties object as value '
                             'for the liquid properties')
-        self.liquid = IncompressibleFluid(self.array_shape,
-                                          name + ': Liquid Phase',
-                                          fluid_props=liquid_props,
-                                          temperature=self._temperature,
-                                          pressure=self._pressure)
-        self.gas = GasMixture(self.array_shape, name + ': Gas Phase',
-                              species_dict=gas_species_dict,
-                              mole_fractions=mole_fractions,
-                              temperature=self._temperature,
-                              pressure=self._pressure)
+        self.liquid = IncompressibleFluid(
+            self.array_shape, name + ': Liquid Phase', fluid_props=liquid_props,
+            temperature=self._temperature, pressure=self._pressure)
+        self.gas = GasMixture(
+            self.array_shape, name + ': Gas Phase',
+            species_dict=gas_species_dict, mole_fractions=mole_fractions,
+            temperature=self._temperature, pressure=self._pressure,
+            print_data=False)
         ids_pc = [self.species.names.index(name) for name in
                   phase_change_species_names]
         if len(ids_pc) > 1:
@@ -706,6 +715,62 @@ class TwoPhaseMixture(DiscreteFluid):
         # self.add_print_data(self.humidity, 'Humidity')
         # print(self.print_data)
         # print(self.gas.print_data)
+        self.update(temperature=self._temperature, pressure=self._pressure)
+
+    def update(self, temperature=None, pressure=None,
+               mole_composition=None, gas_mole_composition=None,
+               method='ideal', *args, **kwargs):
+        super().update(temperature, pressure)
+        if mole_composition is not None:
+            if np.max(mole_composition) > constants.SMALL:
+                mole_composition[mole_composition < constants.SMALL] = 0.0
+                self._mole_fraction[:] = \
+                    self.gas.calc_mole_fraction(mole_composition)
+
+        self.mw[:] = self.gas.calc_molar_mass(self.mole_fraction)
+        test = self.mw[0]
+        self._mass_fraction[:] = \
+            self.gas.calc_mass_fraction(self._mole_fraction, self.mw)
+        self.saturation_pressure[:] = \
+            self.phase_change_species.calc_saturation_pressure(self._temperature)
+        if gas_mole_composition is None \
+                or np.max(gas_mole_composition) < constants.SMALL:
+            gas_mole_composition = self._calc_concentration()
+        if mole_composition is None:
+            mole_composition = gas_mole_composition
+        self.gas.update(self._temperature,
+                        self._pressure, gas_mole_composition, method)
+        self.liquid.update(self._temperature, self._pressure)
+        self.liquid_mole_fraction[:] = \
+            np.sum(mole_composition, axis=0) \
+            - np.sum(gas_mole_composition, axis=0)
+        self.liquid_mole_fraction[self.liquid_mole_fraction < 0.0] = 0.0
+        self.liquid_mass_fraction = \
+            np.sum(mole_composition * self.mw, axis=0) \
+            - np.sum(gas_mole_composition * self.gas.mw, axis=0)
+        self.liquid_mass_fraction[self.liquid_mass_fraction < 0.0] = 0.0
+        self.surface_tension[:] = self.calc_surface_tension()
+
+        # dry_conc = np.copy(gas_conc)
+        # dry_conc[self.id_pc] = 0.0
+        # total_conc = dry_conc
+        # total_conc[self.id_pc] = np.sum(dry_conc, axis=0) \
+        #     * self.mole_fraction[self.id_pc] \
+        #     / (1.0 - self.mole_fraction[self.id_pc])
+
+        # try:
+        #     self.liquid_mole_fraction[:] = \
+        #         1.0 - np.sum(gas_conc, axis=0) / np.sum(total_conc, axis=0)
+        # except FloatingPointError:
+        #     raise FloatingPointError('error in calculation of total '
+        #                              'concentration, should not be zero')
+        #
+        # self.liquid_mass_fraction[:] = \
+        #     1.0 - np.sum(gas_conc * self.gas.mw, axis=0) \
+        #     / np.sum(total_conc * self.mw, axis=0)
+
+        self._calc_properties(temperature, pressure, method)
+        self._calc_humidity()
 
     def rescale(self, new_array_shape):
         self.gas.rescale(new_array_shape)
@@ -767,61 +832,6 @@ class TwoPhaseMixture(DiscreteFluid):
         super()._set_name(name)
         self.gas.name = self.name + ': Gas Phase'
         self.liquid.name = self.name + ': Liquid Phase'
-
-    def update(self, temperature=None, pressure=None,
-               mole_composition=None, gas_mole_composition=None,
-               method='ideal', *args, **kwargs):
-        super().update(temperature, pressure)
-        if mole_composition is not None:
-            if np.max(mole_composition) > constants.SMALL:
-                mole_composition[mole_composition < constants.SMALL] = 0.0
-                self._mole_fraction[:] = \
-                    self.gas.calc_mole_fraction(mole_composition)
-
-        self.mw[:] = self.gas.calc_molar_mass(self.mole_fraction)
-        test = self.mw[0]
-        self._mass_fraction[:] = \
-            self.gas.calc_mass_fraction(self._mole_fraction, self.mw)
-        self.saturation_pressure[:] = \
-            self.phase_change_species.calc_saturation_pressure(self._temperature)
-        if gas_mole_composition is None \
-                or np.max(gas_mole_composition) < constants.SMALL:
-            gas_mole_composition = self._calc_concentration()
-        if mole_composition is None:
-            mole_composition = gas_mole_composition
-        self.gas.update(self._temperature,
-                        self._pressure, gas_mole_composition, method)
-        self.liquid.update(self._temperature, self._pressure)
-        self.liquid_mole_fraction[:] = \
-            np.sum(mole_composition, axis=0) \
-            - np.sum(gas_mole_composition, axis=0)
-        self.liquid_mole_fraction[self.liquid_mole_fraction < 0.0] = 0.0
-        self.liquid_mass_fraction = \
-            np.sum(mole_composition * self.mw, axis=0) \
-            - np.sum(gas_mole_composition * self.gas.mw, axis=0)
-        self.liquid_mass_fraction[self.liquid_mass_fraction < 0.0] = 0.0
-        self.surface_tension[:] = self.calc_surface_tension()
-
-        # dry_conc = np.copy(gas_conc)
-        # dry_conc[self.id_pc] = 0.0
-        # total_conc = dry_conc
-        # total_conc[self.id_pc] = np.sum(dry_conc, axis=0) \
-        #     * self.mole_fraction[self.id_pc] \
-        #     / (1.0 - self.mole_fraction[self.id_pc])
-
-        # try:
-        #     self.liquid_mole_fraction[:] = \
-        #         1.0 - np.sum(gas_conc, axis=0) / np.sum(total_conc, axis=0)
-        # except FloatingPointError:
-        #     raise FloatingPointError('error in calculation of total '
-        #                              'concentration, should not be zero')
-        #
-        # self.liquid_mass_fraction[:] = \
-        #     1.0 - np.sum(gas_conc * self.gas.mw, axis=0) \
-        #     / np.sum(total_conc * self.mw, axis=0)
-
-        self._calc_properties(temperature, pressure, method)
-        self._calc_humidity()
 
     def calc_surface_tension(self, temperature=None):
         if temperature is None:
@@ -920,6 +930,9 @@ class TwoPhaseMixture(DiscreteFluid):
         self.humidity[:] = \
             self._mole_fraction[self.id_pc] * self._pressure / p_sat
 
+        # Simplification of limiting humidity to 100%
+        self.humidity[self.humidity > 1.0] = 1.0
+
     def calc_vaporization_enthalpy(self, temperature=None):
         if temperature is None:
             temperature = self._temperature
@@ -964,19 +977,7 @@ class CanteraTwoPhaseMixture(CanteraGasMixture):
         self.saturation_pressure = np.zeros(array_shape)
         super().__init__(array_shape, name, species_dict, mole_fractions,
                          temperature, pressure, **kwargs)
-
-    def calc_humid_composition(self, humidity, temperature, pressure,
-                               dry_molar_composition, id_pc=-1):
-        if humidity > 1.0:
-            raise ValueError('relative humidity must not exceed 1.0')
-        self.water_base.TP = temperature, pressure
-        molar_fraction_water = humidity * self.water_base.P_sat / pressure
-        humid_composition = np.asarray(dry_molar_composition)
-        humid_composition[id_pc] = 0.0
-        humid_composition /= np.sum(humid_composition, axis=0)
-        humid_composition *= (1.0 - molar_fraction_water)
-        humid_composition[id_pc] = molar_fraction_water
-        return humid_composition
+        self.update(self._temperature, self._pressure, mole_fractions)
 
     def update(self, temperature=None, pressure=None,
                mole_composition=None, gas_mole_composition=None,
@@ -992,6 +993,19 @@ class CanteraTwoPhaseMixture(CanteraGasMixture):
         # self.saturation_pressure[:] = sat_pressure.reshape(self.array_shape)
         self._calc_humidity()
         # self.water.TP = self._temperature, self._pressure
+
+    def calc_humid_composition(self, humidity, temperature, pressure,
+                               dry_molar_composition, id_pc=-1):
+        if humidity > 1.0:
+            raise ValueError('relative humidity must not exceed 1.0')
+        self.water_base.TP = temperature, pressure
+        molar_fraction_water = humidity * self.water_base.P_sat / pressure
+        humid_composition = np.asarray(dry_molar_composition)
+        humid_composition[id_pc] = 0.0
+        humid_composition /= np.sum(humid_composition, axis=0)
+        humid_composition *= (1.0 - molar_fraction_water)
+        humid_composition[id_pc] = molar_fraction_water
+        return humid_composition
 
     def _calc_humidity(self):
         """
