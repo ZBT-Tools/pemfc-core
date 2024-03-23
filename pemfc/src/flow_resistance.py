@@ -199,13 +199,21 @@ class JunctionFlowResistance(FlowResistance, ABC):
     Reference location is always at the higher velocity in the main
     channel, i.e. the combined flow velocity.
     Concrete implementations of this class must define the method
-    "calc_resistance_values"
+    "calc_resistance_values".
+    The branch diameter must be provided as the parameter
+    "branch_manifold_diameter_ratio" in the zeta_dict dictionary. A optional
+    angle between branch and manifold can be supplied, the default value is 90°.
 
     :return: element-wise additional pressure drop due to flow branching off or
     combining via T-junctions
     """
     def __init__(self, channel, zeta_dict, **kwargs):
         super().__init__(channel, zeta_dict, **kwargs)
+        diameter_ratio = zeta_dict["branch_manifold_diameter_ratio"]
+        self.branch_diameter = diameter_ratio * self.channel.diameter
+        self.angle = zeta_dict.get("angle", 90.0) * np.pi / 180.0
+        self.area_ratio = self.channel.cross_area \
+            / ((0.5 * self.branch_diameter) ** 2.0 * np.pi)
         self.dict = zeta_dict
         # self.coeffs = zeta_dict['coefficients']
         self.value = np.zeros(self.channel.n_ele)
@@ -362,13 +370,11 @@ class RennelsTeeMainFlowResistance(JunctionFlowResistance):
     https://doi.org/10.1002/9781118275276.
     Equations (16.5) for dividing flow and Equation (16.22) for combining
     flow to calculate the resistance values in the main run are implemented.
-    The branch diameter must be provided as the parameter "branch_diameter"
-    in the zeta_dict dictionary. Optionally, a fitting radius with the
-    parameter "fitting_radius" can be supplied. The default value is zero.
+    Optionally, a fitting radius with the parameter "fitting_radius" can be
+    supplied. The default value is zero.
     """
     def __init__(self, channel, zeta_dict, **kwargs):
         super().__init__(channel, zeta_dict, **kwargs)
-        self.branch_diameter = zeta_dict["branch_diameter"]
         self.fitting_radius = zeta_dict.get("fitting_radius", 0.0)
         r_to_d = self.fitting_radius / self.branch_diameter
         self.C_M = 0.23 + 1.46 * r_to_d - 2.75 * r_to_d ** 2.0 \
@@ -423,9 +429,6 @@ class RennelsTeeBranchFlowResistance(RennelsTeeMainFlowResistance):
     Equations (16.13) for dividing flow and Equation (16.30) for combining
     flow to calculate the resistance values for the additional pressure drop
     from the main flow to the branch are implemented.
-    The branch diameter must be provided as the parameter "branch_diameter"
-    in the zeta_dict dictionary. Optionally, a fitting radius with the
-    parameter "fitting_radius" can be supplied. The default value is zero.
     """
     def __init__(self, channel, zeta_dict, **kwargs):
         super().__init__(channel, zeta_dict, **kwargs)
@@ -487,16 +490,8 @@ class BassettTeeMainFlowResistance(JunctionFlowResistance):
     https://doi.org/10.1177/095440620121500801.
     Equations (15) for dividing flow and Equation for Case K11 from Table 2 for
     combining flow to calculate the resistance values in the main run are
-    implemented.The branch diameter must be provided as the parameter
-    "branch_diameter" in the zeta_dict dictionary. Optionally, a fitting angle
-    with the parameter "angle" can be supplied. The default value is 90°.
+    implemented.
     """
-    def __init__(self, channel, zeta_dict, **kwargs):
-        super().__init__(channel, zeta_dict, **kwargs)
-        self.branch_diameter = zeta_dict["branch_diameter"]
-        self.angle = zeta_dict.get("angle", 90.0) * np.pi / 180.0
-        self.area_ratio = self.channel.cross_area \
-            / ((0.5 * self.branch_diameter) ** 2.0 * np.pi)
 
     def update_resistance_values(self):
         """
@@ -547,14 +542,10 @@ class BassettTeeBranchFlowResistance(BassettTeeMainFlowResistance):
     Proceedings of the Institution of Mechanical Engineers,
     Part C: Journal of Mechanical Engineering Science, August 1, 2001.
     https://doi.org/10.1177/095440620121500801.
-    Equation (27) for dividing flow and Equation (12) for
-    combining flow to calculate the resistance values in the main run are
-    implemented.The branch diameter must be provided as the parameter
-    "branch_diameter" in the zeta_dict dictionary. Optionally, a fitting angle
-    with the parameter "angle" can be supplied. The default value is 90°.
+    Equation (27) for dividing flow and Equation (12) for combining flow to
+    calculate the resistance values in the main run are
+    implemented.
     """
-    def __init__(self, channel, zeta_dict, **kwargs):
-        super().__init__(channel, zeta_dict, **kwargs)
 
     def update_resistance_values(self):
         """
@@ -603,17 +594,10 @@ class IdelchikTeeMainFlowResistance(JunctionFlowResistance):
     defining the "calc_resistance_values" with values from the publication:
     Idelchik, Isaak E. „Handbook of hydraulic resistance“. Washington, 1986.
     Page 282 for dividing flow and page 266 for combining flow to calculate the
-    resistance values in the main run are implemented.The branch diameter must
-    be provided as the parameter "branch_diameter" in the zeta_dict dictionary.
-    Optionally, a fitting angle with the parameter "angle" can be supplied. The
-    default value is 90°.
+    resistance values in the main run are implemented.
     """
     def __init__(self, channel, zeta_dict, **kwargs):
         super().__init__(channel, zeta_dict, **kwargs)
-        self.branch_diameter = zeta_dict["branch_diameter"]
-        self.angle = zeta_dict.get("angle", 90.0) * np.pi / 180.0
-        self.area_ratio = self.channel.cross_area \
-            / ((0.5 * self.branch_diameter) ** 2.0 * np.pi)
         cross_area = self.channel.cross_area
         if isinstance(cross_area, np.ndarray):
             self.main_area_ratio = np.zeros(self.channel.pressure.shape)
@@ -655,22 +639,15 @@ class IdelchikTeeMainFlowResistance(JunctionFlowResistance):
 
 class IdelchikTeeBranchFlowResistance(BassettTeeMainFlowResistance):
     """
-   Concrete implementation of the abstract JunctionFlowResistance class
-   defining the "calc_resistance_values" with values from the publication:
-   Idelchik, Isaak E. „Handbook of hydraulic resistance“. Washington, 1986.
-   Page 280 for dividing flow and page 266 for combining flow to calculate
-   the resistance values from the main run to the branch are implemented.
-   The branch diameter must be provided as the parameter "branch_diameter"
-   in the zeta_dict dictionary. Optionally, a fitting angle with the
-   parameter "angle" can be supplied. The default value is 90°.
-   """
+    Concrete implementation of the abstract JunctionFlowResistance class
+    defining the "calc_resistance_values" with values from the publication:
+    Idelchik, Isaak E. „Handbook of hydraulic resistance“. Washington, 1986.
+    Page 280 for dividing flow and page 266 for combining flow to calculate
+    the resistance values from the main run to the branch are implemented.
+    """
 
     def __init__(self, channel, zeta_dict, **kwargs):
         super().__init__(channel, zeta_dict, **kwargs)
-        self.branch_diameter = zeta_dict["branch_diameter"]
-        self.angle = zeta_dict.get("angle", 90.0) * np.pi / 180.0
-        self.area_ratio = self.channel.cross_area \
-            / ((0.5 * self.branch_diameter) ** 2.0 * np.pi)
         one_by_area_ratio = 1.0 / self.area_ratio
         if one_by_area_ratio < 0.2:
             self.factor = 1.0
@@ -725,15 +702,10 @@ class HuangTeeMainFlowResistance(JunctionFlowResistance):
     Exchange Membrane Fuel Cell Stacks". Energy 226 (Juli 2021): 120427.
     https://doi.org/10.1016/j.energy.2021.120427.
     Equation (30) for dividing flow and equation (31) for combining flow to
-    calculate the resistance values in the main run are implemented.The branch
-    diameter must be provided as the parameter "branch_diameter" in the
-    zeta_dict dictionary.
+    calculate the resistance values in the main run are implemented.
     """
     def __init__(self, channel, zeta_dict, **kwargs):
         super().__init__(channel, zeta_dict, **kwargs)
-        self.branch_diameter = zeta_dict["branch_diameter"]
-        self.area_ratio = self.channel.cross_area \
-            / ((0.5 * self.branch_diameter) ** 2.0 * np.pi)
         cross_area = self.channel.cross_area
         if isinstance(cross_area, np.ndarray):
             self.main_area_ratio = np.zeros(self.channel.pressure.shape)
@@ -797,13 +769,8 @@ class HuangTeeBranchFlowResistance(HuangTeeMainFlowResistance):
     Exchange Membrane Fuel Cell Stacks". Energy 226 (Juli 2021): 120427.
     https://doi.org/10.1016/j.energy.2021.120427.
     Equation (33) for dividing flow and equation (34) for combining flow to
-    calculate the resistance values in the main run are implemented.The branch
-    diameter must be provided as the parameter "branch_diameter" in the
-    zeta_dict dictionary.
+    calculate the resistance values in the main run are implemented.
     """
-
-    def __init__(self, channel, zeta_dict, **kwargs):
-        super().__init__(channel, zeta_dict, **kwargs)
 
     def update_resistance_values(self):
         """
