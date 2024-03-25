@@ -94,32 +94,7 @@ class Channel(ABC, oo.OutputObject):
         self.calculate_geometry()
 
         # Flow resistances
-        self.zetas = []
-        # basic wall resistance
-        if channel_dict.get('wall_friction', True):
-            self.zetas.append(fr.FlowResistance(self, {'type': 'WallFriction'}))
-        # resistance due to bends
-        n_bends = channel_dict.get('bend_number', 0)
-        zeta_bends = channel_dict.get('bend_friction_factor', 0.0)
-        if n_bends > 0 and zeta_bends > 0.0:
-            zeta_dict = \
-                {'type': 'Constant', 'value': n_bends * zeta_bends / self.n_ele}
-            self.zetas.append(fr.FlowResistance(self, zeta_dict))
-        # Additional resistances (constant or flow splitting)
-        if 'flow_resistances' in channel_dict:
-            if isinstance(channel_dict['flow_resistances'], (list, tuple)):
-                for zeta_dict in channel_dict['flow_resistances']:
-                    self.zetas.append(fr.FlowResistance(self, zeta_dict))
-        # if 'friction_coefficients' in channel_dict:
-        #     zeta_dict = \
-        #         {'type': 'Junction', 'coefficients':
-        #             channel_dict['friction_coefficients']}
-        #     self.zetas.append(fr.FlowResistance(self, zeta_dict))
-        #
-        # zeta_const = channel_dict.get('constant_friction_factor', 0.0)
-        # if zeta_const > 0.0:
-        #     self.zetas.append(fr.FlowResistance(self, {'type': 'Constant',
-        #                                                'value': zeta_const}))
+        self.zetas = self.create_flow_resistances(channel_dict)
 
         # Flow
         self.velocity = np.zeros(self.n_nodes)
@@ -136,6 +111,40 @@ class Channel(ABC, oo.OutputObject):
         self.add_print_data(self.temperature, 'Fluid Temperature', 'K')
         self.add_print_data(self.wall_temp, 'Wall Temperature', 'K')
         self.add_print_data(self.pressure, 'Fluid Pressure', 'Pa')
+
+    def create_flow_resistances(self, channel_dict):
+        # Basic wall resistance
+        zetas = []
+        if channel_dict.get('wall_friction', True):
+            zetas.append(fr.FlowResistance(self, {'type': 'WallFriction'}))
+
+        # Resistance due to bends
+        n_bends = channel_dict.get('bend_number', 0)
+        zeta_bends = channel_dict.get('bend_friction_factor', 0.0)
+        if n_bends > 0 and zeta_bends > 0.0:
+            zeta_dict = \
+                {'type': 'Constant', 'value': n_bends * zeta_bends / self.n_ele}
+            zetas.append(fr.FlowResistance(self, zeta_dict))
+
+        if 'junction_resistance_model' in channel_dict:
+            zeta_dict = channel_dict['junction_resistance_model']
+            zetas.append(fr.FlowResistance(self, zeta_dict))
+        # Additional resistances (constant or flow splitting)
+        if 'flow_resistances' in channel_dict:
+            if isinstance(channel_dict['flow_resistances'], (list, tuple)):
+                for zeta_dict in channel_dict['flow_resistances']:
+                    zetas.append(fr.FlowResistance(self, zeta_dict))
+        # if 'friction_coefficients' in channel_dict:
+        #     zeta_dict = \
+        #         {'type': 'Junction', 'coefficients':
+        #             channel_dict['friction_coefficients']}
+        #     self.zetas.append(fr.FlowResistance(self, zeta_dict))
+        #
+        # zeta_const = channel_dict.get('constant_friction_factor', 0.0)
+        # if zeta_const > 0.0:
+        #     self.zetas.append(fr.FlowResistance(self, {'type': 'Constant',
+        #                                                'value': zeta_const}))
+        return zetas
 
     def calculate_geometry(self):
         self.x = np.linspace(0.0, self._length, self.n_nodes)

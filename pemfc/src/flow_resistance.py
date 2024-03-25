@@ -17,6 +17,8 @@ class FlowResistance(ABC):
     """
     def __new__(cls, channel, zeta_dict, **kwargs):
         zeta_type = zeta_dict.get('type', 'Constant')
+        if zeta_type in ('Bassett', 'Rennels', 'Idelchick'):
+            zeta_type += 'TeeMain'
         if zeta_type == 'Constant':
             return super(FlowResistance, cls).\
                 __new__(ConstantFlowResistance)

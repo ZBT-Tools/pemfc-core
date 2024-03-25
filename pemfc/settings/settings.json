@@ -1,9 +1,9 @@
 {
     "stack": {
-        "cell_number": 1,
+        "cell_number": 10,
         "heat_power": 0.0,
         "cool_flow": true,
-        "calc_temperature": true,
+        "calc_temperature": false,
         "calc_current_density": true
     },
     "simulation": {
@@ -139,7 +139,10 @@
                 "height": 0.01,
                 "bend_number": 0,
                 "bend_friction_factor": 0.0,
-                "constant_friction_factor": 0.4
+                "junction_resistance_model":
+                    {"type": "Bassett",
+                     "value":  0.4,
+                     "branch_manifold_diameter_ratio": 0.2}
             },
             "outlet_manifold": {
                 "name": "Cathode Outlet Manifold",
@@ -153,7 +156,10 @@
                 "height": 0.01,
                 "bend_number": 0,
                 "bend_friction_factor": 0.0,
-                "constant_friction_factor": 0.4
+                "junction_resistance_model":
+                    {"type": "Bassett",
+                     "value":  0.4,
+                     "branch_manifold_diameter_ratio": 0.2}
             }
         }
     },
@@ -259,7 +265,10 @@
                 "height": 0.01,
                 "bend_number": 0,
                 "bend_friction_factor": 0.0,
-                "constant_friction_factor": 0.4
+                "junction_resistance_model":
+                    {"type": "Bassett",
+                     "value":  0.4,
+                     "branch_manifold_diameter_ratio": 0.2}
             },
             "outlet_manifold": {
                 "name": "Anode Outlet Manifold",
@@ -273,7 +282,10 @@
                 "height": 0.01,
                 "bend_number": 0,
                 "bend_friction_factor": 0.0,
-                "constant_friction_factor": 0.4
+                "junction_resistance_model":
+                    {"type": "Bassett",
+                     "value":  0.4,
+                     "branch_manifold_diameter_ratio": 0.2}
             }
         }
     },
@@ -317,7 +329,10 @@
             "height": 0.01,
             "bend_number": 0,
             "bend_friction_factor": 0.0,
-            "constant_friction_factor": 0.4
+            "junction_resistance_model":
+                {"type": "Bassett",
+                 "value":  0.4,
+                 "branch_manifold_diameter_ratio": 0.2}
         },
         "outlet_manifold": {
             "name": "Coolant Inlet Manifold",
@@ -330,7 +345,10 @@
             "height": 0.01,
             "bend_number": 0,
             "bend_friction_factor": 0.0,
-            "constant_friction_factor": 0.4
+            "junction_resistance_model":
+                {"type": "Bassett",
+                 "value":  0.4,
+                 "branch_manifold_diameter_ratio": 0.2}
         }
     },
     "temperature_system": {
