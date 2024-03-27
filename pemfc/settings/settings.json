@@ -27,7 +27,6 @@
     "membrane": {
         "type": "YeWang2007",
         "thickness": 1.5e-05,
-        "underrelaxation_factor": 0.8,
         "ionic_conductivity": 15.0,
         "basic_resistance": 4.3e-05,
         "temperature_coefficient": 7e-08,
