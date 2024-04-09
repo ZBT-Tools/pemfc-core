@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 
 # local modul imports
 from . import interpolation as ip, global_functions as g_func, \
-    fluid as fluids, flow_resistance as fr, output_object as oo
-
+    flow_resistance as fr, output_object as oo
+from .fluid import fluid as fluids
 try:
     import pemfc.src.cython.channel_heat_transfer as cht
     CHT_FOUND = True
@@ -20,9 +20,10 @@ class Channel(ABC, oo.OutputObject):
         if type(fluid) is fluids.IncompressibleFluid \
                 or type(fluid) is fluids.ConstantFluid:
             return super(Channel, cls).__new__(IncompressibleFluidChannel)
-        elif type(fluid) is fluids.GasMixture:
+        elif type(fluid) in (fluids.GasMixture, fluids.CanteraGasMixture):
             return super(Channel, cls).__new__(GasMixtureChannel)
-        elif type(fluid) is fluids.TwoPhaseMixture:
+        elif type(fluid) in (fluids.TwoPhaseMixture,
+                             fluids.CanteraTwoPhaseMixture):
             return super(Channel, cls).__new__(TwoPhaseMixtureChannel)
         else:
             raise NotImplementedError('Only Channel types of '
@@ -56,7 +57,7 @@ class Channel(ABC, oo.OutputObject):
         self.id_out = None
         self.flow_direction = channel_dict['flow_direction']
 
-        self.pressure_recovery = False
+        self.pressure_recovery_factor = np.ones(self.n_ele) * 0.5
 
         # Geometry
         if channel_dict.keys() >= {'width', 'height'}:
@@ -93,27 +94,7 @@ class Channel(ABC, oo.OutputObject):
         self.calculate_geometry()
 
         # Flow resistances
-        self.zetas = []
-        # basic wall resistance
-        if channel_dict.get('wall_friction', True):
-            self.zetas.append(fr.FlowResistance(self, {'type': 'WallFriction'}))
-        # resistance due to bends
-        n_bends = channel_dict.get('bend_number', 0)
-        zeta_bends = channel_dict.get('bend_friction_factor', 0.0)
-        if n_bends > 0 and zeta_bends > 0.0:
-            zeta_dict = \
-                {'type': 'Constant', 'value': n_bends * zeta_bends / self.n_ele}
-            self.zetas.append(fr.FlowResistance(self, zeta_dict))
-        # additional resistances (constant or flow splitting)
-        zeta_split = channel_dict.get('flow_split_factor', 0.0)
-        zeta_const = channel_dict.get('constant_friction_factor', 0.0)
-        if zeta_split > 0.0:
-            zeta_dict = \
-                {'type': 'Junction', 'value': zeta_const, 'factor': zeta_split}
-            self.zetas.append(fr.FlowResistance(self, zeta_dict))
-        elif zeta_const > 0.0:
-            self.zetas.append(fr.FlowResistance(self, {'type': 'Constant',
-                                                       'value': zeta_const}))
+        self.zetas = self.create_flow_resistances(channel_dict)
 
         # Flow
         self.velocity = np.zeros(self.n_nodes)
@@ -127,9 +108,43 @@ class Channel(ABC, oo.OutputObject):
         self.heat = np.zeros(self.n_ele)
         self.wall_temp = g_func.full(self.n_ele, temp_in)
 
-        # self.add_print_data(self.temp, 'Fluid Temperature', 'K')
+        self.add_print_data(self.temperature, 'Fluid Temperature', 'K')
         self.add_print_data(self.wall_temp, 'Wall Temperature', 'K')
-        # self.add_print_data(self.p, 'Fluid Pressure', 'Pa')
+        self.add_print_data(self.pressure, 'Fluid Pressure', 'Pa')
+
+    def create_flow_resistances(self, channel_dict):
+        # Basic wall resistance
+        zetas = []
+        if channel_dict.get('wall_friction', True):
+            zetas.append(fr.FlowResistance(self, {'type': 'WallFriction'}))
+
+        # Resistance due to bends
+        n_bends = channel_dict.get('bend_number', 0)
+        zeta_bends = channel_dict.get('bend_friction_factor', 0.0)
+        if n_bends > 0 and zeta_bends > 0.0:
+            zeta_dict = \
+                {'type': 'Constant', 'value': n_bends * zeta_bends / self.n_ele}
+            zetas.append(fr.FlowResistance(self, zeta_dict))
+
+        if 'junction_resistance_model' in channel_dict:
+            zeta_dict = channel_dict['junction_resistance_model']
+            zetas.append(fr.FlowResistance(self, zeta_dict))
+        # Additional resistances (constant or flow splitting)
+        if 'flow_resistances' in channel_dict:
+            if isinstance(channel_dict['flow_resistances'], (list, tuple)):
+                for zeta_dict in channel_dict['flow_resistances']:
+                    zetas.append(fr.FlowResistance(self, zeta_dict))
+        # if 'friction_coefficients' in channel_dict:
+        #     zeta_dict = \
+        #         {'type': 'Junction', 'coefficients':
+        #             channel_dict['friction_coefficients']}
+        #     self.zetas.append(fr.FlowResistance(self, zeta_dict))
+        #
+        # zeta_const = channel_dict.get('constant_friction_factor', 0.0)
+        # if zeta_const > 0.0:
+        #     self.zetas.append(fr.FlowResistance(self, {'type': 'Constant',
+        #                                                'value': zeta_const}))
+        return zetas
 
     def calculate_geometry(self):
         self.x = np.linspace(0.0, self._length, self.n_nodes)
@@ -182,7 +197,7 @@ class Channel(ABC, oo.OutputObject):
 
     @property
     def diameter(self):
-        return self._diameter
+        return self.d_h
 
     @property
     def length(self):
@@ -212,6 +227,13 @@ class Channel(ABC, oo.OutputObject):
                wall_temp=None, heat_flux=None, update_mass=True,
                update_flow=True, update_heat=True, update_fluid=True,
                enthalpy_source=None, **kwargs):
+        if mass_flow_in is not None:
+            if np.sum(mass_flow_in) < 0.0:
+                id_in = int(self.id_in)
+                id_out = int(self.id_out)
+                self.id_in = id_out
+                self.id_out = id_in
+                mass_flow_in = np.abs(mass_flow_in)
 
         if update_mass or mass_flow_in is not None or mass_source is not None:
             self.update_mass(mass_flow_in=mass_flow_in, mass_source=mass_source)
@@ -225,7 +247,7 @@ class Channel(ABC, oo.OutputObject):
                              enthalpy_source=enthalpy_source,
                              channel_factor=kwargs.get('channel_factor', 1.0))
 
-    def flow_resistance_sum(self):
+    def calculate_flow_resistance_sum(self):
         """ Update and return the sum of flow resistances (zeta-values) """
         zeta_sum = 0.0
         for zeta in self.zetas:
@@ -338,25 +360,41 @@ class Channel(ABC, oo.OutputObject):
             raise ValueError('velocity and density arrays '
                              'must be of equal shape')
         # calculate resistance based pressure drop
-        dp_res = np.zeros(self.n_ele)
+        dp_zeta = np.zeros(self.n_ele)
         try:
             for zeta in self.zetas:
                 zeta.update()
-                dp_res += zeta.calc_pressure_drop()
+                dp_zeta += zeta.calc_pressure_drop()
         except FloatingPointError:
             raise FloatingPointError('check if channel geometry is '
                                      'adequate for flow conditions in {}'.
                                      format(self.name))
 
-        # calculate influence of dynamic pressure variation due to velocity
+        # Calculate influence of dynamic pressure variation due to velocity
         # changes on static pressure drop
+
+        # pressure_recovery_factor: k = (2 - beta) / 2,
+        # default: k = 0.5 for pure Bernoulli assumption
+        # as in Equation 4a in:
+        # Wang, Junye. "Theory of Flow Distribution in Manifolds".
+        # Chemical Engineering Journal 168, Nr. 3 (April 2011): 1331–45.
+        # https://doi.org/10.1016/j.cej.2011.02.050.
+
+        # and k = theta / 2 = (2 * beta - gamma) / 2
+        # as in Equation 5 and 7 in
+        # Bajura, R. A., und E. H. Jones. "Flow Distribution Manifolds".
+        # Journal of Fluids Engineering 98, Nr. 4 (1. Dezember 1976): 654–65.
+        # https://doi.org/10.1115/1.3448441.
+        # theta = 1.05 for inlet manifold and 2.60 for outlet manifold was used
+        # to compare to experimental data in above reference (equations 29 and 30)
+
         rho1 = self.fluid.density[:-1]
         rho2 = self.fluid.density[1:]
         v1 = self.velocity[:-1]
         v2 = self.velocity[1:]
-        dp_dyn = 0.5 * (rho2 * v2 ** 2.0 - rho1 * v1 ** 2.0) \
-            * self.flow_direction
-        return dp_res + dp_dyn
+        dp_dyn = self.pressure_recovery_factor \
+            * (rho2 * v2 ** 2.0 - rho1 * v1 ** 2.0) * self.flow_direction
+        return dp_zeta + dp_dyn
 
     def calc_pressure(self):
         """
@@ -516,7 +554,7 @@ class GasMixtureChannel(Channel):
         self.mole_source = np.zeros((self.fluid.n_species, self.n_ele))
 
         self.add_print_data(self.mole_flow, 'Mole Flow',
-                            'mol/s', self.fluid.species.names)
+                            'mol/s', self.fluid.species_names)
 
     # def update(self, mass_flow_in=None, mass_source=None,
     #            wall_temp=None, heat_flux=None,
@@ -589,13 +627,13 @@ class GasMixtureChannel(Channel):
                     ' of shape: ', self.mass_flow.shape)
             self.mass_flow[:] = mass_flow
             # self.mole_flow[:] = \
-            #     (mass_flow.transpose() / self.fluid.species.mw).transpose()
+            #     (mass_flow.transpose() / self.fluid.species_mw).transpose()
         if mass_source is not None:
             if np.shape(mass_source) == (self.fluid.n_species, self.n_ele):
                 self.mass_source[:] = mass_source
                 self.mole_source[:] = \
                     (mass_source.transpose()
-                     / self.fluid.species.mw).transpose()
+                     / self.fluid.species_mw).transpose()
             else:
                 raise ValueError('shape of mass_source does not conform '
                                  'to mole_source array')
@@ -606,9 +644,9 @@ class GasMixtureChannel(Channel):
         self.mass_flow[self.mass_flow < 0.0] = 0.0
         self.mass_flow_total[:] = np.sum(self.mass_flow, axis=0)
         # self.mass_flow[:] = \
-        #     (self.mole_flow.transpose() * self.fluid.species.mw).transpose()
+        #     (self.mole_flow.transpose() * self.fluid.species_mw).transpose()
         self.mole_flow[:] = \
-            (self.mass_flow.transpose() / self.fluid.species.mw).transpose()
+            (self.mass_flow.transpose() / self.fluid.species_mw).transpose()
         self.mole_flow_total[:] = np.sum(self.mole_flow, axis=0)
 
 
@@ -628,9 +666,9 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         self.cond_rate_time_const = 5.0
 
         self.add_print_data(self.mole_flow_gas, 'Gas Mole Flow', 'mol/s',
-                            self.fluid.species.names)
+                            self.fluid.species_names)
         self.add_print_data(self.mole_flow_liq, 'Liquid Mole Flow',
-                            'mol/s', self.fluid.species.names)
+                            'mol/s', self.fluid.species_names)
 
     def update_mass(self, mass_flow_in=None, liquid_mass_flow_in=None,
                     mass_source=None, update_fluid=True):
@@ -664,7 +702,7 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         #                             - self.fluid.saturation_pressure)
         # mole_source_liquid = \
         #     self.cross_area * self.dx * self.cond_rate_time_const * dp_cond
-        # mw_water = self.fluid.gas.species.mw[id_pc]
+        # mw_water = self.fluid.gas.species_mw[id_pc]
         # mass_source_liquid = mole_source_liquid * mw_water
         # g_func.add_source(self.mass_flow_liq[id_pc], mass_source_liquid,
         #                   self.flow_direction, self.tri_mtx)
@@ -683,7 +721,7 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         self.mole_flow_gas_total[:] = \
             self.mole_flow_total - np.sum(self.mole_flow_liq, axis=0)
         self.mass_flow_gas_total[:] = \
-            self.mass_flow_total - - np.sum(self.mass_flow_liq, axis=0)
+            self.mass_flow_total - np.sum(self.mass_flow_liq, axis=0)
         # self.mole_flow_gas[:] = \
         #     self.mole_flow_gas_total * self.fluid.gas.mole_fraction
         # self.mass_flow_gas[:] = \
@@ -710,8 +748,8 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         """
         condensation_rate = self.flow_direction \
             * np.ediff1d(self.mole_flow_liq[self.fluid.id_pc])
-        vaporization_enthalpy = self.fluid.phase_change_species.\
-            calc_vaporization_enthalpy(self.temp_ele)
+        vaporization_enthalpy = \
+            self.fluid.calc_vaporization_enthalpy(self.temp_ele)
         self.condensation_heat[:] = condensation_rate * vaporization_enthalpy
 
     def calc_heat_capacitance(self, factor=1.0):

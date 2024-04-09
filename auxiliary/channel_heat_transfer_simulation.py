@@ -5,10 +5,10 @@ import copy
 import matplotlib.pyplot as plt
 
 # local modul imports
-from pemfc import channel
-from pemfc import fluid
-from pemfc import species
-from pemfc import interpolation as ip
+from pemfc.src import channel
+from pemfc.src.fluid import fluid
+from pemfc.src.fluid import species
+from pemfc.src import interpolation as ip
 
 np.set_printoptions(threshold=sys.maxsize, linewidth=10000,
                     precision=9, suppress=True)
@@ -79,9 +79,9 @@ channel_dict = {
     'additional_friction_fractor': 0.01
     }
 
-hydrogen = fluid.factory(hydrogen_dict)
-air = fluid.factory(air_dict)
-water = fluid.factory(water_dict)
+hydrogen = fluid.create(hydrogen_dict)
+air = fluid.create(air_dict)
+water = fluid.create(water_dict)
 fluids = [hydrogen, air, water]
 
 channel_dicts = [copy.deepcopy(channel_dict) for i in range(3)]

@@ -14,9 +14,9 @@ class OutputObject:
         self._name = name
         self.active = True
 
-        self.print_data_1d = {}
-        self.print_data_2d = {}
-        self.print_data = [self.print_data_1d, self.print_data_2d]
+        self.single_print_data = {}
+        self.multi_print_data = {}
+        self.print_data = [self.single_print_data, self.multi_print_data]
         self._instances.add(weakref.ref(self))
 
     def _get_name(self):
@@ -78,19 +78,18 @@ class OutputObject:
         self._instances.add(weakref.ref(copy))
         return copy
 
-    def add_print_data(self, data_array, name, units='-', sub_names=None):
-        if data_array.ndim == 2:
+    def add_print_data(self, data_array, name, units='-', sub_names=None,
+                       multi_data=False):
+        if sub_names is not None or multi_data:
             if sub_names is None:
                 sub_names = [str(i+1) for i in range(len(data_array))]
-            self.print_data_2d[name] = \
+            self.multi_print_data[name] = \
                 {sub_names[i]:
                  {'value': data_array[i], 'units': str(units), 'save': True}
                  for i in range(len(sub_names))}
-        elif data_array.ndim == 1:
-            self.print_data_1d[name] = \
-                {'value': data_array, 'units': str(units), 'save': True}
         else:
-            raise ValueError('argument data_array must be 1- or 2-dimensional')
+            self.single_print_data[name] = \
+                {'value': data_array, 'units': str(units), 'save': True}
 
     def add_print_variables(self, print_variables):
         for i, name in enumerate(print_variables['names']):

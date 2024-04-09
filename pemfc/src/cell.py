@@ -66,7 +66,7 @@ class Cell(OutputObject):
         membrane_dict['length'] = \
             self.cathode.flow_field.length_straight_channels
 
-        membrane_dict['underrelaxation_factor'] = self.urf
+        # membrane_dict['underrelaxation_factor'] = self.urf
         self.membrane = membrane.Membrane(membrane_dict, self.dx)
 
         self.thickness = self.cathode.thickness + self.membrane.thickness \
@@ -288,8 +288,9 @@ class Cell(OutputObject):
                             current_control=current_control)
         self.anode.update(current_density, update_channel=update_channel,
                           current_control=True)
-        if self.cathode.corrected_current_density is not None:
-            corrected_current_density = self.cathode.corrected_current_density
+        if self.cathode.electrochemistry.corrected_current_density is not None:
+            corrected_current_density = \
+                self.cathode.electrochemistry.corrected_current_density
         else:
             corrected_current_density = current_density
         if self.anode.break_program or self.cathode.break_program:

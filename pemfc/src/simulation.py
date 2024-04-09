@@ -4,16 +4,19 @@ import sys
 import numpy as np
 import cProfile
 import timeit
+import inspect
+import json
 
 # local module imports
 from . import stack
 from . import output
+from . import global_functions as gf
 # from data import input_dicts
 
-if 'main_app.py' in sys.argv[0]:
-    from data import input_dicts
-else:
-    from pemfc.data import input_dicts
+# if 'main_app.py' in sys.argv[0]:
+#     from data import input_dicts
+# else:
+#     from pemfc.data import input_dicts
 # from ..gui import data_transfer
 
 
@@ -35,7 +38,13 @@ class Simulation:
     def __init__(self, settings=None):
         # dict_simulation = input_dicts.dict_simulation
         if settings is None:
-            self.settings = input_dicts.sim_dict
+            base_dir = \
+                os.path.dirname(
+                    os.path.abspath(inspect.getsourcefile(lambda: 0)))
+            with open(os.path.join(base_dir, '..', 'settings',
+                                   'settings.json')) as file:
+                self.settings = json.load(file)
+            # self.settings = input_dicts.sim_dict
         else:
             self.settings = settings
 
@@ -66,13 +75,13 @@ class Simulation:
         self.average_cell_voltage = dict_simulation['average_cell_voltage']
         if self.current_control and self.current_density is None:
             raise ValueError('parameter current_density must be provided')
-        elif not self.current_density and self.average_cell_voltage is None:
+        elif self.current_density is None and self.average_cell_voltage is None:
             raise ValueError('parameter average_cell_voltage must be provided')
         stack_dict = self.settings['stack']
         cell_number = stack_dict['cell_number']
-        if self.current_control:
-            stack_dict['init_current_density'] = self.current_density
-        else:
+
+        stack_dict['init_current_density'] = self.current_density
+        if not self.current_control:
             stack_dict['voltage'] = self.average_cell_voltage * cell_number
 
         self.stack = stack.Stack(self.settings, n_nodes,
@@ -100,6 +109,7 @@ class Simulation:
         for i, tar_value in enumerate(target_value):
             current_errors = []
             temp_errors = []
+            convergence_flags = []
             self.timing['simulation'] = 0.0
             self.timing['output'] = 0.0
             simulation_start_time = timeit.default_timer()
@@ -123,6 +133,11 @@ class Simulation:
                 if ((current_error < self.it_crit and temp_error < self.it_crit)
                         and counter > self.min_it) or counter > self.max_it:
                     break
+            if counter > self.max_it:
+                convergence_flag = False
+            else:
+                convergence_flag = True
+            convergence_flags.append(convergence_flag)
             simulation_stop_time = timeit.default_timer()
             simulation_time = simulation_stop_time - simulation_start_time
             self.timing['simulation'] += simulation_time
@@ -169,7 +184,10 @@ class Simulation:
             else:
                 cool_mass_flow = self.stack.coolant_circuit.mass_flow_in
             global_data = \
-                {'Stack Voltage': {'value': self.stack.v_stack, 'units': 'V'},
+                {
+                 'Convergence':
+                     {'value': convergence_flag, 'units': ' '},
+                 'Stack Voltage': {'value': self.stack.v_stack, 'units': 'V'},
                  'Average Cell Voltage':
                      {'value': self.stack.v_stack / self.stack.n_cells,
                       'units': 'V'},
@@ -194,7 +212,7 @@ class Simulation:
                       'units': 'kg/s', 'format': '.4E'},
                  'Anode Mass Flow Rate:':
                      {'value': self.stack.fuel_circuits[1].mass_flow_in,
-                      'units': 'kg/s', 'format': '.4E'}
+                      'units': 'kg/s', 'format': '.4E'},
                  }
             global_data_list.append(global_data)
             output_stop_time = timeit.default_timer()
@@ -210,11 +228,12 @@ class Simulation:
             self.output.write_data(current_densities, cell_voltages,
                                    'Current Density [A/m²]', 'Cell Voltage',
                                    units='V', directory=self.output.output_dir,
-                                   save_csv=True, save_plot=True,
+                                   # save_csv=True, save_plot=True,
                                    write_mode='w')
 
         output_stop_time = timeit.default_timer()
         self.timing['output'] += output_stop_time - output_start_time
+
         return global_data_list, local_data_list
 
     @staticmethod
@@ -265,19 +284,15 @@ class Simulation:
         """
         Calculates the convergence criteria according to (Koh, 2003)
         """
-        i_cd_vec = self.stack.i_cd.flatten()
-        current_error = \
-            np.abs(np.sum(((i_cd_vec - self.stack.i_cd_old.flatten())
-                           / i_cd_vec) ** 2.0))
+        current_error = gf.calc_rrmse(self.stack.i_cd.flatten(),
+                                      self.stack.i_cd_old.flatten())
         # self.temp_criteria =\
         #     np.abs(np.sum(((self.temp_old
         #                     - self.stack.temp_sys.temp_layer[0][0, 0]))
         #                   / self.stack.temp_sys.temp_layer[0][0, 0]))
         if self.stack.calc_temp:
-            temp_error =\
-                np.abs(np.sum(((self.stack.temp_old
-                                - self.stack.temp_sys.temp_layer_vec)
-                              / self.stack.temp_sys.temp_layer_vec) ** 2.0))
+            temp_error = gf.calc_rrmse(self.stack.temp_old,
+                                       self.stack.temp_sys.temp_layer_vec)
         else:
             temp_error = 0.0
         return current_error, temp_error

@@ -1,8 +1,6 @@
 name: pemfc
 dependencies:
-        - python>=3.9.7
-        - pip
-        - pip:
-                - numpy
-                - scipy
-                - matplotlib
+        - python>=3.11
+        - numpy
+        - scipy
+        - matplotlib

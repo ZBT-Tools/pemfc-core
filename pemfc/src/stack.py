@@ -3,7 +3,8 @@ import numpy as np
 
 # local module imports
 from . import electrical_coupling as el_cpl, flow_circuit as flow_circuit, \
-    cell as cl, temperature_system as therm_cpl, fluid as fluid, channel as chl
+    cell as cl, temperature_system as therm_cpl, channel as chl
+from .fluid import fluid as fluid
 # from data import input_dicts
 # from ..gui import data_transfer
 
@@ -55,6 +56,9 @@ class Stack:
         # switch for cell discretizsation
         cell_dict['channel_land_discretization'] = \
             settings['simulation']['channel_land_discretization']
+        # add underrelaxation factor to cell settings
+        cell_dict['underrelaxation_factor'] = \
+            settings['simulation']['underrelaxation_factor']
 
         # Initialize fluid channels
         fluids, channels = [], []
@@ -68,7 +72,7 @@ class Stack:
             fluid_dicts[i]['nodes'] = n_nodes
             # fluids.append(fluid.factory2(fluid_dicts[i]))
             channels.append([chl.Channel(channel_dicts[i],
-                                         fluid.factory(fluid_dicts[i]))
+                                         fluid.create(fluid_dicts[i]))
                              for j in range(self.n_cells)])
 
         # Initialize fuel cells
@@ -112,10 +116,10 @@ class Stack:
             manifold_out_dicts[i]['length'] = manifold_length
             sub_channel_number = self.cells[0].half_cells[i].n_channel
             self.fuel_circuits.append(
-                flow_circuit.factory(flow_circuit_dicts[i],
-                                     manifold_in_dicts[i],
-                                     manifold_out_dicts[i],
-                                     channels[i], sub_channel_number))
+                flow_circuit.create(flow_circuit_dicts[i],
+                                    manifold_in_dicts[i],
+                                    manifold_out_dicts[i],
+                                    channels[i], sub_channel_number))
 
         cool_flow = stack_dict['cool_flow']
         if cool_flow:
@@ -144,7 +148,7 @@ class Stack:
             for i in range(n_cool):
                 cool_channels.append(
                     chl.Channel(coolant_channel_dict,
-                                fluid.factory(coolant_dict),
+                                fluid.create(coolant_dict),
                                 number=str(i)))
                 cool_channels[i].extend_data_names(cool_channels[i].name)
                 cool_channels[i].fluid.name = \
@@ -157,10 +161,10 @@ class Stack:
                 cool_channels[-1].height *= 1.0
             if n_cool > 0:
                 self.coolant_circuit = \
-                    flow_circuit.factory(dict_coolant_flow_circuit,
-                                         dict_coolant_in_manifold,
-                                         dict_coolant_out_manifold,
-                                         cool_channels, n_cool_cell)
+                    flow_circuit.create(dict_coolant_flow_circuit,
+                                        dict_coolant_in_manifold,
+                                        dict_coolant_out_manifold,
+                                        cool_channels, n_cool_cell)
             else:
                 self.coolant_circuit = None
         else:
@@ -307,7 +311,8 @@ class Stack:
             v_loss = 0.5 * self.n_cells
         else:
             v_loss = self.v_loss
-        heat = self.i_cd_avg * self.cells[0].active_area * v_loss
+        v_heat = self.temp_sys.e_tn * self.n_cells - self.e_0 + v_loss
+        heat = self.i_cd_avg * self.cells[0].active_area * v_heat
         cp_cool = \
             np.average([np.average(channel.fluid.specific_heat)
                         for channel in self.coolant_circuit.channels])

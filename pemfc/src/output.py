@@ -4,10 +4,16 @@ import os
 import shutil
 from itertools import cycle, islice
 import matplotlib
+# configure matplotlib backend here
+import sys
+main_name = sys.argv[0]
+if 'main_app.py' in main_name:
+    matplotlib.use('Agg')
+
 import matplotlib.pyplot as plt
 import timeit
 import json
-import sys
+from json import JSONEncoder
 
 # local module imports
 from . import interpolation as ip
@@ -15,10 +21,7 @@ from . import global_functions as g_func
 from . import stack as stack
 # from ..data import input_dicts
 
-# configure backend here
-main_name = sys.argv[0]
-if 'main_app.py' in main_name:
-    matplotlib.use('TkAgg')
+
 
 # globals
 FONT_SIZE = 14
@@ -27,6 +30,13 @@ MARKER_SIZE = 5.0
 LINE_WIDTH = 1.0
 FIG_DPI = 150
 FIG_SIZE = (6.4, 4.8)
+
+
+class NumpyArrayEncoder(JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return JSONEncoder.default(self, obj)
 
 
 class Output:
@@ -209,6 +219,7 @@ class Output:
         plt.tight_layout()
         if filepath:
             fig.savefig(filepath, format=kwargs.get('fileformat', 'png'))
+            plt.close()
         return fig
 
     @staticmethod
@@ -449,12 +460,12 @@ class Output:
         plot_path = os.path.join(case_path, 'plots')
         if not os.path.exists(csv_path):
             os.makedirs(csv_path)
-        # else:
-        #     self.clean_directory(csv_path)
+        else:
+            self.clean_directory(csv_path)
         if not os.path.exists(plot_path):
             os.makedirs(plot_path)
-        # else:
-        #     self.clean_directory(plot_path)
+        else:
+            self.clean_directory(plot_path)
 
         def save_oo_collection(oo_collection, x_values, x_label, **kwargs):
             # data_dict = kwargs.get('data_dict', {})
@@ -612,16 +623,20 @@ class Output:
             file_path = os.path.join(self.output_dir, 'settings.json')
             if fmt == 'json':
                 with open(file_path, 'w') as file:
-                    file.write(json.dumps(settings, indent=2))
+                    file.write(json.dumps(settings, indent=2,
+                                          cls=NumpyArrayEncoder))
 
-    def save_global_results(self, results, fmt='json'):
+    def save_global_results(self, results, fmt='json', **kwargs):
         # if settings is None:
         #     settings = input_dicts.sim_dict
         if not isinstance(results, dict):
             raise TypeError('must provide python dict to save global results')
         else:
-            file_path = os.path.join(self.output_dir, self.case_name,
-                                     'summary.json')
+            file_dir = os.path.join(self.output_dir, self.case_name)
+            if not os.path.exists(file_dir):
+                os.makedirs(file_dir)
+            file_name = kwargs.get('file_name', 'summary.json')
+            file_path = os.path.join(file_dir, file_name)
             if fmt == 'json':
                 with open(file_path, 'w') as file:
                     file.write(json.dumps(results, indent=2))

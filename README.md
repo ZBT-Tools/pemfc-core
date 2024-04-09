@@ -47,6 +47,30 @@ plots, if specified in the settings file (bottom).
 
 ![alt text](./data/class_structure.svg "Class Structure")
 
+# Citing the Model
+
+This model is versioned using Zenodo: 
+[![DOI](https://zenodo.org/badge/448911658.svg)](https://zenodo.org/badge/latestdoi/448911658)
+
+If you use this tool as part of a scholarly work, please cite using:
+
+> Feierabend, L. (2023). PEM Fuel Cell Stack Model (Version v1.0.0) [Computer software]. https://doi.org/10.5281/zenodo.7611662
+
+A BibTeX entry for LaTeX users is
+
+```TeX
+@software{  
+    Feierabend_PEM_Fuel_Cell_2023,  
+    author = {Feierabend, Lukas},  
+    doi = {10.5281/zenodo.7611662},  
+    month = {2},  
+    title = {{PEM Fuel Cell Stack Model}},  
+    url = {https://github.com/zbt-tools/pemfc-core},  
+    version = {v1.0.0},  
+    year = {2023}  
+}
+```
+
 # References
 
 #### Stack discretization, temperature coupling, reactant transport according to:  
@@ -82,12 +106,26 @@ https://doi.org/10.1016/j.memsci.2017.04.067.*
 for the PEMFC.” The Journal of Physical Chemistry B 115, no. 44 (November 10, 
 2011): 12835–44. https://doi.org/10.1021/jp205291f.*
 
-#### Manifold model and flow distribution based on:  
+#### Manifold model and flow distribution based on:
+Variation of the algorithm from this publication:
+
 *Koh, Joon-Ho, Hai-Kyung Seo, Choong Gon Lee, Young-Sung Yoo, and Hee Chun 
 Lim. “Pressure and Flow Distribution in Internal Gas Manifolds of a Fuel-Cell 
 Stack.” Journal of Power Sources 115, no. 1 (March 2003): 54–65. https://doi.
 org/10.1016/S0378-7753(02)00615-8.*
 
+Using variable resistances at the T-junctions from these correlations:
+
+*Bassett, M. D., D. E. Winterbone, and R. J. Pearson. “Calculation of Steady 
+Flow Pressure Loss Coefficients for Pipe Junctions.” Proceedings of the 
+Institution of Mechanical Engineers, Part C: Journal of Mechanical Engineering 
+Science, August 1, 2001. https://doi.org/10.1177/095440620121500801.*
+
+*Rennels, Donald C., and Hobart M. Hudson. Pipe Flow: A Practical and 
+Comprehensive Guide. Hoboken, NJ, USA: John Wiley & Sons, Inc., 2012.
+https://doi.org/10.1002/9781118275276.*
+
+*Idelchik, Isaak E. „Handbook of hydraulic resistance“. Washington, 1986.*
 
 #### Electrochemical reaction kinetics and transport losses according to:  
 *Kulikovsky, A. A. “A Physically–Based Analytical Polarization Curve of a 
