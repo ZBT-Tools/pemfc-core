@@ -3,15 +3,40 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 # local module imports
-from . import layers as layers, constants
-from . import global_functions as gf
+from pemfc.src import solid, constants
+from pemfc.src import global_functions as gf
 
 
-class Membrane(ABC, layers.SolidLayer):
-    def __new__(cls, membrane_dict, dx, **kwargs):
+class MetaMembrane(solid.MetaAbstractSolid):
+    def __call__(cls, *args, **kwargs):
+        """
+        Override default metaclass __call__ function to determine the relevant
+        superclass depending on the discretization argument, which should be
+        provided as the second argument in the constructor similar to the
+        initialization for the Membrane classes
+        """
+        discretization = args[1]
+        if len(args) == 2:
+            # if isinstance(discretization, int):
+            #     newcls = type(cls.__name__, (solid.Solid1D,) + (cls, ), {})
+            #     return super(MetaMembrane, newcls).__call__(*args, **kwargs)
+            # elif isinstance(discretization, (tuple, list)) and len(discretization) == 2:
+            #     newcls = type(cls.__name__, (solid.Solid2D,) + (cls, ), {})
+            #     return super(MetaMembrane, newcls).__call__(*args, **kwargs)
+            newcls = type(cls.__name__, (solid.Solid1D,) + (cls,), {})
+            call_solid1d = super(MetaMembrane, newcls).__call__
+            newcls = type(cls.__name__, (solid.Solid2D,) + (cls,), {})
+            call_solid2d = super(MetaMembrane, newcls).__call__
+            return solid.create_wrapper(call_solid1d, call_solid2d, *args, **kwargs)
+        return super(MetaMembrane, cls).__call__(*args, **kwargs)
+
+
+class Membrane(ABC):
+    def __new__(cls, membrane_dict, discretization, **kwargs):
         model_type = membrane_dict.get('type', 'Constant')
         if model_type == 'Constant':
-            return super(Membrane, cls).__new__(Constant)
+            newcls = type(cls.__name__, (solid.Solid2D,) + (cls,), {})
+            return super(Membrane, newcls).__new__(Constant)
         elif model_type == 'Linear':
             return super(Membrane, cls).__new__(LinearMembrane)
         elif model_type == 'Springer':
@@ -24,10 +49,10 @@ class Membrane(ABC, layers.SolidLayer):
                                       'Constant, Linear, Springer, '
                                       'and YeWang2007.')
 
-    def __init__(self, membrane_dict, dx, **kwargs):
+    def __init__(self, membrane_dict, discretization, **kwargs):
         self.name = 'Membrane'
         membrane_dict['name'] = self.name
-        super().__init__(membrane_dict, dx)
+        super().__init__(membrane_dict, discretization)
 
         # membrane temperature
         self.temp = np.zeros(self.dx.shape)
@@ -70,8 +95,8 @@ class Membrane(ABC, layers.SolidLayer):
 
 
 class Constant(Membrane):
-    def __init__(self, membrane_dict, dx, **kwargs):
-        super().__init__(membrane_dict, dx, **kwargs)
+    def __init__(self, membrane_dict, discretization, **kwargs):
+        super().__init__(membrane_dict, discretization, **kwargs)
         # self.water_flux = np.zeros_like(self.dx)
         # water cross flux through the membrane
         self.omega[:] = 1.0 / self.ionic_conductance[0]
@@ -82,8 +107,8 @@ class Constant(Membrane):
 
 
 class LinearMembrane(Membrane):
-    def __init__(self, membrane_dict, dx, **kwargs):
-        super().__init__(membrane_dict, dx, **kwargs)
+    def __init__(self, membrane_dict, discretization, **kwargs):
+        super().__init__(membrane_dict, discretization, **kwargs)
         self.basic_resistance = membrane_dict['basic_resistance']
         # basic electrical resistance of the membrane
         self.temp_coeff = membrane_dict['temperature_coefficient']
@@ -100,8 +125,8 @@ class WaterTransportMembrane(Membrane, ABC):
 
     FARADAY = constants.FARADAY
 
-    def __init__(self, membrane_dict, dx, **kwargs):
-        super().__init__(membrane_dict, dx, **kwargs)
+    def __init__(self, membrane_dict, discretization, **kwargs):
+        super().__init__(membrane_dict, discretization, **kwargs)
 
         # self.vapour_coeff = membrane_dict['vapour_transport_coefficient']
         # self.acid_group_conc = membrane_dict['acid_group_concentration']
@@ -153,8 +178,8 @@ class SpringerMembrane(WaterTransportMembrane):
     is approximated by the channel humidity/water activity due to insufficient
     resolution of the through-plane concentration gradients.
     """
-    def __init__(self, membrane_dict, dx, **kwargs):
-        super().__init__(membrane_dict, dx, **kwargs)
+    def __init__(self, membrane_dict, discretization, **kwargs):
+        super().__init__(membrane_dict, discretization, **kwargs)
         # Under-relaxation factor for water flux update
         self.urf = membrane_dict.get('underrelaxation_factor', 0.95)
 
@@ -284,8 +309,8 @@ class YeWang2007Membrane(SpringerMembrane):
     is approximated by the channel humidity/water activity due to insufficient
     resolution of the through-plane concentration gradients.
     """
-    def __init__(self, membrane_dict, dx, **kwargs):
-        super().__init__(membrane_dict, dx, **kwargs)
+    def __init__(self, membrane_dict, discretization, **kwargs):
+        super().__init__(membrane_dict, discretization, **kwargs)
         # Under-relaxation factor for water flux update
         self.urf = membrane_dict.get('underrelaxation_factor', 0.8)
 
@@ -322,3 +347,16 @@ class YeWang2007Membrane(SpringerMembrane):
         super().calc_diffusion_coefficient()
         self.diff_coeff[:] *= 0.5
         return self.diff_coeff
+
+
+membrane_dict = {
+    'width': 3.0,
+    'length': 3.0,
+    'thickness': 0.1,
+    'electrical_conductivity': 1.0,
+    'thermal_conductivity': 1.0,
+    'ionic_conductivity': 15.0,
+    'type': 'Constant',
+}
+test_membrane = Membrane(membrane_dict, (20, 1))
+print(test_membrane.layer_dict)

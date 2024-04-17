@@ -3,7 +3,7 @@ import warnings
 import numpy as np
 
 # local module imports
-from . import layers as layers, constants, \
+from . import solid as solid, constants, \
     global_functions as g_func, flow_field as ff, \
     channel as chl
 from .fluid import fluid as fluids
@@ -60,7 +60,7 @@ class HalfCell:
              'length': self.flow_field.length_straight_channels})
         # 'porosity': self.channel.cross_area * self.n_channel / (
         #             self.th_bpp * self.width)}
-        self.bpp = layers.SolidLayer(bpp_dict, self.channel.dx)
+        self.bpp = solid.Solid1D(bpp_dict, self.channel.dx)
 
         # initialize gas diffusion electrode (gde: gdl + cl
         gde_dict = halfcell_dict['gde']
@@ -73,7 +73,7 @@ class HalfCell:
         #    (self.th_gdl * halfcell_dict['porosity gdl']
         #     + self.th_cl * halfcell_dict['porosity cl'])
         #    / (self.th_gde + self.th_cl)}
-        self.gde = layers.SolidLayer(gde_dict, self.channel.dx)
+        self.gde = solid.Solid1D(gde_dict, self.channel.dx)
         self.thickness = self.bpp.thickness + self.gde.thickness
 
         self.n_charge = self.electrochemistry.n_charge

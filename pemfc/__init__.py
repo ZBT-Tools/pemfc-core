@@ -15,7 +15,7 @@ from .src import global_functions
 # from .src.gui import *
 from .src import half_cell
 from .src import interpolation
-from .src import layers
+from .src import solid
 from .src import matrix_functions
 from .src import membrane
 from .src import output
