@@ -13,10 +13,10 @@
         "underrelaxation_factor": 0.5,
         "current_control": true,
         "operation_control": "Current",
-        "elements": 50,
+        "elements": 7,
         "current_density": 5000.0,
         "average_cell_voltage": 0.5,
-        "channel_land_discretization": false
+        "channel_land_discretization": true
     },
     "cell": {
         "width": 0.1,

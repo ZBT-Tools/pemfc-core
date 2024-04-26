@@ -16,6 +16,7 @@ class Cell(OutputObject):
         self.number = number
         super().__init__(name)
         self.cell_dict = cell_dict
+
         # print('Initializing: ', self.name)
         self.n_layer = 5
         self.n_electrodes = 2
@@ -26,10 +27,14 @@ class Cell(OutputObject):
         if self.last_cell:
             self.n_layer += 1
         n_nodes = channels[0].n_nodes
-        # number of nodes along the channel
+        # Number of nodes along the channel
         self.n_ele = n_nodes - 1
 
-        # underrelaxation factor
+        # Additional resolution in width direction in regions
+        # "under land" and "under channel" if True
+        self.channel_land_discretization = cell_dict['channel_land_discretization']
+
+        # Underrelaxation factor
         self.urf = cell_dict['underrelaxation_factor']
 
         self.e_0 = cell_dict['open_circuit_voltage']
@@ -45,10 +50,9 @@ class Cell(OutputObject):
             # name = self.name + ': ' + half_cell_dicts[i]['name']
             name = half_cell_dicts[i]['name']
             half_cell_dicts[i]['name'] = name
-
         self.half_cells = [h_c.HalfCell(half_cell_dicts[i], cell_dict,
                                         channels[i], number=self.number)
-                           for i in range(len(channels))]
+                           for i in range(len(half_cell_dicts))]
         self.cathode = self.half_cells[0]
         self.anode = self.half_cells[1]
 
@@ -65,10 +69,13 @@ class Cell(OutputObject):
             self.cathode.flow_field.width_straight_channels
         membrane_dict['length'] = \
             self.cathode.flow_field.length_straight_channels
-
         # membrane_dict['underrelaxation_factor'] = self.urf
-        self.membrane = membrane.Membrane(membrane_dict, self.dx.shape)
+        layer_discretization = self.dx.shape
+        if self.channel_land_discretization is True:
+            layer_discretization += (2, )
+        self.membrane = membrane.Membrane(membrane_dict, layer_discretization)
 
+        # Overall cell thickness (cell pitch)
         self.thickness = self.cathode.thickness + self.membrane.thickness \
             + self.anode.thickness
 
@@ -117,7 +124,7 @@ class Cell(OutputObject):
              + np.roll(self.thermal_conductance_x, 1, axis=0)) * 0.5
         self.thermal_conductance_x = \
             np.vstack((self.thermal_conductance_x,
-                       self.thermal_conductance_x[0]))
+                       [self.thermal_conductance_x[0]]))
         if self.first_cell:
             self.thermal_conductance_x[0] *= 0.5
         if self.last_cell:

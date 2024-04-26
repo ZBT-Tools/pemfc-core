@@ -17,12 +17,16 @@ class HalfCell:
     def __init__(self, halfcell_dict, cell_dict, channel, number=None):
         self.number = number
         self.name = halfcell_dict['name']
+        # Discretization in elements and nodes along the x-axis (flow axis)
         self.n_nodes = channel.n_nodes
         n_ele = self.n_nodes - 1
         self.n_ele = n_ele
-        # Discretization in elements and nodes along the x-axis (flow axis)
 
-        """half cell geometry parameter"""
+        # Additional resolution in width direction in regions
+        # "under land" and "under channel" if True
+        self.channel_land_discretization = cell_dict['channel_land_discretization']
+
+        # Half cell geometry parameter
         self.width = cell_dict["width"]
         self.length = cell_dict["length"]
 
@@ -47,27 +51,31 @@ class HalfCell:
 
         self.faraday = constants.FARADAY
 
-        # initialize electrochemistry model
+        # Initialize electrochemistry model
         electrochemistry_dict = halfcell_dict['electrochemistry']
         electrochemistry_dict['fuel_index'] = self.id_fuel
         self.electrochemistry = electrochem.ElectrochemistryModel(
             electrochemistry_dict, self.n_nodes)
 
-        # initialize bipolar plate (bpp)
+        # Initialize bipolar plate (bpp)
         bpp_dict = halfcell_dict['bpp']
         bpp_dict.update(
-            {'width': self.flow_field.width_straight_channels,
+            {'name': self.name + ' BPP',
+             'width': self.flow_field.width_straight_channels,
              'length': self.flow_field.length_straight_channels})
         # 'porosity': self.channel.cross_area * self.n_channel / (
         #             self.th_bpp * self.width)}
 
         layer_discretization = self.channel.dx.shape
+        if self.channel_land_discretization is True:
+            layer_discretization += (2, )
         self.bpp = sl.SolidLayer(bpp_dict, layer_discretization)
 
         # initialize gas diffusion electrode (gde: gdl + cl
         gde_dict = halfcell_dict['gde']
         gde_dict.update(
-            {'thickness': electrochemistry_dict['thickness_gdl']
+            {'name': self.name + ' GDE',
+             'thickness': electrochemistry_dict['thickness_gdl']
                 + electrochemistry_dict['thickness_cl'],
              'width': self.flow_field.width_straight_channels,
              'length': self.flow_field.length_straight_channels})

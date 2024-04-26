@@ -39,22 +39,22 @@ class SolidLayer(dsct.Discretization2D, oo.OutputObject):
         if np.ndim(conductivity) == 0:
             conductance_z = self.d_area * conductivity / self.thickness
             conductance_x = \
-                self.width * self.thickness * conductivity / self.dx[0]
+                self.dx[1] / self.dx[0] * self.thickness * conductivity
             conductance_y = \
-                self.length * self.thickness * conductivity / self.dx[1]
+                self.dx[0] / self.dx[1] * self.thickness * conductivity
 
         elif np.ndim(conductivity) == 1 and np.shape(conductivity)[0] == 2:
             conductance_z = self.d_area * conductivity[0] / self.thickness
             conductance_x = \
-                self.width * self.thickness * conductivity[1] / self.dx[0]
+                self.dx[1] / self.dx[0] * self.thickness * conductivity[1]
             conductance_y = \
-                self.length * self.thickness * conductivity[1] / self.dx[1]
+                self.dx[0] / self.dx[1] * self.thickness * conductivity[1]
         elif np.ndim(conductivity) == 1 and np.shape(conductivity)[0] == 3:
             conductance_z = self.d_area * conductivity[0] / self.thickness
             conductance_x = \
-                self.width * self.thickness * conductivity[1] / self.dx[0]
+                self.dx[1] / self.dx[0] * self.thickness * conductivity[1]
             conductance_y = \
-                self.length * self.thickness * conductivity[2] / self.dx[1]
+                self.dx[0] / self.dx[1] * self.thickness * conductivity[2]
         else:
             raise ValueError('conductivity must be either single scalar or '
                              'an iterable with two entries')

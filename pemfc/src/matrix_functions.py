@@ -15,10 +15,10 @@ def tile_add_overlap(array, n, m=1):
 
 def overlapping_vector(vector, reps, overlap_size):
     n_vector = len(vector)
-    n_result = reps*n_vector - (reps-1)*overlap_size
+    n_result = reps * n_vector - (reps - 1) * overlap_size
     # n_result = reps * (n_vector - overlap_size) + overlap_size
     result = np.zeros(n_result)
-    non_overlap_size = int(n_vector-overlap_size)
+    non_overlap_size = int(n_vector - overlap_size)
     for i in range(reps):
         start_id = i * non_overlap_size
         end_id = start_id + n_vector
@@ -57,7 +57,8 @@ def build_1d_conductance_matrix(cond_vector, offset=1):
 def build_z_cell_conductance_matrix(cond_vector, n_ele):
     list_mat = []
     for i in range(n_ele):
-        list_mat.append(build_1d_conductance_matrix(cond_vector[:, i]))
+        for j in range(cond_vector.shape[-1]):
+            list_mat.append(build_1d_conductance_matrix(cond_vector[:, i, j]))
     return sp_la.block_diag(*list_mat)
 
 
@@ -80,6 +81,7 @@ def build_x_cell_conductance_matrix(cond_vector, n_ele, n_layer=None):
 
 def build_cell_conductance_matrix(x_cond_vector, z_cond_vector, n_ele):
     z_cond_mtx = build_z_cell_conductance_matrix(z_cond_vector, n_ele)
+    raise ValueError('code adaption for 2D only up until this point')
     if n_ele > 1:
         x_cond_mtx = build_x_cell_conductance_matrix(x_cond_vector, n_ele)
     else:

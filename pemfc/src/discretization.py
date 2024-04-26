@@ -31,8 +31,8 @@ class Discretization2D:
         self.width = width
 
         self.area = self.width * self.length
-        x = [np.linspace(0, self.length, i + 1) for i in self.shape]
-        x_shape = sum((i.shape for i in x), ())
+        x = [np.linspace(0, self.length, self.shape[0] + 1),
+             np.linspace(0, self.width, self.shape[1] + 1)]
         self.x = np.asarray(
             [np.asarray([x[0] for j in range(x[1].shape[0])]).transpose(),
              np.asarray([x[1] for j in range(x[0].shape[0])])])
@@ -45,7 +45,7 @@ class Discretization2D:
         self.dx = np.asarray([dx[0][:, :self.shape[1]], dx[1][:self.shape[0], :]])
 
         # Temporary reduce discretization to single dx
-        self.dx = self.dx.mean(axis=(1, 2))
+        # self.dx = self.dx.mean(axis=(1, 2))
 
         # dx = np.diff(self.x)
         # dy = np.diff(self.y)
