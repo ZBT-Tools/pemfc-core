@@ -3,7 +3,7 @@ import warnings
 import numpy as np
 
 # local module imports
-from . import solid as solid, constants, \
+from . import solid_layer as sl, constants, \
     global_functions as g_func, flow_field as ff, \
     channel as chl
 from .fluid import fluid as fluids
@@ -60,7 +60,9 @@ class HalfCell:
              'length': self.flow_field.length_straight_channels})
         # 'porosity': self.channel.cross_area * self.n_channel / (
         #             self.th_bpp * self.width)}
-        self.bpp = solid.Solid1D(bpp_dict, self.channel.dx)
+
+        layer_discretization = self.channel.dx.shape
+        self.bpp = sl.SolidLayer(bpp_dict, layer_discretization)
 
         # initialize gas diffusion electrode (gde: gdl + cl
         gde_dict = halfcell_dict['gde']
@@ -73,7 +75,7 @@ class HalfCell:
         #    (self.th_gdl * halfcell_dict['porosity gdl']
         #     + self.th_cl * halfcell_dict['porosity cl'])
         #    / (self.th_gde + self.th_cl)}
-        self.gde = solid.Solid1D(gde_dict, self.channel.dx)
+        self.gde = sl.SolidLayer(gde_dict, layer_discretization)
         self.thickness = self.bpp.thickness + self.gde.thickness
 
         self.n_charge = self.electrochemistry.n_charge
@@ -88,9 +90,9 @@ class HalfCell:
         # stoichiometry of the reactant at the channel inlet
         self.inlet_stoi = 0.0
         # cross water flux through the membrane
-        self.w_cross_flow = np.zeros(n_ele)
+        self.w_cross_flow = np.zeros(layer_discretization)
         # voltage loss
-        self.v_loss = np.zeros(self.n_ele)
+        self.v_loss = np.zeros(layer_discretization)
 
     def update(self, current_density, update_channel=False,
                current_control=True):

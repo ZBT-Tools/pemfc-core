@@ -3,40 +3,15 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 # local module imports
-from pemfc.src import solid, constants
+from pemfc.src import solid_layer as sl, constants
 from pemfc.src import global_functions as gf
 
 
-class MetaMembrane(solid.MetaAbstractSolid):
-    def __call__(cls, *args, **kwargs):
-        """
-        Override default metaclass __call__ function to determine the relevant
-        superclass depending on the discretization argument, which should be
-        provided as the second argument in the constructor similar to the
-        initialization for the Membrane classes
-        """
-        discretization = args[1]
-        if len(args) == 2:
-            # if isinstance(discretization, int):
-            #     newcls = type(cls.__name__, (solid.Solid1D,) + (cls, ), {})
-            #     return super(MetaMembrane, newcls).__call__(*args, **kwargs)
-            # elif isinstance(discretization, (tuple, list)) and len(discretization) == 2:
-            #     newcls = type(cls.__name__, (solid.Solid2D,) + (cls, ), {})
-            #     return super(MetaMembrane, newcls).__call__(*args, **kwargs)
-            newcls = type(cls.__name__, (solid.Solid1D,) + (cls,), {})
-            call_solid1d = super(MetaMembrane, newcls).__call__
-            newcls = type(cls.__name__, (solid.Solid2D,) + (cls,), {})
-            call_solid2d = super(MetaMembrane, newcls).__call__
-            return solid.create_wrapper(call_solid1d, call_solid2d, *args, **kwargs)
-        return super(MetaMembrane, cls).__call__(*args, **kwargs)
-
-
-class Membrane(ABC):
+class Membrane(sl.SolidLayer, ABC):
     def __new__(cls, membrane_dict, discretization, **kwargs):
         model_type = membrane_dict.get('type', 'Constant')
         if model_type == 'Constant':
-            newcls = type(cls.__name__, (solid.Solid2D,) + (cls,), {})
-            return super(Membrane, newcls).__new__(Constant)
+            return super(Membrane, cls).__new__(Constant)
         elif model_type == 'Linear':
             return super(Membrane, cls).__new__(LinearMembrane)
         elif model_type == 'Springer':
@@ -100,7 +75,7 @@ class Constant(Membrane):
         # self.water_flux = np.zeros_like(self.dx)
         # water cross flux through the membrane
         self.omega[:] = 1.0 / self.ionic_conductance[0]
-        self.omega_ca[:] = self.omega * self.area_dx
+        self.omega_ca[:] = self.omega * self.d_area
 
     def calc_ionic_resistance(self, *args):
         pass
@@ -117,7 +92,7 @@ class LinearMembrane(Membrane):
     def calc_ionic_resistance(self, *args):
         self.omega_ca[:] = \
             (self.basic_resistance - self.temp_coeff * self.temp)  # * 1e-2
-        self.omega[:] = self.omega_ca / self.area_dx
+        self.omega[:] = self.omega_ca / self.d_area
         return self.omega, self.omega_ca
 
 
@@ -242,7 +217,7 @@ class SpringerMembrane(WaterTransportMembrane):
         # Area-specific membrane resistance [Ohm-m²]
         self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
         # Absolute resistance [Ohm]
-        self.omega[:] = self.omega_ca / self.area_dx
+        self.omega[:] = self.omega_ca / self.d_area
         return self.omega, self.omega_ca
 
     def calc_cross_water_flux(self, current_density, humidity, *args):
@@ -329,7 +304,7 @@ class YeWang2007Membrane(SpringerMembrane):
         # Area-specific membrane resistance [Ohm-m²]
         self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
         # Absolute resistance [Ohm]
-        self.omega[:] = self.omega_ca / self.area_dx
+        self.omega[:] = self.omega_ca / self.d_area
         return self.omega, self.omega_ca
 
     def calc_eod(self):
@@ -349,14 +324,14 @@ class YeWang2007Membrane(SpringerMembrane):
         return self.diff_coeff
 
 
-membrane_dict = {
-    'width': 3.0,
-    'length': 3.0,
-    'thickness': 0.1,
-    'electrical_conductivity': 1.0,
-    'thermal_conductivity': 1.0,
-    'ionic_conductivity': 15.0,
-    'type': 'Constant',
-}
-test_membrane = Membrane(membrane_dict, (20, 1))
-print(test_membrane.layer_dict)
+# membrane_dict = {
+#     'width': 3.0,
+#     'length': 3.0,
+#     'thickness': 0.1,
+#     'electrical_conductivity': 1.0,
+#     'thermal_conductivity': 1.0,
+#     'ionic_conductivity': 15.0,
+#     'type': 'Constant',
+# }
+# test_membrane = Membrane(membrane_dict, (20, 1))
+# print(test_membrane.layer_dict)

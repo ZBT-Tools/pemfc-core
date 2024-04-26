@@ -67,7 +67,7 @@ class Cell(OutputObject):
             self.cathode.flow_field.length_straight_channels
 
         # membrane_dict['underrelaxation_factor'] = self.urf
-        self.membrane = membrane.Membrane(membrane_dict, self.dx)
+        self.membrane = membrane.Membrane(membrane_dict, self.dx.shape)
 
         self.thickness = self.cathode.thickness + self.membrane.thickness \
             + self.anode.thickness
@@ -187,14 +187,13 @@ class Cell(OutputObject):
             + self.anode.bpp.thickness \
             + self.anode.gde.thickness
 
-        # voltage loss
-        self.v_loss = np.zeros(self.n_ele)
-
-        # initializing temperatures with average channel fluid temperature
+        # Initializing temperatures with average channel fluid temperature
         temp_init = np.average([hc.channel.fluid.temperature
                                 for hc in self.half_cells])
+        # membrane temperature
+        self.temp_mem = np.zeros(self.membrane.temp.shape)
         self.temp_layer = \
-            g_func.full((self.n_layer, self.n_ele), temp_init)
+            g_func.full((self.n_layer,) + self.temp_mem.shape, temp_init)
         # interface names according to temperature array
         self.temp_names = ['Cathode BPP-BPP',
                            'Cathode BPP-GDE',
@@ -202,15 +201,16 @@ class Cell(OutputObject):
                            'Anode MEM-GDE',
                            'Anode GDE-BPP',
                            'Anode BPP-BPP']
-        # membrane temperature
-        self.temp_mem = np.zeros(self.n_ele)
+
         # current density
-        self.i_cd = np.zeros(self.n_ele)
+        self.i_cd = np.zeros(self.temp_mem.shape)
         # cell voltage
-        self.v = np.zeros(self.n_ele)
+        self.v = np.zeros(self.i_cd.shape)
+        # voltage loss
+        self.v_loss = np.zeros(self.n_ele)
         # self.resistance_z = np.zeros(n_ele)
         # through-plane cell resistance
-        self.conductance_z = np.zeros(self.n_ele)
+        self.conductance_z = np.zeros(self.i_cd.shape)
 
         self.add_print_data(self.i_cd, 'Current Density', 'A/m²')
         self.add_print_data(self.temp_layer, 'Temperature', 'K',

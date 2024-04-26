@@ -9,7 +9,8 @@ class OutputObject:
     # CLUSTER_NAMES = [['Cell', 'Flow Circuit']]
     _instances = set()
 
-    def __init__(self, name):
+    def __init__(self, name, **kwargs):
+        super().__init__()
         assert isinstance(name, str)
         self._name = name
         self.active = True
