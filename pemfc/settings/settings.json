@@ -40,6 +40,7 @@
     "cathode": {
         "name": "Cathode",
         "channel_number": 50,
+        "rib_width": 0.001,
         "stoichiometry": 1.5,
         "reaction_stoichiometry": [
             -1.0,
@@ -107,7 +108,6 @@
                 "humidity": 0.5
             },
             "cross_sectional_shape": "rectangular",
-            "rib_width": 0.001,
             "base_width": 0.0008,
             "length": 0.5,
             "p_out": 101325.0,
@@ -166,6 +166,7 @@
     "anode": {
         "name": "Anode",
         "channel_number": 50,
+        "rib_width": 0.001,
         "stoichiometry": 1.5,
         "reaction_stoichiometry": [
             -2.0,
@@ -233,7 +234,6 @@
                 "humidity": 0.5
             },
             "cross_sectional_shape": "rectangular",
-            "rib_width": 0.001,
             "base_width": 0.0008,
             "length": 0.5,
             "p_out": 101325.0,

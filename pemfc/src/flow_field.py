@@ -23,7 +23,7 @@ class FlowField:
         width = flowfield_dict['width']
         area = length * width
 
-        # rib width dictates and resets channel length if provided
+        # Rib width dictates and resets channel length if provided
         if 'rib_width' in flowfield_dict:
             self.rib_width = flowfield_dict['rib_width']
             self.width_straight_channels = \

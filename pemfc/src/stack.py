@@ -114,7 +114,7 @@ class Stack:
         for i in range(len(half_cell_dicts)):
             manifold_in_dicts[i]['length'] = manifold_length
             manifold_out_dicts[i]['length'] = manifold_length
-            sub_channel_number = self.cells[0].half_cells[i].n_channel
+            sub_channel_number = self.cells[0].half_cells[i].n_channels
             self.fuel_circuits.append(
                 flow_circuit.create(flow_circuit_dicts[i],
                                     manifold_in_dicts[i],
@@ -325,7 +325,7 @@ class Stack:
                 self.cells[0].half_cells[i].calc_inlet_flow(self.i_cd_avg)
             cell_mass_flow = np.sum(cell_mass_flow, axis=0)
             mass_flow = cell_mass_flow \
-                * self.cells[0].half_cells[i].n_channel * self.n_cells
+                        * self.cells[0].half_cells[i].n_channels * self.n_cells
             mass_flows_in.append(mass_flow)
         return mass_flows_in
 

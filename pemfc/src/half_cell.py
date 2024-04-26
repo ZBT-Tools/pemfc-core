@@ -24,7 +24,8 @@ class HalfCell:
 
         # Additional resolution in width direction in regions
         # "under land" and "under channel" if True
-        self.channel_land_discretization = cell_dict['channel_land_discretization']
+        self.channel_land_discretization = \
+            cell_dict['channel_land_discretization']
 
         # Half cell geometry parameter
         self.width = cell_dict["width"]
@@ -36,19 +37,25 @@ class HalfCell:
         self.channel.fluid.name = \
             self.name + ' Fluid'  # + self.channel.fluid.TYPE_NAME
 
-        # number of channels of each half cell
-        self.n_channel = halfcell_dict['channel_number']
+        # Number of channels of each half cell
+        self.n_channels = halfcell_dict['channel_number']
 
-        flowfield_dict = {**cell_dict, **halfcell_dict}
-
+        # Initialize flow field geometry
+        flowfield_dict = {
+            'channel_number': self.n_channels,
+            'rib_width': halfcell_dict['rib_width'],
+            'width': self.width,
+            'length': self.length
+        }
         self.flow_field = \
             ff.FlowField(self.name + 'Flow Field', flowfield_dict, self.channel)
 
-        # fuel must be at first position
+
+
+        # Fuel must be at first position
         self.id_fuel = 0
         if isinstance(self.channel, chl.TwoPhaseMixtureChannel):
             self.id_h2o = self.channel.fluid.id_pc
-
         self.faraday = constants.FARADAY
 
         # Initialize electrochemistry model
