@@ -16,11 +16,15 @@ class SolidLayer(dsct.Discretization2D, oo.OutputObject):
     (default: 1.5) is provided.
     """
 
-    def __init__(self, layer_dict: dict, discretization: int | tuple | list):
+    def __init__(self, layer_dict: dict):
         # Initialize super class
         name = layer_dict.get('name', 'unnamed')
-        super().__init__(name=name, length=layer_dict['length'],
-                         width=layer_dict['width'], shape=discretization)
+        discretization_dict = {
+            'width': layer_dict['width'],
+            'length': layer_dict['length'],
+            **layer_dict['discretization']}
+
+        super().__init__(name=name, discretization_dict=discretization_dict)
         self.dict = layer_dict
         self.thickness = layer_dict['thickness']
 

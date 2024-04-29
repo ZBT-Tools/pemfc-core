@@ -62,18 +62,24 @@ class Cell(OutputObject):
             half_cell.channel.fluid.extend_data_names(
                 half_cell.channel.fluid.name)
 
-        self.dx = self.cathode.channel.dx
+        # self.dx = self.cathode.channel.dx
+
+        """heat conductivity along and through the cell layers"""
+        self.width_straight_channels = \
+            self.cathode.flow_field.width_straight_channels
+        self.d_area = self.cathode.gde.d_area
 
         # Setup membrane
-        membrane_dict['width'] = \
-            self.cathode.flow_field.width_straight_channels
-        membrane_dict['length'] = \
-            self.cathode.flow_field.length_straight_channels
-        # membrane_dict['underrelaxation_factor'] = self.urf
-        layer_discretization = self.dx.shape
-        if self.channel_land_discretization is True:
-            layer_discretization += (2, )
-        self.membrane = membrane.Membrane(membrane_dict, layer_discretization)
+        membrane_dict.update(
+            {
+                'width': self.width_straight_channels,
+                'length': self.cathode.flow_field.length_straight_channels,
+                'discretization':
+                    {'shape': self.cathode.gde.shape,
+                     'ratio': self.cathode.gde.ratio}
+            }
+        )
+        self.membrane = membrane.Membrane(membrane_dict)
 
         # Overall cell thickness (cell pitch)
         self.thickness = self.cathode.thickness + self.membrane.thickness \
@@ -84,11 +90,6 @@ class Cell(OutputObject):
         self.coords = [0.0, 0.0]
 
         # self.is_ht_pem = self.cell_dict['is_ht_pem']
-
-        """heat conductivity along and through the cell layers"""
-        self.width_straight_channels = \
-            self.cathode.flow_field.width_straight_channels
-        self.active_area_dx = self.width_straight_channels * self.dx
 
         # heat conductivity along the gas diffusion electrode and membrane
         self.th_layer = \
@@ -162,11 +163,11 @@ class Cell(OutputObject):
         # Set constant thermal boundary conditions
         if self.first_cell:
             end_plate_heat = cell_dict['heat_flux']
-            heat_dx = end_plate_heat * self.active_area_dx
+            heat_dx = end_plate_heat * self.d_area
             self.add_explicit_layer_source(self.heat_rhs_const, heat_dx, 0)
         if self.last_cell:
             end_plate_heat = cell_dict['heat_flux']
-            heat_dx = end_plate_heat * self.active_area_dx
+            heat_dx = end_plate_heat * self.d_area
             self.add_explicit_layer_source(self.heat_rhs_const, heat_dx, -1)
 
         # Create electric conductance matrix
@@ -214,7 +215,7 @@ class Cell(OutputObject):
         # cell voltage
         self.v = np.zeros(self.i_cd.shape)
         # voltage loss
-        self.v_loss = np.zeros(self.n_ele)
+        self.v_loss = np.zeros(self.v.shape)
         # self.resistance_z = np.zeros(n_ele)
         # through-plane cell resistance
         self.conductance_z = np.zeros(self.i_cd.shape)
@@ -390,6 +391,6 @@ class Cell(OutputObject):
         Calculates the area-specific electrical resistance of the element in
         z-direction
         """
-        current = current_density * self.active_area_dx
+        current = current_density * self.d_area
         resistance_z = self.v_loss / current
         self.conductance_z[:] = 1.0 / resistance_z

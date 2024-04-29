@@ -8,7 +8,7 @@ from pemfc.src import global_functions as gf
 
 
 class Membrane(sl.SolidLayer, ABC):
-    def __new__(cls, membrane_dict, discretization, **kwargs):
+    def __new__(cls, membrane_dict, **kwargs):
         model_type = membrane_dict.get('type', 'Constant')
         if model_type == 'Constant':
             return super(Membrane, cls).__new__(Constant)
@@ -24,28 +24,28 @@ class Membrane(sl.SolidLayer, ABC):
                                       'Constant, Linear, Springer, '
                                       'and YeWang2007.')
 
-    def __init__(self, membrane_dict, discretization, **kwargs):
+    def __init__(self, membrane_dict, **kwargs):
         self.name = 'Membrane'
         membrane_dict['name'] = self.name
-        super().__init__(membrane_dict, discretization)
+        super().__init__(membrane_dict)
 
         # membrane temperature
-        self.temp = np.zeros(self.dx.shape)
+        self.temp = np.zeros(self.shape)
 
         # constant ionic conductivity of membrane
         self.ionic_conductivity = \
             membrane_dict.get('ionic_conductivity', 1.0e-3)
 
         # area specific membrane resistance
-        self.omega_ca = np.zeros(self.dx.shape)
+        self.omega_ca = np.zeros(self.shape)
 
         # membrane resistance
-        self.omega = np.zeros(self.dx.shape)
+        self.omega = np.zeros(self.shape)
 
         self.calc_loss = membrane_dict.get('calc_loss', True)
 
         # voltage loss at the membrane
-        self.v_loss = np.zeros(self.dx.shape)
+        self.v_loss = np.zeros(self.shape)
 
         self.ionic_conductance = self.calc_conductance(self.ionic_conductivity)
 
@@ -70,8 +70,8 @@ class Membrane(sl.SolidLayer, ABC):
 
 
 class Constant(Membrane):
-    def __init__(self, membrane_dict, discretization, **kwargs):
-        super().__init__(membrane_dict, discretization, **kwargs)
+    def __init__(self, membrane_dict, **kwargs):
+        super().__init__(membrane_dict, **kwargs)
         # self.water_flux = np.zeros_like(self.dx)
         # water cross flux through the membrane
         self.omega[:] = 1.0 / self.ionic_conductance[0]
@@ -82,8 +82,8 @@ class Constant(Membrane):
 
 
 class LinearMembrane(Membrane):
-    def __init__(self, membrane_dict, discretization, **kwargs):
-        super().__init__(membrane_dict, discretization, **kwargs)
+    def __init__(self, membrane_dict, **kwargs):
+        super().__init__(membrane_dict, **kwargs)
         self.basic_resistance = membrane_dict['basic_resistance']
         # basic electrical resistance of the membrane
         self.temp_coeff = membrane_dict['temperature_coefficient']
@@ -100,19 +100,19 @@ class WaterTransportMembrane(Membrane, ABC):
 
     FARADAY = constants.FARADAY
 
-    def __init__(self, membrane_dict, discretization, **kwargs):
-        super().__init__(membrane_dict, discretization, **kwargs)
+    def __init__(self, membrane_dict, **kwargs):
+        super().__init__(membrane_dict, **kwargs)
 
         # self.vapour_coeff = membrane_dict['vapour_transport_coefficient']
         # self.acid_group_conc = membrane_dict['acid_group_concentration']
 
         # Water cross flux through the membrane
-        self.water_content = np.zeros((2, len(self.dx)))
-        self.avg_water_content = np.zeros(self.dx.shape)
-        self.water_flux = np.zeros(self.dx.shape)
-        self.diff_coeff = np.zeros(self.dx.shape)
+        self.water_content = np.zeros((2, *self.shape))
+        self.avg_water_content = np.zeros(self.shape)
+        self.water_flux = np.zeros(self.shape)
+        self.diff_coeff = np.zeros(self.shape)
         # Electro-osmotic drag coefficient
-        self.eod = np.zeros(self.dx.shape)
+        self.eod = np.zeros(self.shape)
         self.eod[:] = membrane_dict.get('electro-osmotic_drag_coeff', 1.07)
 
         self.add_print_data(self.water_flux,
@@ -153,8 +153,8 @@ class SpringerMembrane(WaterTransportMembrane):
     is approximated by the channel humidity/water activity due to insufficient
     resolution of the through-plane concentration gradients.
     """
-    def __init__(self, membrane_dict, discretization, **kwargs):
-        super().__init__(membrane_dict, discretization, **kwargs)
+    def __init__(self, membrane_dict, **kwargs):
+        super().__init__(membrane_dict, **kwargs)
         # Under-relaxation factor for water flux update
         self.urf = membrane_dict.get('underrelaxation_factor', 0.95)
 
@@ -184,7 +184,7 @@ class SpringerMembrane(WaterTransportMembrane):
                                        + 0.0264 * wc_avg ** 2.0
                                        - 0.000671 * wc_avg ** 3.0)))
 
-        diff_coeff = 1.0e-10 * np.exp(2416.0 * (1.0/303.0 * 1.0/self.temp)) \
+        diff_coeff = 1.0e-10 * np.exp(2416.0 * (1.0 / 303.0 * 1.0 / self.temp)) \
             * diff_coeff_star
 
         # # Based on Nguyen and White (1993);
@@ -284,8 +284,8 @@ class YeWang2007Membrane(SpringerMembrane):
     is approximated by the channel humidity/water activity due to insufficient
     resolution of the through-plane concentration gradients.
     """
-    def __init__(self, membrane_dict, discretization, **kwargs):
-        super().__init__(membrane_dict, discretization, **kwargs)
+    def __init__(self, membrane_dict, **kwargs):
+        super().__init__(membrane_dict, **kwargs)
         # Under-relaxation factor for water flux update
         self.urf = membrane_dict.get('underrelaxation_factor', 0.8)
 

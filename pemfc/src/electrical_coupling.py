@@ -75,7 +75,7 @@ class ElectricalCoupling:
         # conductance = (self.c_width * self.dx / resistance).flatten()
         # conductance = 1.0 / self.resistance
         active_area = \
-            np.array([cell.active_area_dx for cell in self.cells]).flatten()
+            np.array([cell.d_area for cell in self.cells]).flatten()
         if self.n_cells > 1:
             self.update_mat(conductance_z)
             self.rhs[:self.n_ele] = self.calc_boundary_condition()
@@ -105,7 +105,7 @@ class ElectricalCoupling:
 
     def calc_voltage_loss(self):
         v_loss = \
-            np.asarray([np.average(cell.v_loss, weights=cell.active_area_dx)
+            np.asarray([np.average(cell.v_loss, weights=cell.d_area)
                         for cell in self.cells])
         v_loss_total = np.sum(v_loss)
         return v_loss, v_loss_total
@@ -118,9 +118,9 @@ class ElectricalCoupling:
         if self.current_control:
             v_loss, v_loss_total = self.calc_voltage_loss()
             i_bc = v_loss[0] * cell_0.conductance_z
-            i_target = self.i_cd_tar * cell_0.active_area_dx
+            i_target = self.i_cd_tar * cell_0.d_area
             i_correction_factor = i_target \
-                / np.average(i_bc, weights=cell_0.active_area_dx)
+                / np.average(i_bc, weights=cell_0.d_area)
             v_loss_total *= - 1.0 * i_correction_factor
             return v_loss_total * cell_0.conductance_z
         else:

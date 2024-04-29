@@ -278,13 +278,13 @@ class Stack:
                                      voltage=voltage)
                 self.i_cd[:] = self.elec_sys.i_cd
             self.v[:] = \
-                np.asarray([np.average(cell.v, weights=cell.active_area_dx)
+                np.asarray([np.average(cell.v, weights=cell.d_area)
                             for cell in self.cells])
             if self.current_control:
                 self.v_stack = np.sum(self.v)
                 self.v_loss = self.e_0 - self.v_stack
             self.i_cd_avg = np.average(self.i_cd[0],
-                                       weights=self.cells[0].active_area_dx)
+                                       weights=self.cells[0].d_area)
 
     def update_flows(self, update_inflows=False,
                      coolant_temp_diff=None, coolant_mass_flow=None):

@@ -22,11 +22,6 @@ class HalfCell:
         n_ele = self.n_nodes - 1
         self.n_ele = n_ele
 
-        # Additional resolution in width direction in regions
-        # "under land" and "under channel" if True
-        self.channel_land_discretization = \
-            cell_dict['channel_land_discretization']
-
         # Half cell geometry parameter
         self.width = cell_dict["width"]
         self.length = cell_dict["length"]
@@ -40,18 +35,6 @@ class HalfCell:
         # Number of channels of each half cell
         self.n_channels = halfcell_dict['channel_number']
 
-        # Initialize flow field geometry
-        flowfield_dict = {
-            'channel_number': self.n_channels,
-            'rib_width': halfcell_dict['rib_width'],
-            'width': self.width,
-            'length': self.length
-        }
-        self.flow_field = \
-            ff.FlowField(self.name + 'Flow Field', flowfield_dict, self.channel)
-
-
-
         # Fuel must be at first position
         self.id_fuel = 0
         if isinstance(self.channel, chl.TwoPhaseMixtureChannel):
@@ -64,33 +47,57 @@ class HalfCell:
         self.electrochemistry = electrochem.ElectrochemistryModel(
             electrochemistry_dict, self.n_nodes)
 
+        # Initialize flow field geometry
+        flowfield_dict = {
+            'channel_number': self.n_channels,
+            'rib_width': halfcell_dict['rib_width'],
+            'width': self.width,
+            'length': self.length
+        }
+        self.flow_field = \
+            ff.FlowField(self.name + 'Flow Field', flowfield_dict, self.channel)
+
+        # Discretization settings
+        # Additional resolution in width direction in regions
+        # "under land" and "under channel" if True
+        self.channel_land_discretization = \
+            cell_dict['channel_land_discretization']
+        discretization_shape = self.channel.dx.shape
+        if self.channel_land_discretization is True:
+            discretization_shape += (2, )
+            land_channel_ratio = self.flow_field.rib_width / self.channel.width
+        else:
+            land_channel_ratio = 1.0
+        discretization_dict = {
+            'shape': discretization_shape,
+            'ratio': (1.0, land_channel_ratio),
+        }
+
         # Initialize bipolar plate (bpp)
         bpp_dict = halfcell_dict['bpp']
-        bpp_dict.update(
-            {'name': self.name + ' BPP',
-             'width': self.flow_field.width_straight_channels,
-             'length': self.flow_field.length_straight_channels})
+        bpp_dict.update({
+            'name': self.name + ' BPP',
+            'width': self.flow_field.width_straight_channels,
+            'length': self.flow_field.length_straight_channels,
+            'discretization': discretization_dict})
         # 'porosity': self.channel.cross_area * self.n_channel / (
         #             self.th_bpp * self.width)}
+        self.bpp = sl.SolidLayer(bpp_dict)
 
-        layer_discretization = self.channel.dx.shape
-        if self.channel_land_discretization is True:
-            layer_discretization += (2, )
-        self.bpp = sl.SolidLayer(bpp_dict, layer_discretization)
-
-        # initialize gas diffusion electrode (gde: gdl + cl
+        # Initialize gas diffusion electrode (gde: gdl + cl)
         gde_dict = halfcell_dict['gde']
         gde_dict.update(
             {'name': self.name + ' GDE',
              'thickness': electrochemistry_dict['thickness_gdl']
                 + electrochemistry_dict['thickness_cl'],
              'width': self.flow_field.width_straight_channels,
-             'length': self.flow_field.length_straight_channels})
+             'length': self.flow_field.length_straight_channels,
+             'discretization': discretization_dict})
         # 'porosity':
         #    (self.th_gdl * halfcell_dict['porosity gdl']
         #     + self.th_cl * halfcell_dict['porosity cl'])
         #    / (self.th_gde + self.th_cl)}
-        self.gde = sl.SolidLayer(gde_dict, layer_discretization)
+        self.gde = sl.SolidLayer(gde_dict)
         self.thickness = self.bpp.thickness + self.gde.thickness
 
         self.n_charge = self.electrochemistry.n_charge
@@ -105,9 +112,9 @@ class HalfCell:
         # stoichiometry of the reactant at the channel inlet
         self.inlet_stoi = 0.0
         # cross water flux through the membrane
-        self.w_cross_flow = np.zeros(layer_discretization)
+        self.w_cross_flow = np.zeros(self.gde.shape)
         # voltage loss
-        self.v_loss = np.zeros(layer_discretization)
+        self.v_loss = np.zeros(self.gde.shape)
 
     def update(self, current_density, update_channel=False,
                current_control=True):

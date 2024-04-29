@@ -170,7 +170,7 @@ class TemperatureSystem:
             source += getattr(channel, 'condensation_heat', 0.0)  # * 0.0
             cell.add_explicit_layer_source(cell.heat_rhs_dyn, source, 1)
 
-            current = cell.i_cd * cell.active_area_dx
+            current = cell.i_cd * cell.d_area
             half_ohmic_heat_membrane = \
                 0.5 * cell.membrane.omega * np.square(current)
 

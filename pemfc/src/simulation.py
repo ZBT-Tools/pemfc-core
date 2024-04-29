@@ -177,7 +177,7 @@ class Simulation:
                 break
 
             average_current_density = \
-                np.average([np.average(cell.i_cd, weights=cell.active_area_dx)
+                np.average([np.average(cell.i_cd, weights=cell.d_area)
                             for cell in self.stack.cells])
             if self.stack.coolant_circuit is None:
                 cool_mass_flow = 0.0
