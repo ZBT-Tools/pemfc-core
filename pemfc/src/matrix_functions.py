@@ -54,10 +54,10 @@ def build_1d_conductance_matrix(cond_vector, offset=1):
         + np.diag(off_diag, k=offset)
 
 
-def build_z_cell_conductance_matrix(cond_vector, n_ele):
+def build_z_cell_conductance_matrix(cond_vector):
     list_mat = []
-    for i in range(n_ele):
-        for j in range(cond_vector.shape[-1]):
+    for j in range(cond_vector.shape[2]):
+        for i in range(cond_vector.shape[1]):
             list_mat.append(build_1d_conductance_matrix(cond_vector[:, i, j]))
     return sp_la.block_diag(*list_mat)
 
@@ -80,7 +80,8 @@ def build_x_cell_conductance_matrix(cond_vector, n_ele, n_layer=None):
 
 
 def build_cell_conductance_matrix(x_cond_vector, z_cond_vector, n_ele):
-    z_cond_mtx = build_z_cell_conductance_matrix(z_cond_vector, n_ele)
+    z_cond_mtx = build_z_cell_conductance_matrix(z_cond_vector)
+    # ToDo: Continue 3D matrix assembly
     raise ValueError('code adaption for 2D only up until this point')
     if n_ele > 1:
         x_cond_mtx = build_x_cell_conductance_matrix(x_cond_vector, n_ele)

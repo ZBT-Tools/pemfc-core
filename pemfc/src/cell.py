@@ -65,21 +65,12 @@ class Cell(OutputObject):
         # self.dx = self.cathode.channel.dx
 
         """heat conductivity along and through the cell layers"""
-        self.width_straight_channels = \
-            self.cathode.flow_field.width_straight_channels
-        self.d_area = self.cathode.gde.d_area
+        # self.width_straight_channels = \
+        #     self.cathode.flow_field.width_straight_channels
+        self.d_area = self.cathode.gde.dsct.d_area
 
         # Setup membrane
-        membrane_dict.update(
-            {
-                'width': self.width_straight_channels,
-                'length': self.cathode.flow_field.length_straight_channels,
-                'discretization':
-                    {'shape': self.cathode.gde.shape,
-                     'ratio': self.cathode.gde.ratio}
-            }
-        )
-        self.membrane = membrane.Membrane(membrane_dict)
+        self.membrane = membrane.Membrane(membrane_dict, self.cathode.gde.dsct)
 
         # Overall cell thickness (cell pitch)
         self.thickness = self.cathode.thickness + self.membrane.thickness \
@@ -163,11 +154,11 @@ class Cell(OutputObject):
         # Set constant thermal boundary conditions
         if self.first_cell:
             end_plate_heat = cell_dict['heat_flux']
-            heat_dx = end_plate_heat * self.d_area
+            heat_dx = end_plate_heat * self.cathode.discretization.d_area
             self.add_explicit_layer_source(self.heat_rhs_const, heat_dx, 0)
         if self.last_cell:
             end_plate_heat = cell_dict['heat_flux']
-            heat_dx = end_plate_heat * self.d_area
+            heat_dx = end_plate_heat * self.anode.discretization.d_area
             self.add_explicit_layer_source(self.heat_rhs_const, heat_dx, -1)
 
         # Create electric conductance matrix
@@ -178,8 +169,7 @@ class Cell(OutputObject):
             (self.elec_cond + np.roll(self.elec_cond, 1, axis=1)) * 0.5
         self.elec_cond = self.elec_cond[:, :-1]
         self.elec_x_mat_const = \
-            mtx.build_z_cell_conductance_matrix(self.elec_cond.transpose(),
-                                                len(self.elec_cond))
+            mtx.build_z_cell_conductance_matrix(self.elec_cond.transpose())
         # print(self.elec_x_mat_const)
 
         # boolearn alarm values
@@ -233,14 +223,17 @@ class Cell(OutputObject):
         external surface
         """
         # geometry model
-        ext_surface_factor = (self.width + self.length) \
-            / (self.cathode.channel.length * self.width_straight_channels)
+        # ext_surface_factor = (self.width + self.length) \
+        #     / (self.cathode.channel.length * self.width_straight_channels)
         # k_amb = np.full((self.n_layer, self.n_ele), 0.)
         # convection conductance to the environment
+        # ToDo: Check thickness calculation
         th_layer_amb = (self.th_layer + np.roll(self.th_layer, 1)) * 0.5
         # if self.last_cell:
         th_layer_amb = np.hstack((th_layer_amb, th_layer_amb[0]))
-        k_amb = np.outer(th_layer_amb, self.dx) * alpha_amb / ext_surface_factor
+        # ToDo: Check conductance calculation
+        k_amb = np.outer(th_layer_amb, self.cathode.discretization.dx[0]) \
+            * alpha_amb * self.cathode.flow_field.external_surface_factor
         if self.first_cell:
             k_amb[0] *= 0.5
         if self.last_cell:
@@ -391,6 +384,6 @@ class Cell(OutputObject):
         Calculates the area-specific electrical resistance of the element in
         z-direction
         """
-        current = current_density * self.d_area
+        current = current_density * self.membrane.dsct.d_area
         resistance_z = self.v_loss / current
         self.conductance_z[:] = 1.0 / resistance_z

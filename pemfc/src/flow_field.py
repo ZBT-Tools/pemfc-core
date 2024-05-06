@@ -26,10 +26,8 @@ class FlowField:
         # Rib width dictates and resets channel length if provided
         if 'rib_width' in flowfield_dict:
             self.rib_width = flowfield_dict['rib_width']
-            self.width_straight_channels = \
-                (chl.width + self.rib_width) * self.n_channels
             self.channel.length = \
-                area / (chl.width + self.rib_width) * self.n_channels
+                area / ((chl.width + self.rib_width) * self.n_channels)
             area_factor = area / (chl.base_area * self.n_channels)
         else:
             area_factor = area / (chl.base_area * self.n_channels)
@@ -43,8 +41,8 @@ class FlowField:
             (chl.width + self.rib_width) * self.n_channels
         self.length_straight_channels = area / self.width_straight_channels
         self.active_area = area_factor * chl.base_area
+        self.external_surface_factor = (width + length) \
+            / (self.width_straight_channels + self.length_straight_channels)
         # self.active_area = area_factor * self.channel.base_area
         # factor active area with ribs / active channel area
-        self.active_area_dx = area_factor * chl.base_area_dx
-        # self.active_area_dx = area_factor * self.channel.base_area_dx
-
+        # self.active_area_dx = area_factor * chl.base_area_dx

@@ -325,7 +325,7 @@ class Stack:
                 self.cells[0].half_cells[i].calc_inlet_flow(self.i_cd_avg)
             cell_mass_flow = np.sum(cell_mass_flow, axis=0)
             mass_flow = cell_mass_flow \
-                        * self.cells[0].half_cells[i].n_channels * self.n_cells
+                * self.cells[0].half_cells[i].n_channels * self.n_cells
             mass_flows_in.append(mass_flow)
         return mass_flows_in
 

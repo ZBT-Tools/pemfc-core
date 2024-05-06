@@ -1,19 +1,20 @@
 # general imports
-from abc import ABC, abstractmethod
+from abc import ABC
 import numpy as np
 from scipy import optimize
 
 # local module imports
 from . import interpolation as ip, constants, channel as chl
+from pemfc.src import discretization as dsct
 
 
 class ElectrochemistryModel(ABC):
 
-    def __init__(self, input_dict: dict, nodes: int):
+    def __init__(self, input_dict: dict, discretization: dsct.Discretization2D):
         
         """voltage loss parameter, (Kulikovsky, 2013)"""
 
-        self.n_ele = nodes - 1
+        shape = discretization.shape
         self.faraday = constants.FARADAY
         # index of fuel component in gas mixture
         self.id_fuel = input_dict['fuel_index']
@@ -36,7 +37,7 @@ class ElectrochemistryModel(ABC):
         self.i_sigma = np.sqrt(2. * vol_ex_cd * self.prot_con_cl
                                * self.tafel_slope)
         # index of the first element with negative cell voltage
-        self.index_cat = self.n_ele
+        self.index_cat = shape[0]
         # characteristic current density, see (Kulikovsky, 2013)
         self.i_star = self.prot_con_cl * self.tafel_slope / self.th_cl
         # concentration at channel inlet
@@ -49,7 +50,7 @@ class ElectrochemistryModel(ABC):
         self.delta_i = input_dict['delta_i']
         # critical local current density where Kulikovsky model transitions
         # into linear tangent line near limiting current
-        self.i_crit = np.zeros(self.n_ele)
+        self.i_crit = np.zeros(shape)
         # switch to include activation contribution to voltage losses
         self.calc_act_loss = input_dict['calc_act_loss']
         # switch to include catalyst layer diffusion contribution to voltage
@@ -60,7 +61,7 @@ class ElectrochemistryModel(ABC):
         self.calc_gdl_diff_loss = input_dict['calc_gdl_diff_loss']
 
         # cell voltage loss
-        self.v_loss = np.zeros(self.n_ele)
+        self.v_loss = np.zeros(shape)
         self.updated_v_loss = False
         self.corrected_current_density = None
 
@@ -85,8 +86,7 @@ class ElectrochemistryModel(ABC):
     def update_voltage_loss(self, current_density: np.ndarray,
                             channel: chl.Channel):
         eta = self.calc_electrode_loss(current_density, channel)
-        self.v_loss[:] = eta # \
-                         # + self.calc_plate_loss(current_density)
+        self.v_loss[:] = eta
         self.updated_v_loss = True
 
     def calc_activation_loss(self, current_density: np.ndarray,
@@ -96,19 +96,19 @@ class ElectrochemistryModel(ABC):
         according to (Kulikovsky, 2013).
         """
         np.seterr(divide='ignore')
-        try:
-            v_loss_act = \
-                np.where(np.logical_and(current_density > constants.SMALL,
-                                        conc > constants.SMALL),
-                         self.tafel_slope
-                         * np.arcsinh((current_density / self.i_sigma) ** 2.
-                                      / (2. * conc
-                                         * (1. - np.exp(-current_density /
-                                                        (2. * self.i_star))))),
-                         0.0)
-            np.seterr(divide='raise')
-        except FloatingPointError:
-            raise
+        # try:
+        v_loss_act = \
+            np.where(np.logical_and(current_density > constants.SMALL,
+                                    conc > constants.SMALL),
+                     self.tafel_slope
+                     * np.arcsinh((current_density / self.i_sigma) ** 2.
+                                  / (2. * conc
+                                     * (1. - np.exp(-current_density /
+                                                    (2. * self.i_star))))),
+                     0.0)
+        np.seterr(divide='raise')
+        # except FloatingPointError:
+        #     raise
         return v_loss_act
 
     def calc_transport_loss_catalyst_layer(self, current_density: np.ndarray,
@@ -117,24 +117,24 @@ class ElectrochemistryModel(ABC):
         Calculates the diffusion voltage loss in the catalyst layer
         according to (Kulikovsky, 2013).
         """
-        try:
-            i_hat = current_density / self.i_star
-            short_save = np.sqrt(2. * i_hat)
-            beta = \
-                short_save / (1. + np.sqrt(1.12 * i_hat) * np.exp(short_save)) \
-                + np.pi * i_hat / (2. + i_hat)
-        except FloatingPointError:
-            test = np.any(current_density < 0.0)
-            raise
-        try:
-            v_loss_cl_diff = \
-                ((self.prot_con_cl * self.tafel_slope ** 2.)
-                 / (4. * self.faraday * self.diff_coeff_cl * conc)
-                 * (current_density / self.i_star
-                    - np.log10(1. + np.square(current_density) /
-                               (self.i_star ** 2. * beta ** 2.)))) / var
-        except FloatingPointError:
-            raise
+        # try:
+        i_hat = current_density / self.i_star
+        short_save = np.sqrt(2. * i_hat)
+        beta = \
+            short_save / (1. + np.sqrt(1.12 * i_hat) * np.exp(short_save)) \
+            + np.pi * i_hat / (2. + i_hat)
+        # except FloatingPointError:
+        #     test = np.any(current_density < 0.0)
+        #     raise
+        # try:
+        v_loss_cl_diff = \
+            ((self.prot_con_cl * self.tafel_slope ** 2.)
+             / (4. * self.faraday * self.diff_coeff_cl * conc)
+             * (current_density / self.i_star
+                - np.log10(1. + np.square(current_density) /
+                           (self.i_star ** 2. * beta ** 2.)))) / var
+        # except FloatingPointError:
+        #     raise
         return v_loss_cl_diff
 
     def calc_transport_loss_diffusion_layer(self, var: float):
@@ -150,10 +150,13 @@ class ElectrochemistryModel(ABC):
 
     def calc_electrode_loss(self, current_density: np.ndarray,
                             channel: chl.Channel):
+
         if hasattr(channel.fluid, 'gas'):
             conc = channel.fluid.gas.concentration[self.id_fuel]
         else:
             conc = channel.fluid.concentration[self.id_fuel]
+
+        # ToDo: Increase dimensionality of concentration
         conc_ele = ip.interpolate_1d(conc)
         conc_ref = conc[channel.id_in]
         conc_star = conc_ele / conc_ref
@@ -197,7 +200,7 @@ class ElectrochemistryModel(ABC):
                 self.calc_electrode_loss_kulikovsky(current_density[id_reg],
                                                     conc_ele[id_reg], conc_ref,
                                                     update_members=False)
-            eta = np.zeros(self.n_ele)
+            eta = np.zeros(current_density.shape)
             eta[id_lin] = eta_lin
             eta[id_reg] = eta_reg
             return eta

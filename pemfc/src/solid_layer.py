@@ -7,7 +7,7 @@ from pemfc.src import output_object as oo
 from pemfc.src import discretization as dsct
 
 
-class SolidLayer(dsct.Discretization2D, oo.OutputObject):
+class SolidLayer(oo.OutputObject):
     """
     Class for describing a basic solid layer as a cuboid (width,
     length, thickness) with physical properties (electrical and thermal
@@ -16,15 +16,12 @@ class SolidLayer(dsct.Discretization2D, oo.OutputObject):
     (default: 1.5) is provided.
     """
 
-    def __init__(self, layer_dict: dict):
+    def __init__(self, layer_dict: dict, discretization: dsct.Discretization2D):
         # Initialize super class
         name = layer_dict.get('name', 'unnamed')
-        discretization_dict = {
-            'width': layer_dict['width'],
-            'length': layer_dict['length'],
-            **layer_dict['discretization']}
 
-        super().__init__(name=name, discretization_dict=discretization_dict)
+        super().__init__(name=name)
+        self.dsct = discretization
         self.dict = layer_dict
         self.thickness = layer_dict['thickness']
 
@@ -41,24 +38,29 @@ class SolidLayer(dsct.Discretization2D, oo.OutputObject):
 
     def calc_conductance(self, conductivity, effective=True):
         if np.ndim(conductivity) == 0:
-            conductance_z = self.d_area * conductivity / self.thickness
+            conductance_z = \
+                self.dsct.d_area * conductivity / self.thickness
             conductance_x = \
-                self.dx[1] / self.dx[0] * self.thickness * conductivity
+                self.dsct.dx[1] / self.dsct.dx[0] \
+                * (self.thickness * conductivity)
             conductance_y = \
-                self.dx[0] / self.dx[1] * self.thickness * conductivity
+                self.dsct.dx[0] / self.dsct.dx[1] \
+                * self.thickness * conductivity
 
         elif np.ndim(conductivity) == 1 and np.shape(conductivity)[0] == 2:
-            conductance_z = self.d_area * conductivity[0] / self.thickness
+            conductance_z = self.dsct.d_area * conductivity[0] \
+                            / self.thickness
             conductance_x = \
-                self.dx[1] / self.dx[0] * self.thickness * conductivity[1]
+                self.dsct.dx[1] / self.dsct.dx[0] \
+                * self.thickness * conductivity[1]
             conductance_y = \
-                self.dx[0] / self.dx[1] * self.thickness * conductivity[1]
+                self.dsct.dx[0] / self.dsct.dx[1] * self.thickness * conductivity[1]
         elif np.ndim(conductivity) == 1 and np.shape(conductivity)[0] == 3:
-            conductance_z = self.d_area * conductivity[0] / self.thickness
+            conductance_z = self.dsct.d_area * conductivity[0] / self.thickness
             conductance_x = \
-                self.dx[1] / self.dx[0] * self.thickness * conductivity[1]
+                self.dsct.dx[1] / self.dsct.dx[0] * self.thickness * conductivity[1]
             conductance_y = \
-                self.dx[0] / self.dx[1] * self.thickness * conductivity[2]
+                self.dsct.dx[0] / self.dsct.dx[1] * self.thickness * conductivity[2]
         else:
             raise ValueError('conductivity must be either single scalar or '
                              'an iterable with two entries')
@@ -69,12 +71,12 @@ class SolidLayer(dsct.Discretization2D, oo.OutputObject):
 
         return np.asarray([conductance_z, conductance_x, conductance_y])
 
-    def calc_voltage_loss(self, current_density, area=None, **kwargs):
+    def calc_voltage_loss(self, current_density, area=None, axis=0, **kwargs):
         if area is None:
-            current = current_density * self.d_area
+            current = current_density * self.dsct.d_area
         else:
             current = current_density * area
-        return current / self.electrical_conductance[0]
+        return current / self.electrical_conductance[axis]
 
 
 # solid_dict = {

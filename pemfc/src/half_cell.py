@@ -8,6 +8,8 @@ from . import solid_layer as sl, constants, \
     channel as chl
 from .fluid import fluid as fluids
 from . import electrochemistry as electrochem
+from pemfc.src import discretization as dsct
+
 
 warnings.filterwarnings("ignore")
 
@@ -41,12 +43,6 @@ class HalfCell:
             self.id_h2o = self.channel.fluid.id_pc
         self.faraday = constants.FARADAY
 
-        # Initialize electrochemistry model
-        electrochemistry_dict = halfcell_dict['electrochemistry']
-        electrochemistry_dict['fuel_index'] = self.id_fuel
-        self.electrochemistry = electrochem.ElectrochemistryModel(
-            electrochemistry_dict, self.n_nodes)
-
         # Initialize flow field geometry
         flowfield_dict = {
             'channel_number': self.n_channels,
@@ -71,33 +67,36 @@ class HalfCell:
         discretization_dict = {
             'shape': discretization_shape,
             'ratio': (1.0, land_channel_ratio),
+            'width': self.flow_field.width_straight_channels / self.n_channels,
+            'length': self.flow_field.length_straight_channels,
         }
+        self.discretization = dsct.Discretization2D(
+            discretization_dict=discretization_dict)
+
+        # Initialize electrochemistry model
+        electrochemistry_dict = halfcell_dict['electrochemistry']
+        electrochemistry_dict['fuel_index'] = self.id_fuel
+        self.electrochemistry = electrochem.ElectrochemistryModel(
+            electrochemistry_dict, self.discretization)
 
         # Initialize bipolar plate (bpp)
         bpp_dict = halfcell_dict['bpp']
-        bpp_dict.update({
-            'name': self.name + ' BPP',
-            'width': self.flow_field.width_straight_channels,
-            'length': self.flow_field.length_straight_channels,
-            'discretization': discretization_dict})
+        bpp_dict['name'] = self.name + ' BPP'
         # 'porosity': self.channel.cross_area * self.n_channel / (
         #             self.th_bpp * self.width)}
-        self.bpp = sl.SolidLayer(bpp_dict)
+        self.bpp = sl.SolidLayer(bpp_dict, self.discretization)
 
         # Initialize gas diffusion electrode (gde: gdl + cl)
         gde_dict = halfcell_dict['gde']
         gde_dict.update(
             {'name': self.name + ' GDE',
              'thickness': electrochemistry_dict['thickness_gdl']
-                + electrochemistry_dict['thickness_cl'],
-             'width': self.flow_field.width_straight_channels,
-             'length': self.flow_field.length_straight_channels,
-             'discretization': discretization_dict})
+                + electrochemistry_dict['thickness_cl']})
         # 'porosity':
         #    (self.th_gdl * halfcell_dict['porosity gdl']
         #     + self.th_cl * halfcell_dict['porosity cl'])
         #    / (self.th_gde + self.th_cl)}
-        self.gde = sl.SolidLayer(gde_dict)
+        self.gde = sl.SolidLayer(gde_dict, self.discretization)
         self.thickness = self.bpp.thickness + self.gde.thickness
 
         self.n_charge = self.electrochemistry.n_charge
@@ -112,9 +111,9 @@ class HalfCell:
         # stoichiometry of the reactant at the channel inlet
         self.inlet_stoi = 0.0
         # cross water flux through the membrane
-        self.w_cross_flow = np.zeros(self.gde.shape)
+        self.w_cross_flow = np.zeros(self.gde.dsct.shape)
         # voltage loss
-        self.v_loss = np.zeros(self.gde.shape)
+        self.v_loss = np.zeros(self.gde.dsct.shape)
 
     def update(self, current_density, update_channel=False,
                current_control=True):
@@ -125,15 +124,16 @@ class HalfCell:
             self.electrochemistry.update(current_density, self.channel)
             # self.channel.update(mole_flow_in, mole_source)
             # self.channel.mole_flow[:] = mole_flow_in
+            current = self.reduce_flux_to_flow(current_density)
+
             self.channel.mass_source[:], self.channel.mole_source[:] = \
-                self.calc_mass_source(current_density)
+                self.calc_mass_source(current)
             if update_channel:
                 self.channel.update(update_mass=True, update_flow=False,
                                     update_heat=False, update_fluid=True)
             self.update_voltage_loss(current_density)
 
-            # calculate stoichiometry
-            current = np.sum(current_density * self.flow_field.active_area_dx)
+            # Calculate stoichiometry
             self.inlet_stoi = \
                 self.channel.mole_flow[self.id_fuel, self.channel.id_in] \
                 * self.faraday * self.n_charge \
@@ -143,41 +143,15 @@ class HalfCell:
                                  'becomes smaller than one: {1:0.3f}'
                                  .format(self.number, self.inlet_stoi))
 
-    # def calc_mass_balance(self, current_density, stoi=None):
-    #     n_species = self.channel.fluid.n_species
-    #     mole_flow_in = np.zeros((n_species, self.n_nodes))
-    #     mole_source = np.zeros((n_species, self.n_ele))
-    #     mole_flow_in[self.id_fuel, :], mole_source[self.id_fuel, :] = \
-    #         self.calc_fuel_flow(current_density, stoi)
-    #     mole_flow_in[self.id_inert, :] = \
-    #         mole_flow_in[self.id_fuel, self.channel.id_in] \
-    #         * self.inert_reac_ratio
-    #     air_flow_in = np.sum(mole_flow_in[:, self.channel.id_in])
-    #     mole_flow_in[self.id_h2o, :], mole_source[self.id_h2o, :] = \
-    #         self.calc_water_flow(current_density, air_flow_in)
-    #     return mole_flow_in, mole_source
-
-    def calc_mass_balance(self, current_density, stoi=None):
-        avg_current_density = \
-            np.average(current_density, weights=self.flow_field.active_area_dx)
-        mass_flow_in, mole_flow_in = \
-            self.calc_inlet_flow(avg_current_density, stoi)
-        mass_flow_in = g_func.fill_transposed(mass_flow_in,
-                                              self.channel.mass_flow.shape)
-        mole_flow_in = g_func.fill_transposed(mole_flow_in,
-                                              self.channel.mole_flow.shape)
-        mass_source, mole_source = self.calc_mass_source(current_density)
-        return mass_flow_in, mole_flow_in, mass_source, mole_source
-
     def calc_inlet_flow(self, current_density, stoi=None):
         if stoi is None:
             stoi = self.target_stoi
         if np.ndim(current_density) > 0:
             raise ValueError('current_density must be scalar')
         mole_flow_in = np.zeros(self.channel.fluid.n_species)
+        current = self.reduce_flux_to_flow(current_density)
         mole_flow_in[self.id_fuel] = \
-            current_density * self.flow_field.active_area \
-            * stoi * abs(self.n_stoi[self.id_fuel]) \
+            current * stoi * abs(self.n_stoi[self.id_fuel]) \
             / (self.n_charge * self.faraday)
         inlet_composition = \
             self.channel.fluid.mole_fraction[:, self.channel.id_in]
@@ -188,62 +162,32 @@ class HalfCell:
         mass_flow_in = mole_flow_in * self.channel.fluid.species_mw
         return mass_flow_in, mole_flow_in
 
-    def calc_mass_source(self, current_density):
-        mole_source = np.zeros((self.channel.fluid.n_species, self.n_ele))
+    def calc_mass_source(self, current):
+        mole_source = np.zeros((self.channel.fluid.n_species,
+                                *self.discretization.shape))
 
         for i in range(len(mole_source)):
-            mole_source[i] = \
-                current_density * self.flow_field.active_area_dx \
+            mole_source[i] = current \
                 * self.n_stoi[i] / (self.n_charge * self.faraday)
 
-        # water cross flow
-        water_cross_flow = self.flow_field.active_area_dx * self.w_cross_flow
-        mole_source[self.id_h2o] += \
-            self.flow_field.active_area_dx * self.w_cross_flow
+        # Water cross flow
+        water_cross_flow = self.reduce_flux_to_flow(self.w_cross_flow)
+        mole_source[self.id_h2o] += water_cross_flow
         # self.channel.flow_direction
         mass_source = (mole_source.transpose()
                        * self.channel.fluid.species_mw).transpose()
         return mass_source, mole_source
 
-    def calc_fuel_flow(self, current_density, stoi=None):
-        """
-        Calculates the reactant molar flow [mol/s]
-        """
-        if stoi is None:
-            stoi = self.target_stoi
-        curr_den = \
-            np.average(current_density, weights=self.flow_field.active_area_dx)
-        # curr_den = self.target_cd
-        mol_flow_in = curr_den * self.flow_field.active_area * stoi \
-            * abs(self.n_stoi[self.id_fuel]) / (self.n_charge * self.faraday)
-        dmol = current_density * self.flow_field.active_area_dx \
-            * self.n_stoi[self.id_fuel] / (self.n_charge * self.faraday)
-        # g_func.add_source(self.mol_flow[self.id_fuel], dmol,
-        #                   self.flow_direction)
-        return mol_flow_in, dmol
-
-    def calc_water_flow(self, current_density, air_flow_in):
-        """"
-        Calculates the water molar flow [mol/s]
-        """
-        if not isinstance(self.channel.fluid, fluids.TwoPhaseMixture):
-            raise TypeError('Fluid in channel must be of type TwoPhaseMixture')
-        id_in = self.channel.id_in
-        humidity_in = self.channel.fluid.humidity[id_in]
-        sat_p = self.channel.fluid.saturation_pressure[id_in]
-        mol_flow_in = air_flow_in * sat_p * humidity_in / \
-            (self.channel.pressure[id_in] - humidity_in * sat_p)
-        dmol = np.zeros_like(current_density)
-        h2o_prod = self.flow_field.active_area_dx * self.n_stoi[self.id_h2o] \
-            * current_density / (self.n_charge * self.faraday)
-        dmol += h2o_prod
-        h2o_cross = self.flow_field.active_area_dx * self.w_cross_flow
-        # * self.channel.flow_direction
-        dmol += h2o_cross
-        return mol_flow_in, dmol
+    def reduce_flux_to_flow(self, flux: np.ndarray):
+        if flux.ndim == 1:
+            return np.sum(self.discretization.d_area, axis=-1) * flux
+        elif flux.ndim == 2:
+            return np.sum(self.discretization.d_area * flux, axis=-1)
+        else:
+            raise ValueError('flux variable must be one- or two-dimensional numpy array')
 
     def update_voltage_loss(self, current_density: np.ndarray):
-        area = self.flow_field.active_area_dx
+        area = self.discretization.d_area
         bpp_loss = self.bpp.calc_voltage_loss(current_density, area)
         gde_loss = self.gde.calc_voltage_loss(current_density, area)
         self.v_loss[:] = self.electrochemistry.v_loss \

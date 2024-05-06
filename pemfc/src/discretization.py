@@ -61,7 +61,6 @@ class Discretization2D:
 
         # self.dx = np.asarray([dx for i in range(self.shape[1])]).transpose()
         # self.dy = np.asarray([dy for i in range(self.shape[0])])
-
         self.d_area = self.dx[0] * self.dx[1]
 
     @staticmethod

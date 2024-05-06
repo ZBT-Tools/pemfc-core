@@ -10,15 +10,12 @@ from . import matrix_functions as mtx
 class ElectricalCoupling:
 
     def __init__(self, stack):
+        # Reference to stack object
         self.stack = stack
+        # Reference to list of cells
         self.cells = stack.cells
-        # Handover
+        # Number of the stack cells
         self.n_cells = self.stack.n_cells
-        # number of the stack cells
-        self.dx = self.cells[0].dx
-        # length of an element
-        self.th_plate = self.cells[0].cathode.bpp.thickness
-        # thickness of the bipolar plate
 
         # Variables
         self.current_control = stack.current_control
