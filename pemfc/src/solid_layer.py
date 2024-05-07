@@ -38,38 +38,38 @@ class SolidLayer(oo.OutputObject):
 
     def calc_conductance(self, conductivity, effective=True):
         if np.ndim(conductivity) == 0:
-            conductance_z = \
-                self.dsct.d_area * conductivity / self.thickness
             conductance_x = \
+                self.dsct.d_area * conductivity / self.thickness
+            conductance_y = \
                 self.dsct.dx[1] / self.dsct.dx[0] \
                 * (self.thickness * conductivity)
-            conductance_y = \
+            conductance_z = \
                 self.dsct.dx[0] / self.dsct.dx[1] \
                 * self.thickness * conductivity
 
         elif np.ndim(conductivity) == 1 and np.shape(conductivity)[0] == 2:
-            conductance_z = self.dsct.d_area * conductivity[0] \
+            conductance_x = self.dsct.d_area * conductivity[0] \
                             / self.thickness
-            conductance_x = \
+            conductance_y = \
                 self.dsct.dx[1] / self.dsct.dx[0] \
                 * self.thickness * conductivity[1]
-            conductance_y = \
+            conductance_z = \
                 self.dsct.dx[0] / self.dsct.dx[1] * self.thickness * conductivity[1]
         elif np.ndim(conductivity) == 1 and np.shape(conductivity)[0] == 3:
-            conductance_z = self.dsct.d_area * conductivity[0] / self.thickness
-            conductance_x = \
-                self.dsct.dx[1] / self.dsct.dx[0] * self.thickness * conductivity[1]
+            conductance_x = self.dsct.d_area * conductivity[0] / self.thickness
             conductance_y = \
+                self.dsct.dx[1] / self.dsct.dx[0] * self.thickness * conductivity[1]
+            conductance_z = \
                 self.dsct.dx[0] / self.dsct.dx[1] * self.thickness * conductivity[2]
         else:
             raise ValueError('conductivity must be either single scalar or '
                              'an iterable with two entries')
         if effective:
-            conductance_z *= (1.0 - self.porosity) ** self.bruggeman_exponent
             conductance_x *= (1.0 - self.porosity) ** self.bruggeman_exponent
             conductance_y *= (1.0 - self.porosity) ** self.bruggeman_exponent
+            conductance_z *= (1.0 - self.porosity) ** self.bruggeman_exponent
 
-        return np.asarray([conductance_z, conductance_x, conductance_y])
+        return np.asarray([conductance_x, conductance_y, conductance_z])
 
     def calc_voltage_loss(self, current_density, area=None, axis=0, **kwargs):
         if area is None:

@@ -100,7 +100,7 @@ class TemperatureSystem:
                                list(range(1, self.n_cells))]).transpose()
         layer_ids = np.asarray([(-1, 0) for i in range(self.n_cells-1)])
         conductance = \
-            np.asarray([self.cells[i].thermal_conductance_z[layer_ids[i][0]]
+            np.asarray([self.cells[i].thermal_conductance_x[layer_ids[i][0]]
                         for i in range(self.n_cells-1)])
         mtx.connect_cells(matrix, cell_ids, layer_ids,
                           conductance, self.index_list)
@@ -302,7 +302,7 @@ class TemperatureSystem:
 
     def connect_to_next_cell(self, i):
         cell = self.cells[i]
-        conductance = cell.thermal_conductance_z[-1]
+        conductance = cell.thermal_conductance_x[-1]
         source = conductance * self.cells[i + 1].temp_layer[0]
         cell.add_explicit_layer_source(cell.heat_rhs_dyn, source, -1)
         coeff = - conductance
@@ -310,7 +310,7 @@ class TemperatureSystem:
 
     def connect_to_previous_cell(self, i):
         cell = self.cells[i]
-        conductance = self.cells[i - 1].thermal_conductance_z[-1]
+        conductance = self.cells[i - 1].thermal_conductance_x[-1]
         source = - conductance * self.cells[i - 1].temp_layer[-1]
         # source = conductance * (self.cells[i - 1].temp_layer[-1] -
         #                        self.cells[i].temp_layer[0])

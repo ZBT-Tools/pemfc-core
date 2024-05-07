@@ -54,7 +54,7 @@ def build_1d_conductance_matrix(cond_vector, offset=1):
         + np.diag(off_diag, k=offset)
 
 
-def build_z_cell_conductance_matrix(cond_vector):
+def build_x_cell_conductance_matrix(cond_vector):
     list_mat = []
     for j in range(cond_vector.shape[2]):
         for i in range(cond_vector.shape[1]):
@@ -62,15 +62,21 @@ def build_z_cell_conductance_matrix(cond_vector):
     return sp_la.block_diag(*list_mat)
 
 
-def build_x_cell_conductance_matrix(cond_vector, n_ele, n_layer=None):
+def build_y_cell_conductance_matrix(cond_vector, axis, n_layer=None):
+    if axis == -1:
+        axis = len(cond_vector.shape) - 1
+    off_diag = 1
+    for i in range(axis):
+        off_diag *= cond_vector.shape[i]
+    n_ele = cond_vector.shape[axis]
     if not n_ele > 1:
-        raise ValueError('x-conductance matrix can only be built for n_ele > 1')
+        raise ValueError('y-conductance matrix can only be built for n_ele > 1')
     if n_layer is None:
         n_layer = len(cond_vector)
     # center_diag = np.concatenate([cond_vector[:, i] for i in range(n_ele)])
     # flatten in column-major order
     center_diag = cond_vector.flatten(order='F')
-    off_diag = center_diag[:-n_layer]
+    off_diag = np.copy(center_diag[:-n_layer])
     center_diag[n_layer:-n_layer] *= 2.0
     center_diag *= -1.0
     # off_diag = np.concatenate([cond_vector[:, i] for i in range(n_ele-1)])
@@ -79,15 +85,41 @@ def build_x_cell_conductance_matrix(cond_vector, n_ele, n_layer=None):
         + np.diag(off_diag, k=n_layer)
 
 
-def build_cell_conductance_matrix(x_cond_vector, z_cond_vector, n_ele):
-    z_cond_mtx = build_z_cell_conductance_matrix(z_cond_vector)
-    # ToDo: Continue 3D matrix assembly
-    raise ValueError('code adaption for 2D only up until this point')
-    if n_ele > 1:
-        x_cond_mtx = build_x_cell_conductance_matrix(x_cond_vector, n_ele)
+def build_yz_cell_conductance_matrix(cond_vector, axis):
+    if axis == -1:
+        axis = len(cond_vector.shape) - 1
+    offset = 1
+    for i in range(axis):
+        offset *= cond_vector.shape[i]
+    n_ele = cond_vector.shape[axis]
+    if not n_ele > 1:
+        raise ValueError('y-conductance matrix can only be built for n_ele > 1')
+
+    # center_diag = np.concatenate([cond_vector[:, i] for i in range(n_ele)])
+    # flatten in column-major order
+    center_diag = cond_vector.flatten(order='F')
+    off_diag = np.copy(center_diag[:-offset])
+    center_diag[offset:-offset] *= 2.0
+    center_diag *= -1.0
+    # off_diag = np.concatenate([cond_vector[:, i] for i in range(n_ele-1)])
+    return np.diag(center_diag, k=0) \
+        + np.diag(off_diag, k=-offset) \
+        + np.diag(off_diag, k=offset)
+
+
+def build_cell_conductance_matrix(x_cond_vector, y_cond_vector, z_cond_vector):
+    x_cond_mtx = build_x_cell_conductance_matrix(x_cond_vector)
+    # raise ValueError('code adaption for 2D only up until this point')
+    if y_cond_vector.shape[1] > 1:
+        y_cond_mtx = build_y_cell_conductance_matrix(y_cond_vector, axis=1)
     else:
-        x_cond_mtx = 0.0
-    return x_cond_mtx + z_cond_mtx
+        y_cond_mtx = 0.0
+    if y_cond_vector.shape[2] > 1:
+        z_cond_mtx = build_yz_cell_conductance_matrix(z_cond_vector, axis=2)
+    else:
+        z_cond_mtx = 0.0
+    # TODO: Check 3D matrix assembly
+    return x_cond_mtx + y_cond_mtx + z_cond_mtx
 
 
 def connect_cells(matrix, cell_ids, layer_ids, values, mtx_ids,

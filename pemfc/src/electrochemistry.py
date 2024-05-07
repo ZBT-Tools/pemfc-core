@@ -156,7 +156,7 @@ class ElectrochemistryModel(ABC):
         else:
             conc = channel.fluid.concentration[self.id_fuel]
 
-        # ToDo: Increase dimensionality of concentration
+        # TODO: Increase dimensionality of concentration
         conc_ele = ip.interpolate_1d(conc)
         conc_ref = conc[channel.id_in]
         conc_star = conc_ele / conc_ref

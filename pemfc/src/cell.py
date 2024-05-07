@@ -32,7 +32,8 @@ class Cell(OutputObject):
 
         # Additional resolution in width direction in regions
         # "under land" and "under channel" if True
-        self.channel_land_discretization = cell_dict['channel_land_discretization']
+        self.channel_land_discretization = \
+            cell_dict['channel_land_discretization']
 
         # Underrelaxation factor
         self.urf = cell_dict['underrelaxation_factor']
@@ -90,49 +91,61 @@ class Cell(OutputObject):
                         self.anode.gde.thickness,
                         self.anode.bpp.thickness])
 
-        self.thermal_conductance_z = \
+        self.thermal_conductance_x = \
             np.asarray([self.cathode.bpp.thermal_conductance[0],
                         self.cathode.gde.thermal_conductance[0],
                         self.membrane.thermal_conductance[0],
                         self.anode.gde.thermal_conductance[0],
                         self.anode.bpp.thermal_conductance[0]])
 
-        self.thermal_conductance_x = \
+        self.thermal_conductance_y = \
             np.asarray([self.cathode.bpp.thermal_conductance[1],
                         self.cathode.gde.thermal_conductance[1],
                         self.membrane.thermal_conductance[1],
                         self.anode.gde.thermal_conductance[1],
                         self.anode.bpp.thermal_conductance[1]])
 
-        # self.thermal_conductance_y = \
-        #     np.asarray([self.cathode.bpp.thermal_conductance[1],
-        #                 self.cathode.gde.thermal_conductance[1],
-        #                 self.membrane.thermal_conductance[1],
-        #                 self.anode.gde.thermal_conductance[1],
-        #                 self.anode.bpp.thermal_conductance[1]])
+        self.thermal_conductance_y = \
+            (self.thermal_conductance_y
+             + np.roll(self.thermal_conductance_y, 1, axis=0)) * 0.5
+        self.thermal_conductance_y = \
+            np.vstack((self.thermal_conductance_y,
+                       [self.thermal_conductance_y[0]]))
 
-        self.thermal_conductance_x = \
-            (self.thermal_conductance_x
-             + np.roll(self.thermal_conductance_x, 1, axis=0)) * 0.5
-        self.thermal_conductance_x = \
-            np.vstack((self.thermal_conductance_x,
-                       [self.thermal_conductance_x[0]]))
+        # TODO: Interpolate node-to-node conductance for y and z direction
+        self.thermal_conductance_z = \
+            np.asarray([self.cathode.bpp.thermal_conductance[2],
+                        self.cathode.gde.thermal_conductance[2],
+                        self.membrane.thermal_conductance[2],
+                        self.anode.gde.thermal_conductance[2],
+                        self.anode.bpp.thermal_conductance[2]])
+
+        self.thermal_conductance_z = \
+            (self.thermal_conductance_z
+             + np.roll(self.thermal_conductance_z, 1, axis=0)) * 0.5
+        self.thermal_conductance_z = \
+            np.vstack((self.thermal_conductance_z,
+                       [self.thermal_conductance_z[0]]))
+
         if self.first_cell:
-            self.thermal_conductance_x[0] *= 0.5
+            self.thermal_conductance_y[0] *= 0.5
+            self.thermal_conductance_z[0] *= 0.5
         if self.last_cell:
-            self.thermal_conductance_x[-1] *= 0.5
+            self.thermal_conductance_y[-1] *= 0.5
+            self.thermal_conductance_z[-1] *= 0.5
 
         if self.last_cell:
             heat_cond_mtx = \
                 mtx.build_cell_conductance_matrix(self.thermal_conductance_x,
-                                                  self.thermal_conductance_z,
-                                                  self.n_ele)
+                                                  self.thermal_conductance_y,
+                                                  self.thermal_conductance_z)
         else:
             heat_cond_mtx = \
                 mtx.build_cell_conductance_matrix(
                     self.thermal_conductance_x[:-1],
-                    self.thermal_conductance_z[:-1],
-                    self.n_ele)
+                    self.thermal_conductance_y[:-1],
+                    self.thermal_conductance_z[:-1])
+
         self.heat_mtx_const = heat_cond_mtx
         # self.heat_mtx_const = np.zeros(self.heat_cond_mtx.shape)
         self.heat_mtx_dyn = np.zeros(self.heat_mtx_const.shape)
@@ -169,7 +182,7 @@ class Cell(OutputObject):
             (self.elec_cond + np.roll(self.elec_cond, 1, axis=1)) * 0.5
         self.elec_cond = self.elec_cond[:, :-1]
         self.elec_x_mat_const = \
-            mtx.build_z_cell_conductance_matrix(self.elec_cond.transpose())
+            mtx.build_x_cell_conductance_matrix(self.elec_cond.transpose())
         # print(self.elec_x_mat_const)
 
         # boolearn alarm values
@@ -227,11 +240,10 @@ class Cell(OutputObject):
         #     / (self.cathode.channel.length * self.width_straight_channels)
         # k_amb = np.full((self.n_layer, self.n_ele), 0.)
         # convection conductance to the environment
-        # ToDo: Check thickness calculation
         th_layer_amb = (self.th_layer + np.roll(self.th_layer, 1)) * 0.5
         # if self.last_cell:
         th_layer_amb = np.hstack((th_layer_amb, th_layer_amb[0]))
-        # ToDo: Check conductance calculation
+        # TODO: Check conductance calculation
         k_amb = np.outer(th_layer_amb, self.cathode.discretization.dx[0]) \
             * alpha_amb * self.cathode.flow_field.external_surface_factor
         if self.first_cell:
