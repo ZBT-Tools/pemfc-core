@@ -40,7 +40,7 @@
     "cathode": {
         "name": "Cathode",
         "channel_number": 50,
-        "rib_width": 0.001,
+        "rib_width": 0.0005,
         "stoichiometry": 1.5,
         "reaction_stoichiometry": [
             -1.0,

@@ -155,7 +155,6 @@ def build_one_dimensional_conductance_matrix(conductance_array, axis):
     for i in range(axis):
         offset *= conductance_array.shape[i]
     center_diag = calculate_center_diagonal(conductance_array, axis=axis)
-    # TODO: Check off diagonal calculation
     off_diag = calculate_off_diagonal(conductance_array, axis)[:-offset]
     center_diag *= -1.0
     return np.diag(center_diag, k=0) \
@@ -168,10 +167,10 @@ def build_cell_conductance_matrix(x_cond_vector, y_cond_vector, z_cond_vector):
     x_cond_mtx_1 = build_one_dimensional_conductance_matrix(x_cond_vector, axis=0)
     # raise ValueError('code adaption for 2D only up until this point')
     if y_cond_vector.shape[1] > 1:
-        y_cond_mtx = build_y_cell_conductance_matrix(y_cond_vector, axis=1)
-        y_cond_mtx_1 = build_one_dimensional_conductance_matrix(y_cond_vector, axis=1)
-        test = y_cond_mtx - y_cond_mtx_1
-        test_1 = np.sum(np.abs(y_cond_mtx - y_cond_mtx_1))
+        # y_cond_mtx = build_y_cell_conductance_matrix(y_cond_vector, axis=1)
+        y_cond_mtx = build_one_dimensional_conductance_matrix(y_cond_vector, axis=1)
+        # test = y_cond_mtx - y_cond_mtx_1
+        # test_1 = np.sum(np.abs(y_cond_mtx - y_cond_mtx_1))
     else:
         y_cond_mtx = 0.0
     if z_cond_vector.shape[2] > 1:

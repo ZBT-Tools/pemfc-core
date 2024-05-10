@@ -25,6 +25,8 @@ class ElectricalCoupling:
             self.v_tar = stack.v_target
             self.e_0_stack = np.sum([cell.e_0 for cell in self.cells])
             self.v_loss_tar = self.e_0_stack - self.v_tar
+
+        # TODO: Update ElectricalCoupling for 3D
         # number of the nodes along the channel
         self.n_ele = self.cells[0].n_ele
         # number of the elements along the channel

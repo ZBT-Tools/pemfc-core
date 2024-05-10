@@ -71,6 +71,8 @@ class TemperatureSystem:
         # Heat transfer to ambient
         alpha_amb = temp_dict['alpha_amb']
         temp_amb = temp_dict['temp_amb']
+
+        # TODO: Update TemperatureSystem for 3D
         # ambient temperature
         for cell in self.cells:
             cell.k_amb = cell.calc_ambient_conductance(alpha_amb)

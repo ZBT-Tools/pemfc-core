@@ -119,7 +119,6 @@ class Cell(OutputObject):
             np.vstack((self.thermal_conductance_y,
                        [self.thermal_conductance_y[0]]))
 
-        # TODO: Interpolate node-to-node conductance for y and z direction
         self.thermal_conductance_z = \
             np.asarray([self.cathode.bpp.thermal_conductance[2],
                         self.cathode.gde.thermal_conductance[2],
@@ -158,10 +157,11 @@ class Cell(OutputObject):
         self.heat_mtx_dyn = np.zeros(self.heat_mtx_const.shape)
         self.heat_mtx = np.zeros(self.heat_mtx_dyn.shape)
 
-        self.heat_rhs_const = np.zeros(self.n_layer * self.n_ele)
+        self.heat_rhs_const = np.zeros(self.heat_mtx_const.flatten().shape)
         self.heat_rhs_dyn = np.zeros(self.heat_rhs_const.shape)
         self.heat_rhs = np.zeros(self.heat_rhs_dyn.shape)
 
+        # TODO: Finish initializition of cells for 3D
         # Create array for each thermal layer with indices according to
         # corresponding position in center diagonal of conductance matrix and
         # right hand side vector
