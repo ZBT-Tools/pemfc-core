@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import linalg as sp_la
+import scipy as sp
 
 
 def tile_add_overlap(array, n, m=1):
@@ -63,41 +64,36 @@ def build_x_cell_conductance_matrix(cond_vector):
 
 
 def build_y_cell_conductance_matrix(cond_vector, axis, n_layer=None):
-    if axis == -1:
-        axis = len(cond_vector.shape) - 1
-    off_diag = 1
-    for i in range(axis):
-        off_diag *= cond_vector.shape[i]
     n_ele = cond_vector.shape[axis]
     if not n_ele > 1:
         raise ValueError('y-conductance matrix can only be built for n_ele > 1')
     if n_layer is None:
         n_layer = len(cond_vector)
-    # center_diag = np.concatenate([cond_vector[:, i] for i in range(n_ele)])
+    center_diag = np.concatenate([cond_vector[:, i] for i in range(n_ele)])
     # flatten in column-major order
-    center_diag = cond_vector.flatten(order='F')
-    off_diag = np.copy(center_diag[:-n_layer])
+    # center_diag = cond_vector.flatten(order='F')
+    # off_diag = np.copy(center_diag[:-n_layer])
     center_diag[n_layer:-n_layer] *= 2.0
     center_diag *= -1.0
-    # off_diag = np.concatenate([cond_vector[:, i] for i in range(n_ele-1)])
+    off_diag = np.concatenate([cond_vector[:, i] for i in range(n_ele-1)])
     return np.diag(center_diag, k=0) \
         + np.diag(off_diag, k=-n_layer) \
         + np.diag(off_diag, k=n_layer)
 
 
-def build_yz_cell_conductance_matrix(cond_vector, axis):
+def build_z_cell_conductance_matrix(cond_vector, axis):
     if axis == -1:
         axis = len(cond_vector.shape) - 1
     offset = 1
     for i in range(axis):
         offset *= cond_vector.shape[i]
-    n_ele = cond_vector.shape[axis]
-    if not n_ele > 1:
-        raise ValueError('y-conductance matrix can only be built for n_ele > 1')
 
     # center_diag = np.concatenate([cond_vector[:, i] for i in range(n_ele)])
     # flatten in column-major order
-    center_diag = cond_vector.flatten(order='F')
+    center_diag = cond_vector.flatten(order='F') * 0.5
+    # cond_vector_new = cond_vector[]
+    # for i in range(cond_vector.shape[axis]):
+
     off_diag = np.copy(center_diag[:-offset])
     center_diag[offset:-offset] *= 2.0
     center_diag *= -1.0
@@ -107,15 +103,79 @@ def build_yz_cell_conductance_matrix(cond_vector, axis):
         + np.diag(off_diag, k=offset)
 
 
+def calculate_center_diagonal(array, axis):
+    if not array.ndim == 3:
+        raise ValueError('only three-dimensional arrays supported at the moment')
+    result = np.zeros(array.shape)
+    weights = [0.5, 1, 0.5]
+    if axis == 0:
+        result[1:-1, :, :] = \
+            sp.ndimage.convolve1d(array, weights, mode='constant',
+                                  axis=axis, cval=0.0)[1:-1, :, :]
+        result[0, :, :] = (array[0, :, :] + array[1, :, :]) * 0.5
+        result[-1, :, :] = (array[-2, :, :] + array[-1, :, :]) * 0.5
+
+    elif axis == 1:
+        result[:, 1:-1, :] = \
+            sp.ndimage.convolve1d(array, weights, mode='constant',
+                                  axis=axis, cval=0.0)[:, 1:-1, :]
+        result[:, 0, :] = (array[:, 0, :] + array[:, 1, :]) * 0.5
+        result[:, -1, :] = (array[:, -2, :] + array[:, -1, :]) * 0.5
+
+    elif axis == 2 or axis == -1:
+        result[:, :, 1:-1] = \
+            sp.ndimage.convolve1d(array, weights, mode='constant',
+                                  axis=axis, cval=0.0)[:, :, 1:-1]
+        result[:, :, 0] = (array[:, :, 0] + array[:, :, 1]) * 0.5
+        result[:, :, -1] = (array[:, :, -2] + array[:, :, -1]) * 0.5
+    else:
+        raise ValueError('only three-dimensional arrays supported')
+    return result.flatten(order='F')
+
+
+def calculate_off_diagonal(array, axis):
+    off_coeff_matrix = sp.ndimage.convolve1d(
+        array, [0.5, 0.5], mode='constant', axis=axis, cval=0.0)
+    if axis == 0:
+        off_coeff_matrix[-1, :, :] = 0.0
+    elif axis == 1:
+        off_coeff_matrix[:, -1, :] = 0.0
+    elif axis == 2:
+        off_coeff_matrix[:, :, -1] = 0.0
+    else:
+        raise ValueError('only three-dimensional arrays supported at the moment')
+
+    return off_coeff_matrix.flatten(order='F')
+
+
+def build_one_dimensional_conductance_matrix(conductance_array, axis):
+    if axis == -1:
+        axis = len(conductance_array.shape) - 1
+    offset = 1
+    for i in range(axis):
+        offset *= conductance_array.shape[i]
+    center_diag = calculate_center_diagonal(conductance_array, axis=axis)
+    # TODO: Check off diagonal calculation
+    off_diag = calculate_off_diagonal(conductance_array, axis)[:-offset]
+    center_diag *= -1.0
+    return np.diag(center_diag, k=0) \
+        + np.diag(off_diag, k=-offset) \
+        + np.diag(off_diag, k=offset)
+
+
 def build_cell_conductance_matrix(x_cond_vector, y_cond_vector, z_cond_vector):
     x_cond_mtx = build_x_cell_conductance_matrix(x_cond_vector)
+    x_cond_mtx_1 = build_one_dimensional_conductance_matrix(x_cond_vector, axis=0)
     # raise ValueError('code adaption for 2D only up until this point')
     if y_cond_vector.shape[1] > 1:
         y_cond_mtx = build_y_cell_conductance_matrix(y_cond_vector, axis=1)
+        y_cond_mtx_1 = build_one_dimensional_conductance_matrix(y_cond_vector, axis=1)
+        test = y_cond_mtx - y_cond_mtx_1
+        test_1 = np.sum(y_cond_mtx - y_cond_mtx_1)
     else:
         y_cond_mtx = 0.0
-    if y_cond_vector.shape[2] > 1:
-        z_cond_mtx = build_yz_cell_conductance_matrix(z_cond_vector, axis=2)
+    if z_cond_vector.shape[2] > 1:
+        z_cond_mtx = build_one_dimensional_conductance_matrix(z_cond_vector, axis=2)
     else:
         z_cond_mtx = 0.0
     # TODO: Check 3D matrix assembly

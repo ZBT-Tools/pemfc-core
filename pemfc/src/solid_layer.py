@@ -36,7 +36,7 @@ class SolidLayer(oo.OutputObject):
         self.electrical_conductance = \
             self.calc_conductance(self.electrical_conductivity)
 
-    def calc_conductance(self, conductivity, effective=True):
+    def calc_conductance(self, conductivity, effective=False):
         if np.ndim(conductivity) == 0:
             conductance_x = \
                 self.dsct.d_area * conductivity / self.thickness

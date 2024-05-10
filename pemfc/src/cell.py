@@ -98,6 +98,13 @@ class Cell(OutputObject):
                         self.anode.gde.thermal_conductance[0],
                         self.anode.bpp.thermal_conductance[0]])
 
+        # self.thermal_conductance_x = \
+        #     (self.thermal_conductance_x
+        #      + np.roll(self.thermal_conductance_x, 1, axis=0)) * 0.5
+        # self.thermal_conductance_x = \
+        #     np.vstack((self.thermal_conductance_x,
+        #                [self.thermal_conductance_x[0]]))
+
         self.thermal_conductance_y = \
             np.asarray([self.cathode.bpp.thermal_conductance[1],
                         self.cathode.gde.thermal_conductance[1],
@@ -191,12 +198,12 @@ class Cell(OutputObject):
         self.break_program = False
         # True if the program aborts because of some critical impact
 
-        # cell height
-        self.height = self.membrane.thickness \
-            + self.cathode.bpp.thickness \
-            + self.cathode.gde.thickness \
-            + self.anode.bpp.thickness \
-            + self.anode.gde.thickness
+        # Cell thickness
+        self.thickness = self.membrane.thickness \
+                         + self.cathode.bpp.thickness \
+                         + self.cathode.gde.thickness \
+                         + self.anode.bpp.thickness \
+                         + self.anode.gde.thickness
 
         # Initializing temperatures with average channel fluid temperature
         temp_init = np.average([hc.channel.fluid.temperature

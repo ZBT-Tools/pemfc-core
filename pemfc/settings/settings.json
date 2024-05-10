@@ -1,6 +1,6 @@
 {
     "stack": {
-        "cell_number": 3,
+        "cell_number": 1,
         "heat_power": 0.0,
         "cool_flow": true,
         "calc_temperature": false,
@@ -40,7 +40,7 @@
     "cathode": {
         "name": "Cathode",
         "channel_number": 50,
-        "rib_width": 0.0005,
+        "rib_width": 0.001,
         "stoichiometry": 1.5,
         "reaction_stoichiometry": [
             -1.0,
