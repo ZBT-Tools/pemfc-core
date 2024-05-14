@@ -226,7 +226,7 @@ class Stack:
         # target current density
 
         # current density array
-        self.i_cd = np.zeros((self.n_cells, n_ele))
+        self.i_cd = np.zeros((self.n_cells, *self.cells[0].membrane.dsct.shape))
         self.i_cd[:] = self.i_cd_target
         # for i in range(self.n_cells):
         #     self.i_cd[i, :] = \

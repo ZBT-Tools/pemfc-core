@@ -157,7 +157,7 @@ class Cell(OutputObject):
         self.heat_mtx_dyn = np.zeros(self.heat_mtx_const.shape)
         self.heat_mtx = np.zeros(self.heat_mtx_dyn.shape)
 
-        self.heat_rhs_const = np.zeros(self.heat_mtx_const.flatten().shape)
+        self.heat_rhs_const = np.zeros(self.heat_mtx_const.shape[0])
         self.heat_rhs_dyn = np.zeros(self.heat_rhs_const.shape)
         self.heat_rhs = np.zeros(self.heat_rhs_dyn.shape)
 
@@ -167,8 +167,9 @@ class Cell(OutputObject):
         # right hand side vector
         index_list = []
         for i in range(self.n_layer):
-            index_list.append([(j * self.n_layer) + i
-                               for j in range(self.n_ele)])
+            index_list.append(
+                [(j * self.n_layer) + i for j in
+                 range(np.prod(self.membrane.dsct.shape, dtype=np.int32))])
         self.index_array = np.asarray(index_list)
 
         # Set constant thermal boundary conditions
@@ -250,8 +251,8 @@ class Cell(OutputObject):
         th_layer_amb = (self.th_layer + np.roll(self.th_layer, 1)) * 0.5
         # if self.last_cell:
         th_layer_amb = np.hstack((th_layer_amb, th_layer_amb[0]))
-        # TODO: Check conductance calculation
-        k_amb = np.outer(th_layer_amb, self.cathode.discretization.dx[0]) \
+        dy = self.cathode.discretization.dx[0].flatten(order='F')
+        k_amb = np.outer(th_layer_amb, dy) \
             * alpha_amb * self.cathode.flow_field.external_surface_factor
         if self.first_cell:
             k_amb[0] *= 0.5

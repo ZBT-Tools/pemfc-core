@@ -77,9 +77,9 @@ class TemperatureSystem:
         for cell in self.cells:
             cell.k_amb = cell.calc_ambient_conductance(alpha_amb)
             if cell.last_cell:
-                k_amb_vector = cell.k_amb.transpose().flatten()
+                k_amb_vector = cell.k_amb.flatten(order='F')
             else:
-                k_amb_vector = cell.k_amb[:-1].transpose().flatten()
+                k_amb_vector = cell.k_amb[:-1].flatten(order='F')
 
             cell.add_implicit_layer_source(cell.heat_mtx_const, -k_amb_vector)
             cell.add_explicit_layer_source(cell.heat_rhs_const,

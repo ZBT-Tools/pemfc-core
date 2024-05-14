@@ -149,7 +149,7 @@ class HalfCell:
         if np.ndim(current_density) > 0:
             raise ValueError('current_density must be scalar')
         mole_flow_in = np.zeros(self.channel.fluid.n_species)
-        current = self.reduce_flux_to_flow(current_density)
+        current = np.sum(self.reduce_flux_to_flow(current_density))
         mole_flow_in[self.id_fuel] = \
             current * stoi * abs(self.n_stoi[self.id_fuel]) \
             / (self.n_charge * self.faraday)
@@ -179,7 +179,7 @@ class HalfCell:
         return mass_source, mole_source
 
     def reduce_flux_to_flow(self, flux: np.ndarray):
-        if flux.ndim == 1:
+        if np.isscalar(flux) or flux.ndim == 1:
             return np.sum(self.discretization.d_area, axis=-1) * flux
         elif flux.ndim == 2:
             return np.sum(self.discretization.d_area * flux, axis=-1)
