@@ -182,6 +182,8 @@ class Cell(OutputObject):
             heat_dx = end_plate_heat * self.anode.discretization.d_area
             self.add_explicit_layer_source(self.heat_rhs_const, heat_dx, -1)
 
+        # TODO: Check electric conductance matrix assembly with new coordinates
+        # and discretization
         # Create electric conductance matrix
         self.elec_cond = \
             np.asarray([self.cathode.bpp.electrical_conductance[1],
@@ -317,12 +319,10 @@ class Cell(OutputObject):
         if self.anode.break_program or self.cathode.break_program:
             self.break_program = True
         else:
-            humidity = np.asarray([self.cathode.channel.fluid.humidity,
-                                   self.anode.channel.fluid.humidity])
-            humidity_ele = \
-                np.array([ip.interpolate_1d(humidity[0]),
-                          ip.interpolate_1d(humidity[1])])
-            self.membrane.update(corrected_current_density, humidity_ele)
+            humidity = np.asarray([self.cathode.calc_humidity(),
+                                   self.anode.calc_humidity()])
+
+            self.membrane.update(corrected_current_density, humidity)
             self.calc_voltage_loss()
             self.calc_conductance(corrected_current_density)
             # if np.any(self.v_alarm) and current_control:

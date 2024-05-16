@@ -1,6 +1,6 @@
 {
     "stack": {
-        "cell_number": 1,
+        "cell_number": 3,
         "heat_power": 0.0,
         "cool_flow": true,
         "calc_temperature": false,

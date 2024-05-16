@@ -28,18 +28,19 @@ class ElectricalCoupling:
 
         # TODO: Update ElectricalCoupling for 3D
         # number of the nodes along the channel
-        self.n_ele = self.cells[0].n_ele
+        # self.n_ele = self.cells[0].n_ele
+        self.shape = self.cells[0].membrane.dsct.shape
         # number of the elements along the channel
-        self.i_cd = np.zeros((self.n_cells, self.n_ele))
+        self.i_cd = np.zeros((self.n_cells, *self.shape))
         # current density of the elements in z-direction
         # self.resistance = np.zeros((self.n_cells, self.n_ele)).flatten()
         # combined cell & bipolar plate resistance vector in z-direction
-        self.v_end_plate = np.zeros(self.n_ele)
+        self.v_end_plate = np.zeros(self.shape)
         # accumulated voltage loss over the stack at the lower end plate
         if self.n_cells > 1:
             self.mat = None
             # electrical conductance matrix
-            self.rhs = np.zeros((self.n_cells - 1) * self.n_ele)
+            self.rhs = np.zeros((self.n_cells - 1) * np.prod(self.shape))
             # right hand side terms, here the current
             # self.c_width = \
             #     self.cells[0].cathode.rib_width \
@@ -48,6 +49,8 @@ class ElectricalCoupling:
             # width of the channel
 
             self.solve_sparse = True
+
+            # TODO: Update initialization of stack conductance matrix for 3D
             cell_mat_x_list = [cell.elec_x_mat_const for cell in self.cells]
 
             self.mat_const = mtx.block_diag_overlap(cell_mat_x_list,

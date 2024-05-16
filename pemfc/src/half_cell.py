@@ -8,6 +8,7 @@ from . import solid_layer as sl, constants, \
     channel as chl
 from .fluid import fluid as fluids
 from . import electrochemistry as electrochem
+from . import interpolation as ip
 from pemfc.src import discretization as dsct
 
 
@@ -124,7 +125,7 @@ class HalfCell:
             self.electrochemistry.update(current_density, self.channel)
             # self.channel.update(mole_flow_in, mole_source)
             # self.channel.mole_flow[:] = mole_flow_in
-            current = self.reduce_flux_to_flow(current_density)
+            current = self.surface_flux_to_channel_source(current_density)
 
             self.channel.mass_source[:], self.channel.mole_source[:] = \
                 self.calc_mass_source(current)
@@ -137,7 +138,7 @@ class HalfCell:
             self.inlet_stoi = \
                 self.channel.mole_flow[self.id_fuel, self.channel.id_in] \
                 * self.faraday * self.n_charge \
-                / (current * abs(self.n_stoi[self.id_fuel]))
+                / (np.sum(current) * abs(self.n_stoi[self.id_fuel]))
             if current_control and self.inlet_stoi < 1.0:
                 raise ValueError('stoichiometry of cell {0} '
                                  'becomes smaller than one: {1:0.3f}'
@@ -149,7 +150,7 @@ class HalfCell:
         if np.ndim(current_density) > 0:
             raise ValueError('current_density must be scalar')
         mole_flow_in = np.zeros(self.channel.fluid.n_species)
-        current = np.sum(self.reduce_flux_to_flow(current_density))
+        current = np.sum(self.surface_flux_to_channel_source(current_density))
         mole_flow_in[self.id_fuel] = \
             current * stoi * abs(self.n_stoi[self.id_fuel]) \
             / (self.n_charge * self.faraday)
@@ -162,23 +163,25 @@ class HalfCell:
         mass_flow_in = mole_flow_in * self.channel.fluid.species_mw
         return mass_flow_in, mole_flow_in
 
-    def calc_mass_source(self, current):
+    def calc_mass_source(self, current: np.ndarray):
+        if not isinstance(current, np.ndarray):
+            current = np.asarray(current)
         mole_source = np.zeros((self.channel.fluid.n_species,
-                                *self.discretization.shape))
+                                *current.shape))
 
         for i in range(len(mole_source)):
             mole_source[i] = current \
                 * self.n_stoi[i] / (self.n_charge * self.faraday)
 
         # Water cross flow
-        water_cross_flow = self.reduce_flux_to_flow(self.w_cross_flow)
-        mole_source[self.id_h2o] += water_cross_flow
+        water_cross_source = self.surface_flux_to_channel_source(self.w_cross_flow)
+        mole_source[self.id_h2o] += water_cross_source
         # self.channel.flow_direction
         mass_source = (mole_source.transpose()
                        * self.channel.fluid.species_mw).transpose()
         return mass_source, mole_source
 
-    def reduce_flux_to_flow(self, flux: np.ndarray):
+    def surface_flux_to_channel_source(self, flux: np.ndarray):
         if np.isscalar(flux) or flux.ndim == 1:
             return np.sum(self.discretization.d_area, axis=-1) * flux
         elif flux.ndim == 2:
@@ -227,3 +230,13 @@ class HalfCell:
         mass_flow = mole_flow * fluid.species_mw
         return mass_flow, mole_flow
 
+    def calc_humidity(self):
+        """
+        For now this is a helper function to map the channel humidity to the
+        gde-membrane interface in the correct discretization. In the future, a
+        approximation according to composition gradients and thermodynamics
+        should be implemented
+        """
+
+        humidity = ip.interpolate_1d(self.channel.fluid.humidity)
+        return np.asarray([humidity for i in range(self.discretization.shape[-1])]).transpose()

@@ -156,14 +156,11 @@ class ElectrochemistryModel(ABC):
         else:
             conc = channel.fluid.concentration[self.id_fuel]
 
-        # TODO: Increase dimensionality of concentration
-        conc_ele = ip.interpolate_1d(conc)
         conc_ref = conc[channel.id_in]
+        conc_ele = ip.interpolate_1d(conc)
+        # TODO: Include concentration gradient due to in-plane GDL diffusion
+        conc_ele = np.asarray([conc_ele for i in range(current_density.shape[-1])]).transpose()
         conc_star = conc_ele / conc_ref
-        # if self.channel.flow_direction == 1:
-        #     conc_in = conc[:-1]
-        # else:
-        #     conc_in = conc[1:]
         conc_in = conc[channel.id_in]
         if conc_in != self.conc_in:
             self.i_lim_star = self.n_charge * self.faraday * conc_in \
