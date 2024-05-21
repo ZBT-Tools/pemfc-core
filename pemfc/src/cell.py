@@ -161,7 +161,6 @@ class Cell(OutputObject):
         self.heat_rhs_dyn = np.zeros(self.heat_rhs_const.shape)
         self.heat_rhs = np.zeros(self.heat_rhs_dyn.shape)
 
-        # TODO: Finish initializition of cells for 3D
         # Create array for each thermal layer with indices according to
         # corresponding position in center diagonal of conductance matrix and
         # right hand side vector
@@ -182,8 +181,7 @@ class Cell(OutputObject):
             heat_dx = end_plate_heat * self.anode.discretization.d_area
             self.add_explicit_layer_source(self.heat_rhs_const, heat_dx, -1)
 
-        # TODO: Check electric conductance matrix assembly with new coordinates
-        # and discretization
+        # TODO: Check electric conductance matrix assembly with new coordinates and discretization
         # Create electric conductance matrix
         self.elec_cond = \
             np.asarray([self.cathode.bpp.electrical_conductance[1],
@@ -191,11 +189,12 @@ class Cell(OutputObject):
         self.elec_cond = \
             (self.elec_cond + np.roll(self.elec_cond, 1, axis=1)) * 0.5
         self.elec_cond = self.elec_cond[:, :-1]
+        cond_array = np.moveaxis(self.elec_cond, (0, 1, 2), (2, 0, 1))
         self.elec_x_mat_const = \
-            mtx.build_x_cell_conductance_matrix(self.elec_cond.transpose())
+            mtx.build_x_cell_conductance_matrix(cond_array)
         # print(self.elec_x_mat_const)
 
-        # boolearn alarm values
+        # boolean alarm values
         self.v_alarm = False
         # True if :voltage loss > cell voltage
         self.break_program = False

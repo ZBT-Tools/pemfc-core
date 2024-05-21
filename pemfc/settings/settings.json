@@ -113,7 +113,7 @@
             "p_out": 101325.0,
             "temp_in": 343.15,
             "flow_direction": 1,
-            "width": 0.001,
+            "width": 0.0015,
             "height": 0.001,
             "bend_number": 0,
             "bend_friction_factor": 0.1

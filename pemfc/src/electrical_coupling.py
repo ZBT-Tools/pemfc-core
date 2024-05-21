@@ -50,9 +50,10 @@ class ElectricalCoupling:
 
             self.solve_sparse = True
 
-            # TODO: Update initialization of stack conductance matrix for 3D
             cell_mat_x_list = [cell.elec_x_mat_const for cell in self.cells]
 
+            # TODO: Update stack conductance matrix: in 3D the overlap does not seem suitable,
+            #  just additional x-conductance between bipolar half plates seems correct
             self.mat_const = mtx.block_diag_overlap(cell_mat_x_list,
                                                     (self.n_ele, self.n_ele))
             self.mat_const = \
