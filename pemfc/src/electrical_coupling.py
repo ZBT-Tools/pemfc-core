@@ -1,5 +1,6 @@
 # general imports
 import numpy as np
+from scipy import linalg as sp_la
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
 
@@ -50,11 +51,13 @@ class ElectricalCoupling:
 
             self.solve_sparse = True
 
-            cell_mat_x_list = [cell.elec_x_mat_const for cell in self.cells]
+            cell_mat_y_list = [cell.elec_y_mat_const for cell in self.cells]
 
             # TODO: Update stack conductance matrix: in 3D the overlap does not seem suitable,
             #  just additional x-conductance between bipolar half plates seems correct
-            self.mat_const = mtx.block_diag_overlap(cell_mat_x_list,
+
+            stack_y_elec_cond_mat = sp_la.block_diag(*cell_mat_y_list)
+            self.mat_const = mtx.block_diag_overlap(cell_mat_y_list,
                                                     (self.n_ele, self.n_ele))
             self.mat_const = \
                 self.mat_const[self.n_ele:-self.n_ele, self.n_ele:-self.n_ele]

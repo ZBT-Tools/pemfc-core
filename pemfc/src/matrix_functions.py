@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import linalg as sp_la
 import scipy as sp
+import pandas as pd
 
 
 def tile_add_overlap(array, n, m=1):
@@ -164,7 +165,7 @@ def build_one_dimensional_conductance_matrix(conductance_array, axis):
 
 def build_cell_conductance_matrix(x_cond_vector, y_cond_vector, z_cond_vector):
     x_cond_mtx = build_x_cell_conductance_matrix(x_cond_vector)
-    x_cond_mtx_1 = build_one_dimensional_conductance_matrix(x_cond_vector, axis=0)
+    # x_cond_mtx_1 = build_one_dimensional_conductance_matrix(x_cond_vector, axis=0)
     # raise ValueError('code adaption for 2D only up until this point')
     if y_cond_vector.shape[1] > 1:
         # y_cond_mtx = build_y_cell_conductance_matrix(y_cond_vector, axis=1)
@@ -178,6 +179,10 @@ def build_cell_conductance_matrix(x_cond_vector, y_cond_vector, z_cond_vector):
     else:
         z_cond_mtx = 0.0
     # TODO: Check 3D matrix assembly
+    test = np.round(x_cond_mtx[:5, :5], 5)
+    cond_x = np.linalg.cond(test)
+    cond_y = np.linalg.cond(y_cond_mtx)
+    cond_z = np.linalg.cond(z_cond_mtx)
     return x_cond_mtx + y_cond_mtx + z_cond_mtx
 
 

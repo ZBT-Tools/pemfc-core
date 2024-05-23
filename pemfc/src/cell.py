@@ -153,6 +153,8 @@ class Cell(OutputObject):
                     self.thermal_conductance_z[:-1])
 
         self.heat_mtx_const = heat_cond_mtx
+        test = np.abs(heat_cond_mtx)
+        cond_heat_mtx = np.linalg.cond(heat_cond_mtx)
         # self.heat_mtx_const = np.zeros(self.heat_cond_mtx.shape)
         self.heat_mtx_dyn = np.zeros(self.heat_mtx_const.shape)
         self.heat_mtx = np.zeros(self.heat_mtx_dyn.shape)
@@ -190,7 +192,7 @@ class Cell(OutputObject):
             (self.elec_cond + np.roll(self.elec_cond, 1, axis=1)) * 0.5
         self.elec_cond = self.elec_cond[:, :-1]
         cond_array = np.moveaxis(self.elec_cond, (0, 1, 2), (2, 0, 1))
-        self.elec_x_mat_const = \
+        self.elec_y_mat_const = \
             mtx.build_x_cell_conductance_matrix(cond_array)
         # print(self.elec_x_mat_const)
 
