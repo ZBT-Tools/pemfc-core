@@ -104,8 +104,10 @@ class TemperatureSystem:
         conductance = \
             np.asarray([self.cells[i].thermal_conductance_x[layer_ids[i][0]]
                         for i in range(self.n_cells-1)])
+        # old_matrix = np.copy(matrix)
         mtx.connect_cells(matrix, cell_ids, layer_ids,
                           conductance, self.index_list)
+        # diff = matrix - old_matrix
         return matrix
 
     def update(self):

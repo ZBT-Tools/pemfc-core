@@ -13,7 +13,7 @@
         "underrelaxation_factor": 0.5,
         "current_control": true,
         "operation_control": "Current",
-        "elements": 5,
+        "elements": 2,
         "current_density": 5000.0,
         "average_cell_voltage": 0.5,
         "channel_land_discretization": true
@@ -40,7 +40,7 @@
     "cathode": {
         "name": "Cathode",
         "channel_number": 50,
-        "rib_width": 0.0005,
+        "rib_width": 0.001,
         "stoichiometry": 1.5,
         "reaction_stoichiometry": [
             -1.0,
@@ -113,7 +113,7 @@
             "p_out": 101325.0,
             "temp_in": 343.15,
             "flow_direction": 1,
-            "width": 0.0015,
+            "width": 0.001,
             "height": 0.001,
             "bend_number": 0,
             "bend_friction_factor": 0.1

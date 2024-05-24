@@ -179,10 +179,6 @@ def build_cell_conductance_matrix(x_cond_vector, y_cond_vector, z_cond_vector):
     else:
         z_cond_mtx = 0.0
     # TODO: Check 3D matrix assembly
-    test = np.round(x_cond_mtx[:5, :5], 5)
-    cond_x = np.linalg.cond(test)
-    cond_y = np.linalg.cond(y_cond_mtx)
-    cond_z = np.linalg.cond(z_cond_mtx)
     return x_cond_mtx + y_cond_mtx + z_cond_mtx
 
 
@@ -196,25 +192,26 @@ def connect_cells(matrix, cell_ids, layer_ids, values, mtx_ids,
         mtx_id_0 = mtx_ids[cell_ids[i, 0]][:][layer_ids[i, 0]]
         mtx_id_1 = mtx_ids[cell_ids[i, 1]][:][layer_ids[i, 1]]
         if replace:
-            matrix[mtx_id_0, mtx_id_1] = values[i]
-            matrix[mtx_id_0, mtx_id_0] = -values[i]
-            matrix[mtx_id_1, mtx_id_1] = -values[i]
-            matrix[mtx_id_1, mtx_id_0] = values[i]
+            matrix[mtx_id_0, mtx_id_1] = values[i].flatten('F')
+            matrix[mtx_id_0, mtx_id_0] = -values[i].flatten('F')
+            matrix[mtx_id_1, mtx_id_1] = -values[i].flatten('F')
+            matrix[mtx_id_1, mtx_id_0] = values[i].flatten('F')
         else:
-            matrix[mtx_id_0, mtx_id_1] += values[i]
-            matrix[mtx_id_0, mtx_id_0] += -values[i]
-            matrix[mtx_id_1, mtx_id_1] += -values[i]
-            matrix[mtx_id_1, mtx_id_0] += values[i]
+            matrix[mtx_id_0, mtx_id_1] += values[i].flatten('F')
+            matrix[mtx_id_0, mtx_id_0] += -values[i].flatten('F')
+            matrix[mtx_id_1, mtx_id_1] += -values[i].flatten('F')
+            matrix[mtx_id_1, mtx_id_0] += values[i].flatten('F')
 
 
 def create_index_lists(cells):
     n_cells = len(cells)
     index_list = []
     layer_ids = [[] for _ in range(cells[-1].n_layer)]
-    for i, cell in enumerate(cells):
+    for i in range(n_cells):
         index_array = \
-            (cells[i-1].n_ele * cells[i-1].n_layer) * i \
-            + cell.index_array
+            (np.prod(cells[i-1].membrane.dsct.shape, dtype=np.int32)
+             * cells[i-1].n_layer) * i \
+            + cells[i].index_array
         index_list.append(index_array.tolist())
 
     for i in range(n_cells):

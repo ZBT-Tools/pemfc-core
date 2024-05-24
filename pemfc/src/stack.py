@@ -212,12 +212,12 @@ class Stack:
         else:
             self.v_target = v_target
 
+        # Initialize temperature system
+        self.temp_sys = therm_cpl.TemperatureSystem(self, temperature_dict)
         # Initialize the electrical coupling
         self.elec_sys = el_cpl.ElectricalCoupling(self)
-        # Initialize temperature src
-        self.temp_sys = therm_cpl.TemperatureSystem(self, temperature_dict)
 
-        """boolean alarms"""
+        """Boolean alarms"""
         self.v_alarm = False
         # True if :voltage loss > cell voltage
         self.break_program = False
