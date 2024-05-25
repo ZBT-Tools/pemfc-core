@@ -2,6 +2,7 @@ import numpy as np
 from scipy import linalg as sp_la
 import scipy as sp
 import pandas as pd
+from . import cell
 
 
 def tile_add_overlap(array, n, m=1):
@@ -104,11 +105,10 @@ def build_z_cell_conductance_matrix(cond_vector, axis):
         + np.diag(off_diag, k=offset)
 
 
-def calculate_center_diagonal(array, axis):
+def calculate_center_diagonal(array, axis, weights=(0.5, 1.0, 0.5)):
     if not array.ndim == 3:
         raise ValueError('only three-dimensional arrays supported at the moment')
     result = np.zeros(array.shape)
-    weights = [0.5, 1, 0.5]
     if axis == 0:
         result[1:-1, :, :] = \
             sp.ndimage.convolve1d(array, weights, mode='constant',
@@ -134,9 +134,9 @@ def calculate_center_diagonal(array, axis):
     return result.flatten(order='F')
 
 
-def calculate_off_diagonal(array, axis):
+def calculate_off_diagonal(array, axis, weights=(0.5, 0.5)):
     off_coeff_matrix = sp.ndimage.convolve1d(
-        array, [0.5, 0.5], mode='constant', axis=axis, cval=0.0)
+        array, weights, mode='constant', axis=axis, cval=0.0)
     if axis == 0:
         off_coeff_matrix[-1, :, :] = 0.0
     elif axis == 1:
@@ -149,14 +149,18 @@ def calculate_off_diagonal(array, axis):
     return off_coeff_matrix.flatten(order='F')
 
 
-def build_one_dimensional_conductance_matrix(conductance_array, axis):
+def build_one_dimensional_conductance_matrix(conductance_array, axis,
+                                             center_weights=(0.5, 1.0, 0.5),
+                                             off_weights=(0.5, 0.5)):
     if axis == -1:
         axis = len(conductance_array.shape) - 1
     offset = 1
     for i in range(axis):
         offset *= conductance_array.shape[i]
-    center_diag = calculate_center_diagonal(conductance_array, axis=axis)
-    off_diag = calculate_off_diagonal(conductance_array, axis)[:-offset]
+    center_diag = calculate_center_diagonal(
+        conductance_array, axis=axis, weights=center_weights)
+    off_diag = calculate_off_diagonal(
+        conductance_array, axis, weights=off_weights)[:-offset]
     center_diag *= -1.0
     return np.diag(center_diag, k=0) \
         + np.diag(off_diag, k=-offset) \
@@ -167,6 +171,10 @@ def build_cell_conductance_matrix(x_cond_vector, y_cond_vector, z_cond_vector):
     x_cond_mtx = build_x_cell_conductance_matrix(x_cond_vector)
     # x_cond_mtx_1 = build_one_dimensional_conductance_matrix(x_cond_vector, axis=0)
     # raise ValueError('code adaption for 2D only up until this point')
+
+    # TODO: Urgently correct conductance serial connection via convolution:
+    #  conductances must be converted to resistances first
+
     if y_cond_vector.shape[1] > 1:
         # y_cond_mtx = build_y_cell_conductance_matrix(y_cond_vector, axis=1)
         y_cond_mtx = build_one_dimensional_conductance_matrix(y_cond_vector, axis=1)
@@ -203,7 +211,7 @@ def connect_cells(matrix, cell_ids, layer_ids, values, mtx_ids,
             matrix[mtx_id_1, mtx_id_0] += values[i].flatten('F')
 
 
-def create_index_lists(cells):
+def create_stack_index_list(cells: list[cell.Cell]):
     n_cells = len(cells)
     index_list = []
     layer_ids = [[] for _ in range(cells[-1].n_layer)]
@@ -221,3 +229,23 @@ def create_index_lists(cells):
     for sub_list in layer_ids:
         layer_index_list.append(np.hstack(sub_list))
     return index_list, layer_index_list
+
+
+def create_cell_index_list(shape: tuple[int]):
+    """
+    Create list of lists with each list containing flattened order of indices
+    for a continuous functional layer (either for thermal or conductance matrix).
+    Functional layers a discretized in x-direction (z-direction in old version),
+    the remaining flattened order is equal to the order in the overall matrix
+    and the corresponding right-hand side vector
+    (typically first y-, then z-direction within a layer a.k.a x-plane)
+
+    Args:
+        shape: tuple of size 3 containing the number of layers (index 0),
+        the number of y-elements (index 1) and the number z-elements (index 2)
+    """
+    index_list = []
+    for i in range(shape[0]):
+        index_list.append(
+            [(j * shape[0]) + i for j in range(shape[1] * shape[2])])
+    return index_list

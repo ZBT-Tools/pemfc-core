@@ -51,7 +51,7 @@ class ElectricalCoupling:
 
             self.solve_sparse = True
 
-            cell_mat_y_list = [cell.elec_y_mat_const for cell in self.cells]
+            cell_mat_y_list = [cell.elec_mat_const for cell in self.cells]
 
             # TODO: Update stack conductance matrix: in 3D the overlap does not seem suitable,
             #  just additional x-conductance between bipolar half plates seems correct

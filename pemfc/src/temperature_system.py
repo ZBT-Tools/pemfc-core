@@ -89,7 +89,7 @@ class TemperatureSystem:
             np.hstack([cell.heat_rhs_const for cell in self.cells])
 
         self.index_list, self.layer_index_list = \
-            mtx.create_index_lists(self.cells)
+            mtx.create_stack_index_list(self.cells)
 
         # constant part of conductance matrix
         self.mtx_const = self.connect_cells()

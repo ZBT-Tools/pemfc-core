@@ -1,5 +1,6 @@
 # general imports
 import numpy as np
+import scipy as sp
 import copy
 
 # local modul imports
@@ -81,7 +82,16 @@ class Cell(OutputObject):
         # will be initialized correctly through stack class
         self.coords = [0.0, 0.0]
 
-        # self.is_ht_pem = self.cell_dict['is_ht_pem']
+        # Create array for each thermal layer with indices according to
+        # corresponding position in center diagonal of conductance matrix and
+        # right hand side vector
+        # index_list = []
+        # for i in range(self.n_layer):
+        #     index_list.append(
+        #         [(j * self.n_layer) + i for j in
+        #          range(np.prod(self.membrane.dsct.shape, dtype=np.int32))])
+        self.index_array = mtx.create_cell_index_list(
+            (self.n_layer, *self.membrane.dsct.shape))
 
         # heat conductivity along the gas diffusion electrode and membrane
         self.th_layer = \
@@ -153,8 +163,7 @@ class Cell(OutputObject):
                     self.thermal_conductance_z[:-1])
 
         self.heat_mtx_const = heat_cond_mtx
-        test = np.abs(heat_cond_mtx)
-        cond_heat_mtx = np.linalg.cond(heat_cond_mtx)
+
         # self.heat_mtx_const = np.zeros(self.heat_cond_mtx.shape)
         self.heat_mtx_dyn = np.zeros(self.heat_mtx_const.shape)
         self.heat_mtx = np.zeros(self.heat_mtx_dyn.shape)
@@ -162,16 +171,6 @@ class Cell(OutputObject):
         self.heat_rhs_const = np.zeros(self.heat_mtx_const.shape[0])
         self.heat_rhs_dyn = np.zeros(self.heat_rhs_const.shape)
         self.heat_rhs = np.zeros(self.heat_rhs_dyn.shape)
-
-        # Create array for each thermal layer with indices according to
-        # corresponding position in center diagonal of conductance matrix and
-        # right hand side vector
-        index_list = []
-        for i in range(self.n_layer):
-            index_list.append(
-                [(j * self.n_layer) + i for j in
-                 range(np.prod(self.membrane.dsct.shape, dtype=np.int32))])
-        self.index_array = np.asarray(index_list)
 
         # Set constant thermal boundary conditions
         if self.first_cell:
@@ -183,17 +182,38 @@ class Cell(OutputObject):
             heat_dx = end_plate_heat * self.anode.discretization.d_area
             self.add_explicit_layer_source(self.heat_rhs_const, heat_dx, -1)
 
-        # TODO: Check electric conductance matrix assembly with new coordinates and discretization
-        # Create electric conductance matrix
-        self.elec_cond = \
+        # Create electric conductance matrix.
+        # For new update, matrix setup will be analogous to thermal matrix by
+        # ordering along x- (through-plane), y- (along-the-channel),
+        # and z-direction (channel-rib-discretization), where the x-discretization
+        # represents the smallest block matrix entity
+        # Constant x-conductance will be zero for initial constant setup,
+        # due to dynamic addition of lumped x-conductance during solution procedure
+        # TODO: Check electric conductance matrix assembly with new coordinates
+        #  and discretization
+        elec_cond_x = \
+            np.asarray([self.cathode.bpp.electrical_conductance[0],
+                        self.anode.bpp.electrical_conductance[0]])
+        elec_resistance_x = 1.0 / elec_cond_x
+
+        # elec_resistance_x_sum = np.sum(elec_resistance_x, axis=0)
+        elec_resistance_x_sum = sp.ndimage.convolve1d(
+            elec_resistance_x, axis=0, weights=(1.0, 1.0, 1.0), mode='constant')[:-1]
+        elec_cond_x_lumped = 1.0 / elec_resistance_x_sum
+
+        elec_cond_y = \
             np.asarray([self.cathode.bpp.electrical_conductance[1],
                         self.anode.bpp.electrical_conductance[1]])
-        self.elec_cond = \
-            (self.elec_cond + np.roll(self.elec_cond, 1, axis=1)) * 0.5
-        self.elec_cond = self.elec_cond[:, :-1]
-        cond_array = np.moveaxis(self.elec_cond, (0, 1, 2), (2, 0, 1))
-        self.elec_y_mat_const = \
-            mtx.build_x_cell_conductance_matrix(cond_array)
+        elec_cond_z = \
+            np.asarray([self.cathode.bpp.electrical_conductance[2],
+                        self.anode.bpp.electrical_conductance[2]])
+
+        self.elec_mat_const = \
+            mtx.build_cell_conductance_matrix(
+                elec_cond_x_lumped * 0.0,
+                elec_cond_y,
+                elec_cond_z
+            )
         # print(self.elec_x_mat_const)
 
         # boolean alarm values
