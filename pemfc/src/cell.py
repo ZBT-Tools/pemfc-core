@@ -5,7 +5,7 @@ import copy
 
 # local modul imports
 from . import interpolation as ip, matrix_functions as mtx, half_cell as h_c, \
-    global_functions as g_func, membrane as membrane
+    global_functions as g_func, membrane as membrane, solid_layer as sl
 from .output_object import OutputObject
 
 
@@ -101,27 +101,46 @@ class Cell(OutputObject):
                         self.anode.gde.thickness,
                         self.anode.bpp.thickness])
 
-        self.thermal_conductance_x = \
-            np.asarray([self.cathode.bpp.thermal_conductance[0],
-                        self.cathode.gde.thermal_conductance[0],
-                        self.membrane.thermal_conductance[0],
-                        self.anode.gde.thermal_conductance[0],
-                        self.anode.bpp.thermal_conductance[0]])
+        thermal_conductance_x = \
+            [self.cathode.bpp.thermal_conductance[0],
+             self.cathode.gde.thermal_conductance[0],
+             self.membrane.thermal_conductance[0],
+             self.anode.gde.thermal_conductance[0],
+             self.anode.bpp.thermal_conductance[0]]
+        thermal_conductance_y = \
+            [self.cathode.bpp.thermal_conductance[1],
+             self.cathode.gde.thermal_conductance[1],
+             self.membrane.thermal_conductance[1],
+             self.anode.gde.thermal_conductance[1],
+             self.anode.bpp.thermal_conductance[1]]
+        thermal_conductance_z = \
+            [self.cathode.bpp.thermal_conductance[2],
+             self.cathode.gde.thermal_conductance[2],
+             self.membrane.thermal_conductance[2],
+             self.anode.gde.thermal_conductance[2],
+             self.anode.bpp.thermal_conductance[2]]
 
-        # self.thermal_conductance_x = \
-        #     (self.thermal_conductance_x
-        #      + np.roll(self.thermal_conductance_x, 1, axis=0)) * 0.5
-        # self.thermal_conductance_x = \
-        #     np.vstack((self.thermal_conductance_x,
-        #                [self.thermal_conductance_x[0]]))
+        thermal_conductance = [thermal_conductance_x,
+                               thermal_conductance_y,
+                               thermal_conductance_z]
 
-        self.thermal_conductance_y = \
-            np.asarray([self.cathode.bpp.thermal_conductance[1],
-                        self.cathode.gde.thermal_conductance[1],
-                        self.membrane.thermal_conductance[1],
-                        self.anode.gde.thermal_conductance[1],
-                        self.anode.bpp.thermal_conductance[1]])
+        # Split bipolar plate in two elements among x-direction if
+        # channel-land-discretization is applied
+        factors = (2.0, 0.5, 0.5)
+        if self.channel_land_discretization:
+            for i in range(len(thermal_conductance)):
+                value = self.cathode.bpp.thermal_conductance[i] * factors[i]
+                thermal_conductance[i].insert(0, value)
+                value = self.anode.bpp.thermal_conductance[i] * factors[i]
+                thermal_conductance[i].append(value)
+        thermal_conductance = np.asarray(thermal_conductance)
 
+        thermal_conductance[1] = \
+            (thermal_conductance[1] +
+             np.roll(thermal_conductance[1], 1, axis=0)) * 0.5
+        thermal_conductance[1] = \
+            np.vstack((thermal_conductance[1],
+                       [thermal_conductance[1][0]]))
         self.thermal_conductance_y = \
             (self.thermal_conductance_y
              + np.roll(self.thermal_conductance_y, 1, axis=0)) * 0.5
@@ -129,13 +148,7 @@ class Cell(OutputObject):
             np.vstack((self.thermal_conductance_y,
                        [self.thermal_conductance_y[0]]))
 
-        self.thermal_conductance_z = \
-            np.asarray([self.cathode.bpp.thermal_conductance[2],
-                        self.cathode.gde.thermal_conductance[2],
-                        self.membrane.thermal_conductance[2],
-                        self.anode.gde.thermal_conductance[2],
-                        self.anode.bpp.thermal_conductance[2]])
-
+        # thermal_conductance_z = self.thermal_conductance_z[:, 0, 0]
         self.thermal_conductance_z = \
             (self.thermal_conductance_z
              + np.roll(self.thermal_conductance_z, 1, axis=0)) * 0.5
@@ -143,24 +156,35 @@ class Cell(OutputObject):
             np.vstack((self.thermal_conductance_z,
                        [self.thermal_conductance_z[0]]))
 
-        if self.first_cell:
-            self.thermal_conductance_y[0] *= 0.5
-            self.thermal_conductance_z[0] *= 0.5
-        if self.last_cell:
-            self.thermal_conductance_y[-1] *= 0.5
-            self.thermal_conductance_z[-1] *= 0.5
+        # thermal_conductance_z_2 = self.thermal_conductance_z[:, 0, 0]
+        self.thermal_conductance_y[0] *= 0.5
+        self.thermal_conductance_z[0] *= 0.5
+        self.thermal_conductance_y[-1] *= 0.5
+        self.thermal_conductance_z[-1] *= 0.5
 
-        if self.last_cell:
-            heat_cond_mtx = \
-                mtx.build_cell_conductance_matrix(self.thermal_conductance_x,
-                                                  self.thermal_conductance_y,
-                                                  self.thermal_conductance_z)
-        else:
-            heat_cond_mtx = \
-                mtx.build_cell_conductance_matrix(
-                    self.thermal_conductance_x[:-1],
-                    self.thermal_conductance_y[:-1],
-                    self.thermal_conductance_z[:-1])
+        # if self.first_cell:
+        #     self.thermal_conductance_y[0] *= 0.5
+        #     self.thermal_conductance_z[0] *= 0.5
+        # if self.last_cell:
+        #     self.thermal_conductance_y[-1] *= 0.5
+        #     self.thermal_conductance_z[-1] *= 0.5
+
+        # if self.last_cell:
+        heat_cond_mtx = \
+            mtx.build_cell_conductance_matrix(
+                self.thermal_conductance_x,
+                sl.SolidLayer.calc_inter_node_conductance(
+                    self.thermal_conductance_y, axis=1),
+                sl.SolidLayer.calc_inter_node_conductance(
+                    self.thermal_conductance_z, axis=2))
+        # else:
+        #     heat_cond_mtx = \
+        #         mtx.build_cell_conductance_matrix(
+        #             self.thermal_conductance_x[:-1],
+        #             sl.SolidLayer.calc_inter_node_conductance(
+        #                 self.thermal_conductance_y[:-1], axis=1),
+        #             sl.SolidLayer.calc_inter_node_conductance(
+        #                 self.thermal_conductance_z[:-1], axis=2))
 
         self.heat_mtx_const = heat_cond_mtx
 

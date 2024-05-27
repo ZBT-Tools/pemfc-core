@@ -167,9 +167,88 @@ def build_one_dimensional_conductance_matrix(conductance_array, axis,
         + np.diag(off_diag, k=offset)
 
 
+def calculate_center_diagonal_2(array, axis):
+    if not array.ndim == 3:
+        raise ValueError('only three-dimensional arrays supported at the moment')
+    if axis not in (0, 1, 2, -1):
+        raise ValueError('axis must be 0, 1, 2, or -1')
+    shape = list(array.shape)
+    shape[axis] += 1
+    result = np.zeros(shape)
+    if axis == 0:
+        result[1:-1, :, :] = array[:-1, :, :] + array[1:, :, :]
+        result[0, :, :] = array[0, :, :]
+        result[-1, :, :] = array[-1, :, :]
+    elif axis == 1:
+        result[:, 1:-1, :] = array[:, :-1, :] + array[:, 1:, :]
+        result[:, 0, :] = array[:, 0, :]
+        result[:, -1, :] = array[:, -1, :]
+    elif axis == 2 or axis == -1:
+        result[:, :, 1:-1] = array[:, :, :-1] + array[:, :, 1:]
+        result[:, :, 0] = array[:, :, 0]
+        result[:, :, -1] = array[:, :, -1]
+    else:
+        raise ValueError('only three-dimensional arrays supported')
+    return result.flatten(order='F')
+
+
+def calculate_off_diagonal_2(array, axis):
+    if not array.ndim == 3:
+        raise ValueError('only three-dimensional arrays supported at the moment')
+    if axis not in (0, 1, 2, -1):
+        raise ValueError('axis must be 0, 1, 2, or -1')
+    shape = list(array.shape)
+    shape[axis] += 1
+    result = np.zeros(shape)
+    if axis == 0:
+        result[:-1, :, :] = array
+    elif axis == 1:
+        result[:, :-1, :] = array
+    elif axis == 2:
+        result[:, :, :-1] = array
+    else:
+        raise ValueError('only three-dimensional arrays supported at the moment')
+    return result.flatten(order='F')
+
+
+def create_one_dimensional_conductance_matrix(conductance_array, axis):
+    """
+    Calculate a tri-diagonal matrix for conduction in one dimension along the
+    given axis, while the order of arranging from inner to outer axis in the
+    matrix structure is from lowest to highest axis index 0, 1, 2 i.e. x, y, z
+    The conductance array for the provided axis should already give the
+    inter-nodal conductances so that the array is one element smaller compared
+    to the final solution vector. This should not be true for the remaining
+    axis.
+
+    Args:
+        conductance_array: k, l, m - sized conductance array while the axis index
+                           indicates the connected axis with a reduced dimension
+        axis: axis for one-dimensional conduction
+
+    Returns: tri-diagonal matrix for conduction with off-diagonal position
+             according to the conduction axis
+    """
+    if axis == -1:
+        axis = len(conductance_array.shape) - 1
+    offset = 1
+    for i in range(axis):
+        offset *= conductance_array.shape[i]
+    center_diag = calculate_center_diagonal_2(conductance_array, axis=axis)
+    off_diag = calculate_off_diagonal_2(conductance_array, axis)[:-offset]
+    center_diag *= -1.0
+    return np.diag(center_diag, k=0) \
+        + np.diag(off_diag, k=-offset) \
+        + np.diag(off_diag, k=offset)
+
+
 def build_cell_conductance_matrix(x_cond_vector, y_cond_vector, z_cond_vector):
-    x_cond_mtx = build_x_cell_conductance_matrix(x_cond_vector)
-    # x_cond_mtx_1 = build_one_dimensional_conductance_matrix(x_cond_vector, axis=0)
+
+    # x_cond_mtx_1 = build_x_cell_conductance_matrix(x_cond_vector)
+    x_cond_mtx = create_one_dimensional_conductance_matrix(
+        x_cond_vector, axis=0)
+    # diff = x_cond_mtx - x_cond_mtx_1
+    # diff_sum = np.sum(np.abs(diff))
     # raise ValueError('code adaption for 2D only up until this point')
 
     # TODO: Urgently correct conductance serial connection via convolution:
@@ -177,13 +256,13 @@ def build_cell_conductance_matrix(x_cond_vector, y_cond_vector, z_cond_vector):
 
     if y_cond_vector.shape[1] > 1:
         # y_cond_mtx = build_y_cell_conductance_matrix(y_cond_vector, axis=1)
-        y_cond_mtx = build_one_dimensional_conductance_matrix(y_cond_vector, axis=1)
+        y_cond_mtx = create_one_dimensional_conductance_matrix(y_cond_vector, axis=1)
         # test = y_cond_mtx - y_cond_mtx_1
         # test_1 = np.sum(np.abs(y_cond_mtx - y_cond_mtx_1))
     else:
         y_cond_mtx = 0.0
-    if z_cond_vector.shape[2] > 1:
-        z_cond_mtx = build_one_dimensional_conductance_matrix(z_cond_vector, axis=2)
+    if z_cond_vector.shape[2] > 0:
+        z_cond_mtx = create_one_dimensional_conductance_matrix(z_cond_vector, axis=2)
     else:
         z_cond_mtx = 0.0
     # TODO: Check 3D matrix assembly

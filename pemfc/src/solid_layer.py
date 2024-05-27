@@ -2,9 +2,11 @@
 import numpy as np
 from abc import ABC, ABCMeta, abstractmethod
 from collections.abc import Callable
+from collections.abc import Iterable
 # local modul imports
 from pemfc.src import output_object as oo
 from pemfc.src import discretization as dsct
+from typing import Self
 
 
 class SolidLayer(oo.OutputObject):
@@ -77,6 +79,50 @@ class SolidLayer(oo.OutputObject):
         else:
             current = current_density * area
         return current / self.electrical_conductance[axis]
+
+    def reduce_conductance(self, factor, indices, axis=0):
+        if axis == 0:
+            self.thermal_conductance[indices, :, :] *= factor
+            self.electrical_conductance[indices, :, :] *= factor
+        elif axis == 1:
+            self.thermal_conductance[:, indices, :] *= factor
+            self.electrical_conductance[:, indices, :] *= factor
+        elif axis in (2, -1):
+            self.thermal_conductance[:, :, indices] *= factor
+            self.electrical_conductance[:, :, indices] *= factor
+        else:
+            raise ValueError('only three-dimensional arrays supported')
+
+    @classmethod
+    def connect(cls, conductance_a: Iterable[Self],
+                conductance_b: Iterable[Self], mode):
+        conductance_a = np.asarray(conductance_a)
+        conductance_b = np.asarray(conductance_b)
+        if mode == 'serial':
+            return 1.0 / (1.0 / (conductance_a + conductance_b))
+        elif mode == 'parallel':
+            return conductance_a + conductance_b
+        else:
+            raise ValueError("argument 'mode' must either be 'serial' or 'parallel'")
+
+    @classmethod
+    def calc_inter_node_conductance(cls, conductance: Iterable[Self],
+                                    axis=0, mode='serial'):
+        conductance_by_2 = 2.0 * np.asarray(conductance)
+        if axis == 0:
+            return cls.connect(conductance_by_2[:-1, :, :],
+                               conductance_by_2[1:, :, :],
+                               mode)
+        elif axis == 1:
+            return cls.connect(conductance_by_2[:, :-1, :],
+                               conductance_by_2[:, 1:, :],
+                               mode)
+        elif axis in (2, -1):
+            return cls.connect(conductance_by_2[:, :, :-1],
+                               conductance_by_2[:, :, 1:],
+                               mode)
+        else:
+            raise ValueError('axis argument must be either 0, 1, 2 (-1)')
 
 
 # solid_dict = {

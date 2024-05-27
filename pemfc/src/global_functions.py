@@ -320,7 +320,6 @@ def calc_rrmse(array1, array2):
     return np.sqrt(np_div(diff_squared_sum, array2_squared_sum))
 
 
-
 def calc_mean_squared_error(array1, array2):
     """
     Calculates mean squared error of array1 and array2 (same shapes)
