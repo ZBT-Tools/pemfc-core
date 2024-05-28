@@ -254,7 +254,7 @@ def build_cell_conductance_matrix(x_cond_vector, y_cond_vector, z_cond_vector):
     # TODO: Urgently correct conductance serial connection via convolution:
     #  conductances must be converted to resistances first
 
-    if y_cond_vector.shape[1] > 1:
+    if y_cond_vector.shape[1] > 0:
         # y_cond_mtx = build_y_cell_conductance_matrix(y_cond_vector, axis=1)
         y_cond_mtx = create_one_dimensional_conductance_matrix(y_cond_vector, axis=1)
         # test = y_cond_mtx - y_cond_mtx_1
@@ -310,7 +310,7 @@ def create_stack_index_list(cells: list[cell.Cell]):
     return index_list, layer_index_list
 
 
-def create_cell_index_list(shape: tuple[int]):
+def create_cell_index_list(shape: tuple[int, ...]):
     """
     Create list of lists with each list containing flattened order of indices
     for a continuous functional layer (either for thermal or conductance matrix).

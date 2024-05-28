@@ -37,6 +37,8 @@ class SolidLayer(oo.OutputObject):
             self.calc_conductance(self.thermal_conductivity)
         self.electrical_conductance = \
             self.calc_conductance(self.electrical_conductivity)
+        self.conductance = {'electrical': self.electrical_conductance,
+                            'thermal': self.thermal_conductance}
 
     def calc_conductance(self, conductivity, effective=False):
         if np.ndim(conductivity) == 0:
@@ -82,14 +84,14 @@ class SolidLayer(oo.OutputObject):
 
     def reduce_conductance(self, factor, indices, axis=0):
         if axis == 0:
-            self.thermal_conductance[indices, :, :] *= factor
-            self.electrical_conductance[indices, :, :] *= factor
+            for conductance in self.conductance:
+                conductance[indices, :, :] *= factor
         elif axis == 1:
-            self.thermal_conductance[:, indices, :] *= factor
-            self.electrical_conductance[:, indices, :] *= factor
+            for conductance in self.conductance:
+                conductance[:, indices, :] *= factor
         elif axis in (2, -1):
-            self.thermal_conductance[:, :, indices] *= factor
-            self.electrical_conductance[:, :, indices] *= factor
+            for conductance in self.conductance:
+                conductance[:, :, indices] *= factor
         else:
             raise ValueError('only three-dimensional arrays supported')
 

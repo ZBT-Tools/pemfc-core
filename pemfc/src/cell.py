@@ -2,6 +2,7 @@
 import numpy as np
 import scipy as sp
 import copy
+import math
 
 # local modul imports
 from . import interpolation as ip, matrix_functions as mtx, half_cell as h_c, \
@@ -19,14 +20,11 @@ class Cell(OutputObject):
         self.cell_dict = cell_dict
 
         # print('Initializing: ', self.name)
-        self.n_layer = 5
         self.n_electrodes = 2
 
         self.first_cell = cell_dict['first_cell']
         self.last_cell = cell_dict['last_cell']
 
-        if self.last_cell:
-            self.n_layer += 1
         n_nodes = channels[0].n_nodes
         # Number of nodes along the channel
         self.n_ele = n_nodes - 1
@@ -90,103 +88,28 @@ class Cell(OutputObject):
         #     index_list.append(
         #         [(j * self.n_layer) + i for j in
         #          range(np.prod(self.membrane.dsct.shape, dtype=np.int32))])
-        self.index_array = mtx.create_cell_index_list(
-            (self.n_layer, *self.membrane.dsct.shape))
+
 
         # heat conductivity along the gas diffusion electrode and membrane
-        self.th_layer = \
-            np.asarray([self.cathode.bpp.thickness,
-                        self.cathode.gde.thickness,
-                        self.membrane.thickness,
-                        self.anode.gde.thickness,
-                        self.anode.bpp.thickness])
+        self.th_layer = [
+            self.cathode.bpp.thickness,
+            self.cathode.gde.thickness,
+            self.membrane.thickness,
+            self.anode.gde.thickness,
+            self.anode.bpp.thickness]
 
-        thermal_conductance_x = \
-            [self.cathode.bpp.thermal_conductance[0],
-             self.cathode.gde.thermal_conductance[0],
-             self.membrane.thermal_conductance[0],
-             self.anode.gde.thermal_conductance[0],
-             self.anode.bpp.thermal_conductance[0]]
-        thermal_conductance_y = \
-            [self.cathode.bpp.thermal_conductance[1],
-             self.cathode.gde.thermal_conductance[1],
-             self.membrane.thermal_conductance[1],
-             self.anode.gde.thermal_conductance[1],
-             self.anode.bpp.thermal_conductance[1]]
-        thermal_conductance_z = \
-            [self.cathode.bpp.thermal_conductance[2],
-             self.cathode.gde.thermal_conductance[2],
-             self.membrane.thermal_conductance[2],
-             self.anode.gde.thermal_conductance[2],
-             self.anode.bpp.thermal_conductance[2]]
+        self.thermal_conductance = self.calculate_conductance('thermal')
 
-        thermal_conductance = [thermal_conductance_x,
-                               thermal_conductance_y,
-                               thermal_conductance_z]
+        self.index_array = mtx.create_cell_index_list(
+            self.thermal_conductance[1].shape)
+        self.n_layer = self.thermal_conductance[1].shape[0]
 
-        # Split bipolar plate in two elements among x-direction if
-        # channel-land-discretization is applied
-        factors = (2.0, 0.5, 0.5)
-        if self.channel_land_discretization:
-            for i in range(len(thermal_conductance)):
-                value = self.cathode.bpp.thermal_conductance[i] * factors[i]
-                thermal_conductance[i].insert(0, value)
-                value = self.anode.bpp.thermal_conductance[i] * factors[i]
-                thermal_conductance[i].append(value)
-        thermal_conductance = np.asarray(thermal_conductance)
-
-        thermal_conductance[1] = \
-            (thermal_conductance[1] +
-             np.roll(thermal_conductance[1], 1, axis=0)) * 0.5
-        thermal_conductance[1] = \
-            np.vstack((thermal_conductance[1],
-                       [thermal_conductance[1][0]]))
-        self.thermal_conductance_y = \
-            (self.thermal_conductance_y
-             + np.roll(self.thermal_conductance_y, 1, axis=0)) * 0.5
-        self.thermal_conductance_y = \
-            np.vstack((self.thermal_conductance_y,
-                       [self.thermal_conductance_y[0]]))
-
-        # thermal_conductance_z = self.thermal_conductance_z[:, 0, 0]
-        self.thermal_conductance_z = \
-            (self.thermal_conductance_z
-             + np.roll(self.thermal_conductance_z, 1, axis=0)) * 0.5
-        self.thermal_conductance_z = \
-            np.vstack((self.thermal_conductance_z,
-                       [self.thermal_conductance_z[0]]))
-
-        # thermal_conductance_z_2 = self.thermal_conductance_z[:, 0, 0]
-        self.thermal_conductance_y[0] *= 0.5
-        self.thermal_conductance_z[0] *= 0.5
-        self.thermal_conductance_y[-1] *= 0.5
-        self.thermal_conductance_z[-1] *= 0.5
-
-        # if self.first_cell:
-        #     self.thermal_conductance_y[0] *= 0.5
-        #     self.thermal_conductance_z[0] *= 0.5
-        # if self.last_cell:
-        #     self.thermal_conductance_y[-1] *= 0.5
-        #     self.thermal_conductance_z[-1] *= 0.5
-
-        # if self.last_cell:
-        heat_cond_mtx = \
-            mtx.build_cell_conductance_matrix(
-                self.thermal_conductance_x,
+        self.heat_mtx_const = mtx.build_cell_conductance_matrix(
+                self.thermal_conductance[0],
                 sl.SolidLayer.calc_inter_node_conductance(
-                    self.thermal_conductance_y, axis=1),
+                    self.thermal_conductance[1], axis=1),
                 sl.SolidLayer.calc_inter_node_conductance(
-                    self.thermal_conductance_z, axis=2))
-        # else:
-        #     heat_cond_mtx = \
-        #         mtx.build_cell_conductance_matrix(
-        #             self.thermal_conductance_x[:-1],
-        #             sl.SolidLayer.calc_inter_node_conductance(
-        #                 self.thermal_conductance_y[:-1], axis=1),
-        #             sl.SolidLayer.calc_inter_node_conductance(
-        #                 self.thermal_conductance_z[:-1], axis=2))
-
-        self.heat_mtx_const = heat_cond_mtx
+                    self.thermal_conductance[2], axis=2))
 
         # self.heat_mtx_const = np.zeros(self.heat_cond_mtx.shape)
         self.heat_mtx_dyn = np.zeros(self.heat_mtx_const.shape)
@@ -215,29 +138,15 @@ class Cell(OutputObject):
         # due to dynamic addition of lumped x-conductance during solution procedure
         # TODO: Check electric conductance matrix assembly with new coordinates
         #  and discretization
-        elec_cond_x = \
-            np.asarray([self.cathode.bpp.electrical_conductance[0],
-                        self.anode.bpp.electrical_conductance[0]])
-        elec_resistance_x = 1.0 / elec_cond_x
-
-        # elec_resistance_x_sum = np.sum(elec_resistance_x, axis=0)
-        elec_resistance_x_sum = sp.ndimage.convolve1d(
-            elec_resistance_x, axis=0, weights=(1.0, 1.0, 1.0), mode='constant')[:-1]
-        elec_cond_x_lumped = 1.0 / elec_resistance_x_sum
-
-        elec_cond_y = \
-            np.asarray([self.cathode.bpp.electrical_conductance[1],
-                        self.anode.bpp.electrical_conductance[1]])
-        elec_cond_z = \
-            np.asarray([self.cathode.bpp.electrical_conductance[2],
-                        self.anode.bpp.electrical_conductance[2]])
+        self.electrical_conductance = self.calculate_conductance('electrical')
 
         self.elec_mat_const = \
             mtx.build_cell_conductance_matrix(
-                elec_cond_x_lumped * 0.0,
-                elec_cond_y,
-                elec_cond_z
-            )
+                self.electrical_conductance[0],
+                sl.SolidLayer.calc_inter_node_conductance(
+                    self.electrical_conductance[1], axis=1),
+                sl.SolidLayer.calc_inter_node_conductance(
+                    self.electrical_conductance[2], axis=2))
         # print(self.elec_x_mat_const)
 
         # boolean alarm values
@@ -261,27 +170,93 @@ class Cell(OutputObject):
         self.temp_layer = \
             g_func.full((self.n_layer,) + self.temp_mem.shape, temp_init)
         # interface names according to temperature array
-        self.temp_names = ['Cathode BPP-BPP',
-                           'Cathode BPP-GDE',
-                           'Cathode GDE-MEM',
-                           'Anode MEM-GDE',
-                           'Anode GDE-BPP',
-                           'Anode BPP-BPP']
+        self.temp_names = [
+            'Cathode BC-BPP',
+            'Cathode BPP-GDE',
+            'Cathode GDE-MEM',
+            'Anode MEM-GDE',
+            'Anode GDE-BPP',
+            'Anode BPP-BC']
+        if self.channel_land_discretization:
+            self.temp_names.insert(1, 'Cathode BPP-BPP')
+            self.temp_names.insert(-2, 'Anode BPP-BPP')
 
-        # current density
+        # Current density
         self.i_cd = np.zeros(self.temp_mem.shape)
-        # cell voltage
+        # Cell voltage
         self.v = np.zeros(self.i_cd.shape)
-        # voltage loss
+        # Voltage loss
         self.v_loss = np.zeros(self.v.shape)
         # self.resistance_z = np.zeros(n_ele)
-        # through-plane cell resistance
+        # Through-plane cell resistance
         self.conductance_z = np.zeros(self.i_cd.shape)
 
         self.add_print_data(self.i_cd, 'Current Density', 'A/m²')
         self.add_print_data(self.temp_layer, 'Temperature', 'K',
                             self.temp_names[:self.n_layer])
         self.add_print_data(self.v, 'Cell Voltage', 'V')
+
+    def calculate_conductance(self, transport_type: str):
+        if transport_type not in ('electrical', 'thermal'):
+            raise ValueError("transport_type argument must be either 'electrical' or 'thermal'")
+
+        # Stack thermal conductances along through-plane direction, i.e. x-coordinate
+        conductance_x = \
+            [self.cathode.bpp.conductance[transport_type][0],
+             self.cathode.gde.conductance[transport_type][0],
+             self.membrane.conductance[transport_type][0],
+             self.anode.gde.conductance[transport_type][0],
+             self.anode.bpp.conductance[transport_type][0]]
+        conductance_y = \
+            [self.cathode.bpp.conductance[transport_type][1],
+             self.cathode.gde.conductance[transport_type][1],
+             self.membrane.conductance[transport_type][1],
+             self.anode.gde.conductance[transport_type][1],
+             self.anode.bpp.conductance[transport_type][1]]
+        conductance_z = \
+            [self.cathode.bpp.conductance[transport_type][2],
+             self.cathode.gde.conductance[transport_type][2],
+             self.membrane.conductance[transport_type][2],
+             self.anode.gde.conductance[transport_type][2],
+             self.anode.bpp.conductance[transport_type][2]]
+
+        conductance = [conductance_x, conductance_y, conductance_z]
+        return self.stack_cell_property(conductance, exp=(-1.0, 1.0, 1.0),
+                                        stacking_axis=0, modify_values=True)
+
+    def stack_cell_property(self, cell_property: list, stacking_axis, exp: tuple,
+                            modify_values=False, shift_along_axis=(False, True, True)):
+
+        # Split bipolar plate in two elements among x-direction if
+        # channel-land-discretization is applied
+        if self.channel_land_discretization:
+            cat_bpp_split_ratio = (
+                    self.cathode.channel.height / self.cathode.bpp.thickness)
+            ano_bpp_split_ratio = (
+                    self.anode.channel.height / self.anode.bpp.thickness)
+            # factors = (1.0 / bpp_split_ratio, bpp_split_ratio, bpp_split_ratio)
+            for i in range(len(cell_property)):
+                value = np.copy(cell_property[i][0])
+                cell_property[i].insert(0, value * math.pow(1.0 - cat_bpp_split_ratio, exp[i]))
+                cell_property[i][1] = value * math.pow(cat_bpp_split_ratio, exp[i])
+                value = np.copy(cell_property[i][-1])
+                cell_property[i].append(value * math.pow(1.0 - ano_bpp_split_ratio, exp[i]))
+                cell_property[i][-2] = value * math.pow(ano_bpp_split_ratio, exp[i])
+
+        cell_property = [np.asarray(item) for item in cell_property]
+
+        if self.channel_land_discretization and modify_values:
+            for i in range(len(cell_property)):
+                cell_property[i][[1, -2], :,  1] = 0.0
+
+        for i in range(len(cell_property)):
+            if shift_along_axis[i]:
+                cell_property[i] = (cell_property[i] + np.roll(cell_property[i], 1, axis=0)) * 0.5
+                cell_property[i] = np.concatenate(
+                    (cell_property[i], [cell_property[i][0]]), axis=stacking_axis)
+                cell_property[i][0] *= 0.5
+                cell_property[i][-1] *= 0.5
+        return cell_property
 
     def calc_ambient_conductance(self, alpha_amb):
         """
@@ -295,16 +270,17 @@ class Cell(OutputObject):
         #     / (self.cathode.channel.length * self.width_straight_channels)
         # k_amb = np.full((self.n_layer, self.n_ele), 0.)
         # convection conductance to the environment
-        th_layer_amb = (self.th_layer + np.roll(self.th_layer, 1)) * 0.5
+        # th_layer_amb = (self.th_layer + np.roll(self.th_layer, 1, axis=0)) * 0.5
+
         # if self.last_cell:
-        th_layer_amb = np.hstack((th_layer_amb, th_layer_amb[0]))
+        # th_layer_amb = np.hstack((th_layer_amb, th_layer_amb[0]))
+        th_layer_amb = self.stack_cell_property(
+            [self.th_layer], exp=(1.0,), stacking_axis=-1,
+            modify_values=False, shift_along_axis=(True,))
         dy = self.cathode.discretization.dx[0].flatten(order='F')
         k_amb = np.outer(th_layer_amb, dy) \
             * alpha_amb * self.cathode.flow_field.external_surface_factor
-        if self.first_cell:
-            k_amb[0] *= 0.5
-        if self.last_cell:
-            k_amb[-1] *= 0.5
+        # if self.first_cell:
         return k_amb
 
     def add_explicit_layer_source(self, rhs_vector, source_term,
@@ -320,16 +296,16 @@ class Cell(OutputObject):
         rhs_vector += source_vector
         return rhs_vector, source_vector
 
-    def add_implicit_layer_source(self, matrix, coefficient, layer_id=None):
+    def add_implicit_layer_source(self, matrix, coefficients, layer_id=None):
         matrix_size = matrix.shape[0]
         if layer_id is None:
-            if np.isscalar(coefficient):
-                source_vector = g_func.full(matrix_size, coefficient)
+            if np.isscalar(coefficients):
+                source_vector = g_func.full(matrix_size, coefficients)
             else:
-                source_vector = np.asarray(coefficient)
+                source_vector = np.asarray(coefficients)
         else:
             source_vector = np.zeros(matrix_size)
-            np.put(source_vector, self.index_array[layer_id], coefficient)
+            np.put(source_vector, self.index_array[layer_id], coefficients)
         matrix += np.diag(source_vector)
         return matrix, source_vector
 

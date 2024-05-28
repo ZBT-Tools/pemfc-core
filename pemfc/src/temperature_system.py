@@ -76,10 +76,10 @@ class TemperatureSystem:
         # ambient temperature
         for cell in self.cells:
             cell.k_amb = cell.calc_ambient_conductance(alpha_amb)
-            if cell.last_cell:
-                k_amb_vector = cell.k_amb.flatten(order='F')
-            else:
-                k_amb_vector = cell.k_amb[:-1].flatten(order='F')
+            # if cell.last_cell:
+            k_amb_vector = cell.k_amb.flatten(order='F')
+            # else:
+            #     k_amb_vector = cell.k_amb[:-1].flatten(order='F')
 
             cell.add_implicit_layer_source(cell.heat_mtx_const, -k_amb_vector)
             cell.add_explicit_layer_source(cell.heat_rhs_const,
@@ -102,7 +102,7 @@ class TemperatureSystem:
                                list(range(1, self.n_cells))]).transpose()
         layer_ids = np.asarray([(-1, 0) for i in range(self.n_cells-1)])
         conductance = \
-            np.asarray([self.cells[i].thermal_conductance_x[layer_ids[i][0]]
+            np.asarray([self.cells[i].thermal_conductance[0][layer_ids[i][0]]
                         for i in range(self.n_cells-1)])
         # old_matrix = np.copy(matrix)
         mtx.connect_cells(matrix, cell_ids, layer_ids,
@@ -306,7 +306,7 @@ class TemperatureSystem:
 
     def connect_to_next_cell(self, i):
         cell = self.cells[i]
-        conductance = cell.thermal_conductance_x[-1]
+        conductance = cell.thermal_conductance[0][-1]
         source = conductance * self.cells[i + 1].temp_layer[0]
         cell.add_explicit_layer_source(cell.heat_rhs_dyn, source, -1)
         coeff = - conductance
@@ -314,7 +314,7 @@ class TemperatureSystem:
 
     def connect_to_previous_cell(self, i):
         cell = self.cells[i]
-        conductance = self.cells[i - 1].thermal_conductance_x[-1]
+        conductance = self.cells[i - 1].thermal_conductance[0][-1]
         source = - conductance * self.cells[i - 1].temp_layer[-1]
         # source = conductance * (self.cells[i - 1].temp_layer[-1] -
         #                        self.cells[i].temp_layer[0])
