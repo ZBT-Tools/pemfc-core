@@ -1,12 +1,13 @@
 # general imports
 import numpy as np
 import copy
+from abc import ABC, abstractmethod
 from scipy import linalg as sp_la
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
 
 # local module imports
-from . import matrix_functions as mtx, cell as fcell, \
+from . import matrix_functions as mtx_func, stack as stack_module, cell as cell_module, \
     global_functions as g_func, channel as chl
 
 # import pandas as pd
@@ -15,27 +16,137 @@ from . import matrix_functions as mtx, cell as fcell, \
 np.set_printoptions(linewidth=10000, threshold=None, precision=2)
 
 
-class LinearSystem:
+class LinearSystem(ABC):
 
-    def __init__(self, stack, temp_dict):
-        self.cells = stack.cells
-        if not isinstance(stack.cells, (list, tuple)):
-            raise TypeError
-        if not isinstance(self.cells[0], fcell.Cell):
-            raise TypeError
-        self.n_cells = stack.n_cells
+    def __init__(self, shape: tuple[int, ...]):
 
-        # use SciPy sparse solver, efficient for larger sparse matrices
+        # self.cells = stack.cells
+        # if not isinstance(stack.cells, (list, tuple)):
+        #     raise TypeError
+        # if not isinstance(self.cells[0], cell_module.Cell):
+        #     raise TypeError
+        # self.n_cells = stack.n_cells
+        self.shape = shape
+        self.n = np.prod(*shape)
+
+        # Use SciPy sparse solver, efficient for larger sparse matrices
         self.sparse_solve = True
 
-        # instead of solving the completely coupled temperature src at once
+        # Instead of solving the completely coupled temperature src at once
         # solve the decoupled cell-wise temperature systems and iterate
         # however not working yet!!!
         self.solve_individual_cells = False
 
-        # sub channel ratios
-        self.n_cat_channels = stack.fuel_circuits[0].n_subchannels
-        self.n_ano_channels = stack.fuel_circuits[1].n_subchannels
+        # Conductance Matrix as ndarray
+        self.mtx = np.zeros((self.n, self.n))
+        # Solution vector
+        self.solution_vector = np.zeros(self.n)
+        # Right side of the matrix src: mtx * solution_vector = rhs,
+        # contains the power sources and explicit coupled terms
+        self.rhs = np.zeros(self.solution_vector.shape)
+
+    def update(self, *args, **kwargs):
+        """
+        Wrapper to update the overall linear system.
+        """
+        self.update_and_solve_linear_system()
+
+    def update_and_solve_linear_system(self):
+        """
+        This function coordinates the temp_layer program sequence
+        """
+        self.update_matrix()
+        self.update_rhs()
+        self.solve_system()
+
+    @abstractmethod
+    def update_rhs(self):
+        """
+        Create vector with the right hand side entries,
+        Sources from outside the src to the src must be defined negative.
+        """
+        pass
+
+    @abstractmethod
+    def update_matrix(self):
+        """
+        Updates matrix coefficients
+        """
+        pass
+
+    def solve_system(self):
+        """
+        Solves the layer temperatures.
+        """
+        if self.sparse_solve:
+            self.solution_vector[:] = spsolve(self.mtx, self.rhs)
+        else:
+            self.solution_vector[:] = np.linalg.tensorsolve(self.mtx, self.rhs)
+
+
+class StackLinearSystem(LinearSystem, ABC):
+
+    def __init__(self, shape: tuple[int, ...], stack: stack_module.Stack):
+        super().__init__(shape)
+        self.cells = stack.cells
+
+        self.index_list, self.layer_index_list = mtx_func.create_stack_index_list(self.cells)
+
+        # constant part of conductance matrix
+        self.mtx_const = self.connect_cells()
+        if self.sparse_solve:
+            self.mtx_const = sparse.csr_matrix(self.mtx_const)
+
+    @abstractmethod
+    def connect_cells(self):
+        pass
+
+    @abstractmethod
+    def update(self):
+        """
+        This function coordinates the program sequence
+        """
+        pass
+
+    @abstractmethod
+    def update_cell_solution(self):
+        """
+        This function coordinates the program sequence
+
+        Returns:
+
+        """
+        pass
+
+    def update_cell_solution_general(self, cell_solution_name: str, cell_shape_name: str):
+        """
+        Transfer the general solution vector (1D) into the single cell solution arrays (3D)
+        """
+        # TODO: Rework for 3D required
+        for i, cell in enumerate(self.cells):
+            n_layer = getattr(cell, cell_shape_name)[0]
+            for j in range(n_layer):
+                index_vector = self.index_list[i][j]
+                cell_solution_vector = getattr(cell, cell_solution_name)
+                cell_solution_vector[j] = self.solution_vector[index_vector]
+
+
+class TemperatureSystem(StackLinearSystem):
+
+    def __init__(self, stack: stack_module.Stack, input_dict: dict):
+
+        shape = (len(stack.cells), *stack.cells[0].temp_shape)
+        super().__init__(shape, stack)
+
+        """Building up the base conductance matrix"""
+        # Vector for dynamically changing heat conductance values
+        # Add constant source and sink coefficients to heat conductance matrix
+        # Heat transfer to ambient
+        self.input_dict = input_dict
+
+        self.rhs_const = np.hstack([cell.heat_rhs_const for cell in self.cells])
+
+        # TODO: Update TemperatureSystem for 3D
 
         # coolant flow settings
         self.cool_flow = False
@@ -45,7 +156,7 @@ class LinearSystem:
             self.n_cool = len(self.cool_channels)
             if not isinstance(self.cool_channels[0], chl.Channel):
                 raise TypeError
-            if self.n_cool == (self.n_cells + 1):
+            if self.n_cool == (len(self.cells) + 1):
                 self.cool_ch_bc = True
             else:
                 self.cool_ch_bc = False
@@ -55,25 +166,11 @@ class LinearSystem:
         self.e_tn = self.cells[0].e_tn
         # open circuit potential
         self.e_0 = self.cells[0].e_0
-        # conductance matrix
-        self.mtx = None
-        # solid layer temperature vector
-        self.temp_layer_vec = \
-            np.hstack([cell.heat_rhs for cell in self.cells])
-        # right side of the matrix src: mat T = rhs,
-        # contains the power sources and explicit coupled terms
-        self.rhs = np.zeros(np.shape(self.temp_layer_vec))
 
-        """Building up the base conductance matrix"""
-        # vector for dynamically changing heat conductance values
-        # self.dyn_vec = np.zeros(np.shape(self.temp_layer_vec))
-        # Add constant source and sink coefficients to heat conductance matrix
-        # Heat transfer to ambient
-        alpha_amb = temp_dict['alpha_amb']
-        temp_amb = temp_dict['temp_amb']
-
-        # TODO: Update TemperatureSystem for 3D
-        # ambient temperature
+    def add_ambient_convection(self):
+        # Add coefficients to matrix and rhs for each cell due to convection to ambient
+        alpha_amb = self.input_dict['alpha_amb']
+        temp_amb = self.input_dict['temp_amb']
         for cell in self.cells:
             cell.k_amb = cell.calc_ambient_conductance(alpha_amb)
             # if cell.last_cell:
@@ -81,32 +178,23 @@ class LinearSystem:
             # else:
             #     k_amb_vector = cell.k_amb[:-1].flatten(order='F')
 
-            cell.add_implicit_layer_source(cell.heat_mtx_const, -k_amb_vector)
-            cell.add_explicit_layer_source(cell.heat_rhs_const,
-                                           k_amb_vector * temp_amb)
-
-        self.rhs_const = \
-            np.hstack([cell.heat_rhs_const for cell in self.cells])
-
-        self.index_list, self.layer_index_list = \
-            mtx.create_stack_index_list(self.cells)
-
-        # constant part of conductance matrix
-        self.mtx_const = self.connect_cells()
-        if self.sparse_solve:
-            self.mtx_const = sparse.csr_matrix(self.mtx_const)
+            mtx_func.add_implicit_layer_source(
+                cell.heat_mtx_const, -k_amb_vector, cell.index_array)
+            mtx_func.add_explicit_layer_source(
+                cell.heat_rhs_const, k_amb_vector * temp_amb, cell.index_array)
 
     def connect_cells(self):
         matrix = sp_la.block_diag(*[cell.heat_mtx_const for cell in self.cells])
-        cell_ids = np.asarray([list(range(self.n_cells-1)),
-                               list(range(1, self.n_cells))]).transpose()
-        layer_ids = np.asarray([(-1, 0) for i in range(self.n_cells-1)])
+        n_cells = len(self.cells)
+        cell_ids = np.asarray([list(range(n_cells-1)),
+                               list(range(1, n_cells))]).transpose()
+        layer_ids = np.asarray([(-1, 0) for i in range(n_cells-1)])
         conductance = \
             np.asarray([self.cells[i].thermal_conductance[0][layer_ids[i][0]]
-                        for i in range(self.n_cells-1)])
+                        for i in range(n_cells-1)])
         # old_matrix = np.copy(matrix)
-        mtx.connect_cells(matrix, cell_ids, layer_ids,
-                          conductance, self.index_list)
+        mtx_func.connect_cells(matrix, cell_ids, layer_ids,
+                               conductance, self.index_list)
         # diff = matrix - old_matrix
         return matrix
 
@@ -114,23 +202,23 @@ class LinearSystem:
         """
         This function coordinates the program sequence
         """
-        self.update_gas_channel()
         if self.cool_flow:
             self.update_coolant_channel()
-        self.update_temp_layer()
-        if np.any(self.temp_layer_vec < 200.0):
+        self.update_gas_channel()
+        self.update_and_solve_linear_system()
+        if np.any(self.solution_vector < 200.0):
             raise ValueError('temperature too low, check boundary conditions')
-        if np.any(self.temp_layer_vec > 1000.0):
+        if np.any(self.solution_vector > 1000.0):
             raise ValueError('temperature too high, check boundary conditions')
+        self.update_cell_solution()
 
-    def update_temp_layer(self):
+    def update_and_solve_linear_system(self):
         """
         This function coordinates the temp_layer program sequence
         """
         self.update_matrix()
         self.update_rhs()
         self.solve_system()
-        self.update_cell_layer_temperatures()
 
     def update_gas_channel(self):
         """
@@ -158,219 +246,24 @@ class LinearSystem:
 
     def update_rhs(self):
         """
-        Creates a vector with the right hand side entries,
-        add explicit heat sources here.
-        Sources from outside the src
-        to the src must be defined negative.
+        Create vector with the right hand side entries,
+        Sources from outside the src to the src must be defined negative.
         """
-        for i, cell in enumerate(self.cells):
-            cell.heat_rhs_dyn[:] = 0.0
-
-            source = np.zeros(cell.temp_layer[0].shape)
-            # Cathode bpp-gde source
-            # h_vap = w_prop.water.calc_h_vap(cell.cathode.channel.temp[:-1])
-            channel = cell.cathode.channel
-            source += channel.k_coeff * channel.temp_ele * self.n_cat_channels
-            source += getattr(channel, 'condensation_heat', 0.0)  # * 0.0
-            cell.add_explicit_layer_source(cell.heat_rhs_dyn, source, 1)
-
-            current = cell.i_cd * cell.d_area
-            half_ohmic_heat_membrane = \
-                0.5 * cell.membrane.omega * np.square(current)
-
-            # Cathode gde-mem source
-            source[:] = 0.0
-            source += half_ohmic_heat_membrane
-            v_loss = np.minimum(self.e_0, cell.cathode.v_loss)
-            v_loss[v_loss < 0.0] = 0.0
-            reaction_heat = \
-                (self.e_tn - self.e_0 + v_loss) * current
-            source += reaction_heat
-            cell.add_explicit_layer_source(cell.heat_rhs_dyn, source, 2)
-
-            # Anode gde-mem source
-            source[:] = 0.0
-            source += half_ohmic_heat_membrane
-            v_loss = np.minimum(self.e_0, cell.anode.v_loss)
-            v_loss[v_loss < 0.0] = 0.0
-            reaction_heat = v_loss * current
-            source += reaction_heat
-            cell.add_explicit_layer_source(cell.heat_rhs_dyn, source, 3)
-
-            # Anode bpp-gde source
-            source[:] = 0.0
-            # h_vap = w_prop.water.calc_h_vap(cell.anode.temp_fluid[:-1])
-            channel = cell.anode.channel
-            source = channel.k_coeff * channel.temp_ele * self.n_ano_channels
-            source += getattr(channel, 'condensation_heat', 0.0)  # * 0.0
-            cell.add_explicit_layer_source(cell.heat_rhs_dyn, source, 4)
-
-            # Cooling channels
-            if self.cool_flow:
-                if self.cool_ch_bc:
-                    cool_chl = self.cool_channels[i]
-                    source = cool_chl.k_coeff * cool_chl.temp_ele
-                    source *= self.n_cool_sub_channels
-                    cell.add_explicit_layer_source(cell.heat_rhs_dyn,
-                                                   source, layer_id=0)
-                    if cell.last_cell:
-                        cool_chl = self.cool_channels[i + 1]
-                        source = cool_chl.k_coeff * cool_chl.temp_ele
-                        source *= self.n_cool_sub_channels
-                        cell.add_explicit_layer_source(cell.heat_rhs_dyn,
-                                                       source, layer_id=-1)
-                else:
-                    if not cell.first_cell:
-                        cool_chl = self.cool_channels[i - 1]
-                        source = cool_chl.k_coeff * cool_chl.temp_ele
-                        source *= self.n_cool_sub_channels
-                        cell.add_explicit_layer_source(cell.heat_rhs_dyn,
-                                                       source, layer_id=0)
-
-        if not self.solve_individual_cells:
-            rhs_dyn = np.hstack([cell.heat_rhs_dyn for cell in self.cells])
-            self.rhs = self.rhs_const + rhs_dyn
+        pass
 
     def update_matrix(self):
         """
-        Updates the thermal conductance matrix
+        Updates matrix coefficients
         """
-        source_vectors = []
-        for i, cell in enumerate(self.cells):
-            cell.heat_mtx_dyn[:, :] = 0.0
-            source_vectors.append(np.zeros(cell.heat_rhs_dyn.shape))
+        pass
 
-            # add thermal conductance for heat transfer to cathode gas
-            source = -cell.cathode.channel.k_coeff * self.n_cat_channels
-            matrix, source_vec_1 = \
-                cell.add_implicit_layer_source(cell.heat_mtx_dyn, source, 1)
-
-            # add thermal conductance for heat transfer to anode gas
-            source = -cell.anode.channel.k_coeff * self.n_ano_channels
-            matrix, source_vec_2 = \
-                cell.add_implicit_layer_source(cell.heat_mtx_dyn, source, 4)
-
-            # add thermal conductance for heat transfer to coolant
-            source_vec_3 = np.zeros(source_vec_1.shape)
-            if self.cool_flow:
-                if self.cool_ch_bc:
-                    source = - self.cool_channels[i].k_coeff
-                    source *= self.n_cool_sub_channels
-                    matrix, source_vec = \
-                        cell.add_implicit_layer_source(cell.heat_mtx_dyn,
-                                                       source, layer_id=0)
-                    source_vec_3[:] = source_vec
-                    if cell.last_cell:
-                        source = - self.cool_channels[i + 1].k_coeff
-                        source *= self.n_cool_sub_channels
-                        matrix, source_vec = \
-                            cell.add_implicit_layer_source(cell.heat_mtx_dyn,
-                                                           source, layer_id=-1)
-                        source_vec_3[:] += source_vec
-                else:
-                    if not cell.first_cell:
-                        source = - self.cool_channels[i - 1].k_coeff
-                        source *= self.n_cool_sub_channels
-                        matrix, source_vec = \
-                            cell.add_implicit_layer_source(cell.heat_mtx_dyn,
-                                                           source, layer_id=0)
-                        source_vec_3[:] = source_vec
-
-            source_vectors[i][:] = source_vec_1 + source_vec_2 + source_vec_3
-
-        dyn_vec = np.hstack(source_vectors)
-        if self.sparse_solve:
-            self.mtx = \
-                self.mtx_const + sparse.diags([dyn_vec], [0], format='csr')
-        else:
-            self.mtx = self.mtx_const + np.diag(dyn_vec)
-
-    def solve_system(self):
-        if self.solve_individual_cells:
-            self.solve_cells()
-        else:
-            self.solve_implicit_system()
-
-    def solve_implicit_system(self):
-        """
-        Solves the layer temperatures.
-        """
-        # tx_df = pd.DataFrame(self.mtx)
-        # mtx_df.to_clipboard(index=False, header=False, sep=' ')
-        # rhs_df = pd.DataFrame(self.rhs)
-        # rhs_df.to_clipboard(index=False, header=False, sep=' ')
-        if self.sparse_solve:
-            self.temp_layer_vec[:] = spsolve(self.mtx, self.rhs)
-        else:
-            self.temp_layer_vec[:] = np.linalg.tensorsolve(self.mtx, self.rhs)
-
-    def connect_to_next_cell(self, i):
-        cell = self.cells[i]
-        conductance = cell.thermal_conductance[0][-1]
-        source = conductance * self.cells[i + 1].temp_layer[0]
-        cell.add_explicit_layer_source(cell.heat_rhs_dyn, source, -1)
-        coeff = - conductance
-        cell.add_implicit_layer_source(cell.heat_mtx_dyn, coeff, -1)
-
-    def connect_to_previous_cell(self, i):
-        cell = self.cells[i]
-        conductance = self.cells[i - 1].thermal_conductance[0][-1]
-        source = - conductance * self.cells[i - 1].temp_layer[-1]
-        # source = conductance * (self.cells[i - 1].temp_layer[-1] -
-        #                        self.cells[i].temp_layer[0])
-        cell.add_explicit_layer_source(cell.heat_rhs_dyn, source, 0)
-        source = conductance
-        cell.add_implicit_layer_source(cell.heat_mtx_dyn, source, 0)
-
-    def solve_cells(self):
-        """
-        Solves the layer temperatures solving each cell individually and
-        explicit coupling between cells (self.solve_individual_cells = True),
-        however not working properly at the moment!!!
-        """
-        tolerance = 1e-10
-        error = 1e8
-        under_relaxation = 0.0
-        temp_old = g_func.full(self.temp_layer_vec.shape, 1e8)
-        temp_new = np.zeros(self.temp_layer_vec.shape)
-        counter = 0
-        while (error > tolerance) or (counter < 3):
-            temp_new_list = []
-            for i, cell in enumerate(self.cells):
-                if counter > 0:
-                    if self.n_cells > 1:
-                        if cell.first_cell:
-                            self.connect_to_next_cell(i)
-                        elif cell.last_cell:
-                            self.connect_to_previous_cell(i)
-                        else:
-                            self.connect_to_previous_cell(i)
-                            self.connect_to_next_cell(i)
-                cell.heat_mtx[:] = cell.heat_mtx_const + cell.heat_mtx_dyn
-                cell.heat_rhs[:] = cell.heat_rhs_const + cell.heat_rhs_dyn
-                temp_layer_vec = \
-                    np.linalg.tensorsolve(cell.heat_mtx, cell.heat_rhs)
-                if counter > 0:
-                    temp_layer_vec = (1.0 - under_relaxation) * temp_layer_vec \
-                        + under_relaxation * temp_old_array[i]
-                temp_new_list.append(temp_layer_vec)
-                for j in range(cell.n_layer):
-                    index_vector = cell.index_array[j]
-                    cell.temp_layer[j] = temp_layer_vec[index_vector]
-            temp_old_array = copy.deepcopy(temp_new_list)
-            temp_new[:] = np.concatenate(temp_new_list, axis=0)
-            error = np.abs(np.sum(((temp_old - temp_new) / temp_new) ** 2.0))
-            temp_old[:] = temp_new
-            counter += 1
-        self.temp_layer_vec[:] = temp_new
-
-    def update_cell_layer_temperatures(self):
-        """
-        From 1D temperature vector to 2D cell temperature arrays
-        """
-        for i, cell in enumerate(self.cells):
-            for j in range(cell.n_layer):
-                # index_vector = cell.index_array[j]
-                index_vector = self.index_list[i][j]
-                cell.temp_layer[j] = self.temp_layer_vec[index_vector]
-
+    def update_cell_solution(self):
+        temp_solution_name = 'temp_layer'
+        if not hasattr(self.cells[0], temp_solution_name):
+            raise ValueError('attribute {} is not found in {}'.format(temp_solution_name,
+                                                                      self.cells[0].__name__))
+        temp_shape_name = 'temp_shape'
+        if not hasattr(self.cells[0], temp_shape_name):
+            raise ValueError('attribute {} is not found in {}'.format(temp_shape_name,
+                                                                      self.cells[0].__name__))
+        self.update_cell_solution_general(temp_solution_name, temp_shape_name)

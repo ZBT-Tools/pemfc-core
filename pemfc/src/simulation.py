@@ -292,7 +292,7 @@ class Simulation:
         #                   / self.stack.temp_sys.temp_layer[0][0, 0]))
         if self.stack.calc_temp:
             temp_error = gf.calc_rrmse(self.stack.temp_old,
-                                       self.stack.temp_sys.temp_layer_vec)
+                                       self.stack.temp_sys.solution_vector)
         else:
             temp_error = 0.0
         return current_error, temp_error

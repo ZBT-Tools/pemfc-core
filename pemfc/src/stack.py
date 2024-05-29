@@ -3,7 +3,7 @@ import numpy as np
 
 # local module imports
 from . import electrical_coupling as el_cpl, flow_circuit as flow_circuit, \
-    cell as cl, temperature_system as therm_cpl, channel as chl
+    cell as cl, temperature_system as therm_cpl, channel as chl, linear_system as lin_sys
 from .fluid import fluid as fluid
 # from data import input_dicts
 # from ..gui import data_transfer
@@ -213,7 +213,8 @@ class Stack:
             self.v_target = v_target
 
         # Initialize temperature system
-        self.temp_sys = therm_cpl.TemperatureSystem(self, temperature_dict)
+        # self.temp_sys = therm_cpl.TemperatureSystem(self, temperature_dict)
+        self.temp_sys = lin_sys.TemperatureSystem(self, temperature_dict)
         # Initialize the electrical coupling
         self.elec_sys = el_cpl.ElectricalCoupling(self)
 

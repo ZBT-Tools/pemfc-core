@@ -19,14 +19,14 @@ class Cell(OutputObject):
         super().__init__(name)
         self.cell_dict = cell_dict
 
-        # print('Initializing: ', self.name)
+        # Set number of electrodes
         self.n_electrodes = 2
 
         self.first_cell = cell_dict['first_cell']
         self.last_cell = cell_dict['last_cell']
 
+        # Number of nodes/elements along the channel
         n_nodes = channels[0].n_nodes
-        # Number of nodes along the channel
         self.n_ele = n_nodes - 1
 
         # Additional resolution in width direction in regions
@@ -88,6 +88,9 @@ class Cell(OutputObject):
 
         self.thermal_conductance = self.calculate_conductance('thermal')
 
+        # Shape for cell-based temperature solution
+        self.temp_shape = self.thermal_conductance[0].shape
+
         self.index_array = mtx.create_cell_index_list(
             self.thermal_conductance[1].shape)
         self.n_layer = self.thermal_conductance[1].shape[0]
@@ -111,11 +114,11 @@ class Cell(OutputObject):
         if self.first_cell:
             end_plate_heat = cell_dict['heat_flux']
             heat_dx = end_plate_heat * self.cathode.discretization.d_area
-            self.add_explicit_layer_source(self.heat_rhs_const, heat_dx, 0)
+            mtx.add_explicit_layer_source(self.heat_rhs_const, heat_dx, self.index_array, 0)
         if self.last_cell:
             end_plate_heat = cell_dict['heat_flux']
             heat_dx = end_plate_heat * self.anode.discretization.d_area
-            self.add_explicit_layer_source(self.heat_rhs_const, heat_dx, -1)
+            mtx.add_explicit_layer_source(self.heat_rhs_const, heat_dx, self.index_array, -1)
 
         # Create electric conductance matrix.
         # For new update, matrix setup will be analogous to thermal matrix by
@@ -127,6 +130,8 @@ class Cell(OutputObject):
         # TODO: Check electric conductance matrix assembly with new coordinates
         #  and discretization
         self.electrical_conductance = self.calculate_conductance('electrical')
+        # Shape for cell-based voltage solution
+        self.voltage_shape = self.electrical_conductance[0].shape
 
         self.elec_mat_const = \
             mtx.build_cell_conductance_matrix(
@@ -270,32 +275,6 @@ class Cell(OutputObject):
             * alpha_amb * self.cathode.flow_field.external_surface_factor
         # if self.first_cell:
         return k_amb
-
-    def add_explicit_layer_source(self, rhs_vector, source_term,
-                                  layer_id=None):
-        if layer_id is None:
-            if np.isscalar(source_term):
-                source_vector = np.full_like(rhs_vector, -source_term)
-            else:
-                source_vector = np.asarray(-source_term)
-        else:
-            source_vector = np.zeros(rhs_vector.shape)
-            np.put(source_vector, self.index_array[layer_id], -source_term)
-        rhs_vector += source_vector
-        return rhs_vector, source_vector
-
-    def add_implicit_layer_source(self, matrix, coefficients, layer_id=None):
-        matrix_size = matrix.shape[0]
-        if layer_id is None:
-            if np.isscalar(coefficients):
-                source_vector = g_func.full(matrix_size, coefficients)
-            else:
-                source_vector = np.asarray(coefficients)
-        else:
-            source_vector = np.zeros(matrix_size)
-            np.put(source_vector, self.index_array[layer_id], coefficients)
-        matrix += np.diag(source_vector)
-        return matrix, source_vector
 
     def update(self, current_density, update_channel=False,
                current_control=True, urf=None):

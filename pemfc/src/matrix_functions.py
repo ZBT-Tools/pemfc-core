@@ -2,6 +2,7 @@ import numpy as np
 from scipy import linalg as sp_la
 import scipy as sp
 from . import cell
+from . import global_functions as g_func
 
 
 def tile_add_overlap(array, n, m=1):
@@ -327,3 +328,31 @@ def create_cell_index_list(shape: tuple[int, ...]):
         index_list.append(
             [(j * shape[0]) + i for j in range(shape[1] * shape[2])])
     return index_list
+
+
+def add_explicit_layer_source(rhs_vector, source_term, index_array,
+                              layer_id=None):
+    if layer_id is None:
+        if np.isscalar(source_term):
+            source_vector = np.full_like(rhs_vector, -source_term)
+        else:
+            source_vector = np.asarray(-source_term)
+    else:
+        source_vector = np.zeros(rhs_vector.shape)
+        np.put(source_vector, index_array[layer_id], -source_term)
+    rhs_vector += source_vector
+    return rhs_vector, source_vector
+
+
+def add_implicit_layer_source(matrix, coefficients, index_array, layer_id=None):
+    matrix_size = matrix.shape[0]
+    if layer_id is None:
+        if np.isscalar(coefficients):
+            source_vector = g_func.full(matrix_size, coefficients)
+        else:
+            source_vector = np.asarray(coefficients)
+    else:
+        source_vector = np.zeros(matrix_size)
+        np.put(source_vector, index_array[layer_id], coefficients)
+    matrix += np.diag(source_vector)
+    return matrix, source_vector
