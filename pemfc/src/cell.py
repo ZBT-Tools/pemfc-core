@@ -62,8 +62,6 @@ class Cell(OutputObject):
             half_cell.channel.fluid.extend_data_names(
                 half_cell.channel.fluid.name)
 
-        # self.dx = self.cathode.channel.dx
-
         """heat conductivity along and through the cell layers"""
         # self.width_straight_channels = \
         #     self.cathode.flow_field.width_straight_channels
@@ -80,17 +78,7 @@ class Cell(OutputObject):
         # will be initialized correctly through stack class
         self.coords = [0.0, 0.0]
 
-        # Create array for each thermal layer with indices according to
-        # corresponding position in center diagonal of conductance matrix and
-        # right hand side vector
-        # index_list = []
-        # for i in range(self.n_layer):
-        #     index_list.append(
-        #         [(j * self.n_layer) + i for j in
-        #          range(np.prod(self.membrane.dsct.shape, dtype=np.int32))])
-
-
-        # heat conductivity along the gas diffusion electrode and membrane
+        # Layer thickness stack
         self.th_layer = [
             self.cathode.bpp.thickness,
             self.cathode.gde.thickness,
@@ -156,11 +144,11 @@ class Cell(OutputObject):
         # True if the program aborts because of some critical impact
 
         # Cell thickness
-        self.thickness = self.membrane.thickness \
-                         + self.cathode.bpp.thickness \
-                         + self.cathode.gde.thickness \
-                         + self.anode.bpp.thickness \
-                         + self.anode.gde.thickness
+        self.thickness = (self.membrane.thickness
+                          + self.cathode.bpp.thickness
+                          + self.cathode.gde.thickness
+                          + self.anode.bpp.thickness
+                          + self.anode.gde.thickness)
 
         # Initializing temperatures with average channel fluid temperature
         temp_init = np.average([hc.channel.fluid.temperature

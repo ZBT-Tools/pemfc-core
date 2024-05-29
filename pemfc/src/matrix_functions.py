@@ -1,7 +1,6 @@
 import numpy as np
 from scipy import linalg as sp_la
 import scipy as sp
-import pandas as pd
 from . import cell
 
 
