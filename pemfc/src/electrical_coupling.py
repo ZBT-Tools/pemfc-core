@@ -51,7 +51,7 @@ class ElectricalCoupling:
 
             self.solve_sparse = True
 
-            cell_mat_y_list = [cell.elec_mat_const for cell in self.cells]
+            cell_mat_y_list = [cell.elec_mtx_const for cell in self.cells]
 
             # TODO: Update stack conductance matrix: in 3D the overlap does not seem suitable,
             #  just additional x-conductance between bipolar half plates seems correct
@@ -77,7 +77,7 @@ class ElectricalCoupling:
             self.v_tar = voltage
             self.v_loss_tar = self.e_0_stack - self.v_tar
         conductance_z = \
-            np.asarray([cell.conductance_z for cell in self.cells]).flatten()
+            np.asarray([cell.electrochemical_conductance for cell in self.cells]).flatten()
         # conductance = (self.c_width * self.dx / resistance).flatten()
         # conductance = 1.0 / self.resistance
         active_area = \
@@ -90,7 +90,7 @@ class ElectricalCoupling:
         else:
             i_bc = self.calc_boundary_condition()
             self.i_cd[:] = - i_bc / active_area
-            v_diff = - i_bc / np.array([cell.conductance_z
+            v_diff = - i_bc / np.array([cell.electrochemical_conductance
                                         for cell in self.cells]).flatten()
             v_diff = v_diff.reshape((self.n_cells, self.n_ele))
             self.update_cell_voltage(v_diff)
@@ -123,14 +123,14 @@ class ElectricalCoupling:
         cell_0 = self.cells[0]
         if self.current_control:
             v_loss, v_loss_total = self.calc_voltage_loss()
-            i_bc = v_loss[0] * cell_0.conductance_z
+            i_bc = v_loss[0] * cell_0.electrochemical_conductance
             i_target = self.i_cd_tar * cell_0.d_area
             i_correction_factor = i_target \
                 / np.average(i_bc, weights=cell_0.d_area)
             v_loss_total *= - 1.0 * i_correction_factor
-            return v_loss_total * cell_0.conductance_z
+            return v_loss_total * cell_0.electrochemical_conductance
         else:
-            return - self.v_loss_tar * cell_0.conductance_z
+            return - self.v_loss_tar * cell_0.electrochemical_conductance
 
     def calc_i(self, conductance, active_area):
         """

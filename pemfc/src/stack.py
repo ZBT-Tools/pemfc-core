@@ -216,7 +216,7 @@ class Stack:
         # self.temp_sys = therm_cpl.TemperatureSystem(self, temperature_dict)
         self.temp_sys = lin_sys.TemperatureSystem(self, temperature_dict)
         # Initialize the electrical coupling
-        self.elec_sys = el_cpl.ElectricalCoupling(self)
+        self.elec_sys = lin_sys.ElectricalSystem(self, {})
 
         """Boolean alarms"""
         self.v_alarm = False
@@ -227,7 +227,7 @@ class Stack:
         # target current density
 
         # current density array
-        self.i_cd = np.zeros((self.n_cells, *self.cells[0].membrane.dsct.shape))
+        self.i_cd = np.zeros(self.elec_sys.i_cd.shape)
         self.i_cd[:] = self.i_cd_target
         # for i in range(self.n_cells):
         #     self.i_cd[i, :] = \
@@ -243,8 +243,8 @@ class Stack:
         self.e_0 = self.n_cells * self.cells[0].e_0
 
         # old temperature for convergence calculation
-        self.temp_old = np.zeros(self.temp_sys.temp_layer_vec.shape)
-        self.temp_old[:] = self.temp_sys.temp_layer_vec
+        self.temp_old = np.zeros(self.temp_sys.solution_vector.shape)
+        self.temp_old[:] = self.temp_sys.solution_vector
 
     def update(self, current_density=None, voltage=None):
         """
@@ -270,7 +270,7 @@ class Stack:
                 self.break_program = True
                 break
         self.i_cd_old[:] = self.elec_sys.i_cd
-        self.temp_old[:] = self.temp_sys.temp_layer_vec
+        self.temp_old[:] = self.temp_sys.solution_vector
         if not self.break_program:
             if self.calc_temp:
                 self.temp_sys.update()

@@ -59,7 +59,7 @@ class TemperatureSystem:
         self.mtx = None
         # solid layer temperature vector
         self.temp_layer_vec = \
-            np.hstack([cell.heat_rhs for cell in self.cells])
+            np.hstack([cell.thermal_rhs for cell in self.cells])
         # right side of the matrix src: mat T = rhs,
         # contains the power sources and explicit coupled terms
         self.rhs = np.zeros(np.shape(self.temp_layer_vec))
@@ -81,12 +81,12 @@ class TemperatureSystem:
             # else:
             #     k_amb_vector = cell.k_amb[:-1].flatten(order='F')
 
-            cell.add_implicit_layer_source(cell.heat_mtx_const, -k_amb_vector)
-            cell.add_explicit_layer_source(cell.heat_rhs_const,
+            cell.add_implicit_layer_source(cell.thermal_mtx_const, -k_amb_vector)
+            cell.add_explicit_layer_source(cell.thermal_rhs_const,
                                            k_amb_vector * temp_amb)
 
         self.rhs_const = \
-            np.hstack([cell.heat_rhs_const for cell in self.cells])
+            np.hstack([cell.thermal_rhs_const for cell in self.cells])
 
         self.index_list, self.layer_index_list = \
             mtx.create_stack_index_list(self.cells)
@@ -97,7 +97,7 @@ class TemperatureSystem:
             self.mtx_const = sparse.csr_matrix(self.mtx_const)
 
     def connect_cells(self):
-        matrix = sp_la.block_diag(*[cell.heat_mtx_const for cell in self.cells])
+        matrix = sp_la.block_diag(*[cell.thermal_mtx_const for cell in self.cells])
         cell_ids = np.asarray([list(range(self.n_cells-1)),
                                list(range(1, self.n_cells))]).transpose()
         layer_ids = np.asarray([(-1, 0) for i in range(self.n_cells-1)])
@@ -160,11 +160,10 @@ class TemperatureSystem:
         """
         Creates a vector with the right hand side entries,
         add explicit heat sources here.
-        Sources from outside the src
-        to the src must be defined negative.
+        Sources from outside the src to the src must be defined negative.
         """
         for i, cell in enumerate(self.cells):
-            cell.heat_rhs_dyn[:] = 0.0
+            cell.thermal_rhs_dyn[:] = 0.0
 
             source = np.zeros(cell.temp_layer[0].shape)
             # Cathode bpp-gde source
@@ -172,7 +171,7 @@ class TemperatureSystem:
             channel = cell.cathode.channel
             source += channel.k_coeff * channel.temp_ele * self.n_cat_channels
             source += getattr(channel, 'condensation_heat', 0.0)  # * 0.0
-            cell.add_explicit_layer_source(cell.heat_rhs_dyn, source, 1)
+            cell.add_explicit_layer_source(cell.thermal_rhs_dyn, source, 1)
 
             current = cell.i_cd * cell.d_area
             half_ohmic_heat_membrane = \
@@ -186,7 +185,7 @@ class TemperatureSystem:
             reaction_heat = \
                 (self.e_tn - self.e_0 + v_loss) * current
             source += reaction_heat
-            cell.add_explicit_layer_source(cell.heat_rhs_dyn, source, 2)
+            cell.add_explicit_layer_source(cell.thermal_rhs_dyn, source, 2)
 
             # Anode gde-mem source
             source[:] = 0.0
@@ -195,7 +194,7 @@ class TemperatureSystem:
             v_loss[v_loss < 0.0] = 0.0
             reaction_heat = v_loss * current
             source += reaction_heat
-            cell.add_explicit_layer_source(cell.heat_rhs_dyn, source, 3)
+            cell.add_explicit_layer_source(cell.thermal_rhs_dyn, source, 3)
 
             # Anode bpp-gde source
             source[:] = 0.0
@@ -203,7 +202,7 @@ class TemperatureSystem:
             channel = cell.anode.channel
             source = channel.k_coeff * channel.temp_ele * self.n_ano_channels
             source += getattr(channel, 'condensation_heat', 0.0)  # * 0.0
-            cell.add_explicit_layer_source(cell.heat_rhs_dyn, source, 4)
+            cell.add_explicit_layer_source(cell.thermal_rhs_dyn, source, 4)
 
             # Cooling channels
             if self.cool_flow:
@@ -211,24 +210,24 @@ class TemperatureSystem:
                     cool_chl = self.cool_channels[i]
                     source = cool_chl.k_coeff * cool_chl.temp_ele
                     source *= self.n_cool_sub_channels
-                    cell.add_explicit_layer_source(cell.heat_rhs_dyn,
+                    cell.add_explicit_layer_source(cell.thermal_rhs_dyn,
                                                    source, layer_id=0)
                     if cell.last_cell:
                         cool_chl = self.cool_channels[i + 1]
                         source = cool_chl.k_coeff * cool_chl.temp_ele
                         source *= self.n_cool_sub_channels
-                        cell.add_explicit_layer_source(cell.heat_rhs_dyn,
+                        cell.add_explicit_layer_source(cell.thermal_rhs_dyn,
                                                        source, layer_id=-1)
                 else:
                     if not cell.first_cell:
                         cool_chl = self.cool_channels[i - 1]
                         source = cool_chl.k_coeff * cool_chl.temp_ele
                         source *= self.n_cool_sub_channels
-                        cell.add_explicit_layer_source(cell.heat_rhs_dyn,
+                        cell.add_explicit_layer_source(cell.thermal_rhs_dyn,
                                                        source, layer_id=0)
 
         if not self.solve_individual_cells:
-            rhs_dyn = np.hstack([cell.heat_rhs_dyn for cell in self.cells])
+            rhs_dyn = np.hstack([cell.thermal_rhs_dyn for cell in self.cells])
             self.rhs = self.rhs_const + rhs_dyn
 
     def update_matrix(self):
@@ -237,18 +236,18 @@ class TemperatureSystem:
         """
         source_vectors = []
         for i, cell in enumerate(self.cells):
-            cell.heat_mtx_dyn[:, :] = 0.0
-            source_vectors.append(np.zeros(cell.heat_rhs_dyn.shape))
+            cell.thermal_mtx_dyn[:, :] = 0.0
+            source_vectors.append(np.zeros(cell.thermal_rhs_dyn.shape))
 
             # add thermal conductance for heat transfer to cathode gas
             source = -cell.cathode.channel.k_coeff * self.n_cat_channels
             matrix, source_vec_1 = \
-                cell.add_implicit_layer_source(cell.heat_mtx_dyn, source, 1)
+                cell.add_implicit_layer_source(cell.thermal_mtx_dyn, source, 1)
 
             # add thermal conductance for heat transfer to anode gas
             source = -cell.anode.channel.k_coeff * self.n_ano_channels
             matrix, source_vec_2 = \
-                cell.add_implicit_layer_source(cell.heat_mtx_dyn, source, 4)
+                cell.add_implicit_layer_source(cell.thermal_mtx_dyn, source, 4)
 
             # add thermal conductance for heat transfer to coolant
             source_vec_3 = np.zeros(source_vec_1.shape)
@@ -257,14 +256,14 @@ class TemperatureSystem:
                     source = - self.cool_channels[i].k_coeff
                     source *= self.n_cool_sub_channels
                     matrix, source_vec = \
-                        cell.add_implicit_layer_source(cell.heat_mtx_dyn,
+                        cell.add_implicit_layer_source(cell.thermal_mtx_dyn,
                                                        source, layer_id=0)
                     source_vec_3[:] = source_vec
                     if cell.last_cell:
                         source = - self.cool_channels[i + 1].k_coeff
                         source *= self.n_cool_sub_channels
                         matrix, source_vec = \
-                            cell.add_implicit_layer_source(cell.heat_mtx_dyn,
+                            cell.add_implicit_layer_source(cell.thermal_mtx_dyn,
                                                            source, layer_id=-1)
                         source_vec_3[:] += source_vec
                 else:
@@ -272,7 +271,7 @@ class TemperatureSystem:
                         source = - self.cool_channels[i - 1].k_coeff
                         source *= self.n_cool_sub_channels
                         matrix, source_vec = \
-                            cell.add_implicit_layer_source(cell.heat_mtx_dyn,
+                            cell.add_implicit_layer_source(cell.thermal_mtx_dyn,
                                                            source, layer_id=0)
                         source_vec_3[:] = source_vec
 
@@ -308,9 +307,9 @@ class TemperatureSystem:
         cell = self.cells[i]
         conductance = cell.thermal_conductance[0][-1]
         source = conductance * self.cells[i + 1].temp_layer[0]
-        cell.add_explicit_layer_source(cell.heat_rhs_dyn, source, -1)
+        cell.add_explicit_layer_source(cell.thermal_rhs_dyn, source, -1)
         coeff = - conductance
-        cell.add_implicit_layer_source(cell.heat_mtx_dyn, coeff, -1)
+        cell.add_implicit_layer_source(cell.thermal_mtx_dyn, coeff, -1)
 
     def connect_to_previous_cell(self, i):
         cell = self.cells[i]
@@ -318,9 +317,9 @@ class TemperatureSystem:
         source = - conductance * self.cells[i - 1].temp_layer[-1]
         # source = conductance * (self.cells[i - 1].temp_layer[-1] -
         #                        self.cells[i].temp_layer[0])
-        cell.add_explicit_layer_source(cell.heat_rhs_dyn, source, 0)
+        cell.add_explicit_layer_source(cell.thermal_rhs_dyn, source, 0)
         source = conductance
-        cell.add_implicit_layer_source(cell.heat_mtx_dyn, source, 0)
+        cell.add_implicit_layer_source(cell.thermal_mtx_dyn, source, 0)
 
     def solve_cells(self):
         """
@@ -346,10 +345,10 @@ class TemperatureSystem:
                         else:
                             self.connect_to_previous_cell(i)
                             self.connect_to_next_cell(i)
-                cell.heat_mtx[:] = cell.heat_mtx_const + cell.heat_mtx_dyn
-                cell.heat_rhs[:] = cell.heat_rhs_const + cell.heat_rhs_dyn
+                cell.thermal_mtx[:] = cell.thermal_mtx_const + cell.thermal_mtx_dyn
+                cell.thermal_rhs[:] = cell.thermal_rhs_const + cell.thermal_rhs_dyn
                 temp_layer_vec = \
-                    np.linalg.tensorsolve(cell.heat_mtx, cell.heat_rhs)
+                    np.linalg.tensorsolve(cell.thermal_mtx, cell.thermal_rhs)
                 if counter > 0:
                     temp_layer_vec = (1.0 - under_relaxation) * temp_layer_vec \
                         + under_relaxation * temp_old_array[i]
