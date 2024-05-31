@@ -43,6 +43,7 @@ class LinearSystem(ABC):
         self.solve_individual_cells = False
 
         # Conductance Matrix as ndarray
+        # TODO: Check shape of mtx, not conform to mtx_const and mtx_dyn
         self.mtx = np.zeros((self.n, self.n))
         # Solution vector
         self.solution_vector = np.zeros(self.n)
@@ -96,7 +97,8 @@ class StackLinearSystem(LinearSystem, ABC):
         super().__init__(shape)
         self.cells = stack.cells
         # self.transport_type = transport_type
-        self.index_list, self.layer_index_list = mtx_func.create_stack_index_list(self.cells)
+        self.index_list, self.layer_index_list = (
+            mtx_func.create_stack_index_list(self.cells))
 
         # Setup constant part of conductance matrix
         if isinstance(self, TemperatureSystem):
@@ -170,7 +172,8 @@ class TemperatureSystem(StackLinearSystem):
         # Heat transfer to ambient
         self.input_dict = input_dict
 
-        self.rhs_const = np.hstack([cell.thermal_rhs_const for cell in self.cells])
+        self.rhs_const = np.hstack(
+            [cell.thermal_rhs_const for cell in self.cells])
 
         # Sub channel ratios
         self.n_cat_channels = stack.fuel_circuits[0].n_subchannels
@@ -448,19 +451,16 @@ class ElectricalSystem(StackLinearSystem):
         else:
             self.rhs[:] = - self.v_loss_tar * cell_0.electrochemical_conductance
 
-    def update_matrix(self, electrochmical_conductance, *args, **kwargs):
+    def update_matrix(self, electrochemical_conductance, *args, **kwargs):
         """
         Updates matrix coefficients
         """
-        raise NotImplementedError
-        conductance = electrochmical_conductance
-        cell_c_mid = \
-            np.hstack((conductance[:-self.n_ele] + conductance[self.n_ele:]))
-        mtx_dyn = \
-            - np.diag(cell_c_mid, 0) \
-            + np.diag(conductance[:-self.n_ele][self.n_ele:], self.n_ele) \
-            + np.diag(conductance[:-self.n_ele][self.n_ele:], -self.n_ele)
-        self.mtx = self.mtx_const + mtx_dyn
+        # raise NotImplementedError
+        mtx_list = \
+            [mtx_func.build_cell_conductance_matrix([cond])
+             for cond in electrochemical_conductance]
+        mtx_dyn = sp_la.block_diag(*mtx_list)
+        self.mtx[:] = self.mtx_const + mtx_dyn
 
     def update_cell_solution(self):
         raise NotImplementedError

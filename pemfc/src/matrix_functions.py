@@ -242,31 +242,14 @@ def create_one_dimensional_conductance_matrix(conductance_array, axis):
         + np.diag(off_diag, k=offset)
 
 
-def build_cell_conductance_matrix(x_cond_vector, y_cond_vector, z_cond_vector):
-
-    # x_cond_mtx_1 = build_x_cell_conductance_matrix(x_cond_vector)
-    x_cond_mtx = create_one_dimensional_conductance_matrix(
-        x_cond_vector, axis=0)
-    # diff = x_cond_mtx - x_cond_mtx_1
-    # diff_sum = np.sum(np.abs(diff))
-    # raise ValueError('code adaption for 2D only up until this point')
-
-    # TODO: Urgently correct conductance serial connection via convolution:
-    #  conductances must be converted to resistances first
-
-    if y_cond_vector.shape[1] > 0:
-        # y_cond_mtx = build_y_cell_conductance_matrix(y_cond_vector, axis=1)
-        y_cond_mtx = create_one_dimensional_conductance_matrix(y_cond_vector, axis=1)
-        # test = y_cond_mtx - y_cond_mtx_1
-        # test_1 = np.sum(np.abs(y_cond_mtx - y_cond_mtx_1))
-    else:
-        y_cond_mtx = 0.0
-    if z_cond_vector.shape[2] > 0:
-        z_cond_mtx = create_one_dimensional_conductance_matrix(z_cond_vector, axis=2)
-    else:
-        z_cond_mtx = 0.0
-    # TODO: Check 3D matrix assembly
-    return x_cond_mtx + y_cond_mtx + z_cond_mtx
+def build_cell_conductance_matrix(conductance_list: list[np.ndarray]):
+    cond_mtx_list = []
+    for i, conductance_array in enumerate(conductance_list):
+        if (isinstance(conductance_array, np.ndarray)
+                and conductance_array.shape[i] > 0):
+            cond_mtx_list.append(create_one_dimensional_conductance_matrix(
+                conductance_array, axis=i))
+    return np.sum(cond_mtx_list, axis=0)
 
 
 def connect_cells(matrix, cell_ids, layer_ids, values, mtx_ids,

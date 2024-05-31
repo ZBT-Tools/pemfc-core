@@ -96,11 +96,11 @@ class Cell(OutputObject):
         self.n_layer = self.thermal_conductance[1].shape[0]
 
         self.thermal_mtx_const = mtx.build_cell_conductance_matrix(
-                self.thermal_conductance[0],
-                sl.SolidLayer.calc_inter_node_conductance(
+                [self.thermal_conductance[0],
+                 sl.SolidLayer.calc_inter_node_conductance(
                     self.thermal_conductance[1], axis=1),
-                sl.SolidLayer.calc_inter_node_conductance(
-                    self.thermal_conductance[2], axis=2))
+                 sl.SolidLayer.calc_inter_node_conductance(
+                    self.thermal_conductance[2], axis=2)])
 
         # self.heat_mtx_const = np.zeros(self.heat_cond_mtx.shape)
         self.thermal_mtx_dyn = np.zeros(self.thermal_mtx_const.shape)
@@ -137,12 +137,16 @@ class Cell(OutputObject):
 
         self.elec_mtx_const = \
             mtx.build_cell_conductance_matrix(
-                self.electrical_conductance[0],
-                sl.SolidLayer.calc_inter_node_conductance(
-                    self.electrical_conductance[1], axis=1),
-                sl.SolidLayer.calc_inter_node_conductance(
-                    self.electrical_conductance[2], axis=2))
+                [self.electrical_conductance[0],
+                 sl.SolidLayer.calc_inter_node_conductance(
+                    self.electrical_conductance[1], axis=1) * 0.0,
+                 sl.SolidLayer.calc_inter_node_conductance(
+                    self.electrical_conductance[2], axis=2) * 0.0])
 
+        # test = mtx.build_cell_conductance_matrix(
+        #     [self.electrical_conductance[0],
+        #      0.0,
+        #      0.0])
         # Combine both (heat and electrical) conductance matrices in a unified dictionary
         self.mtx_const = {'thermal': self.thermal_mtx_const,
                           'electrical': self.elec_mtx_const}
