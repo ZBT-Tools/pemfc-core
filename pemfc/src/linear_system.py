@@ -57,12 +57,12 @@ class LinearSystem(ABC):
         """
         self.update_and_solve_linear_system()
 
-    def update_and_solve_linear_system(self):
+    def update_and_solve_linear_system(self, *args, **kwargs):
         """
         This function coordinates the temp_layer program sequence
         """
-        self.update_matrix()
-        self.update_rhs()
+        self.update_matrix(*args, **kwargs)
+        self.update_rhs(*args, **kwargs)
         self.solve_system()
 
     @abstractmethod
@@ -127,6 +127,15 @@ class StackLinearSystem(LinearSystem, ABC):
                                conductance, self.index_list)
         # diff = matrix - old_matrix
         return matrix
+
+    def set_matrix_dirichlet_bc(self, cell_ids, layer_ids):
+        if not len(cell_ids) == len(layer_ids):
+            raise ValueError('cell and layer index lists '
+                             'must have equal length')
+        for i in range(len(cell_ids)):
+            row_ids = self.index_list[cell_ids[i]][:][layer_ids[i]]
+            self.mtx[row_ids, :] = 0.0
+            self.mtx[row_ids, row_ids] = 1.0
 
     @abstractmethod
     def update(self, *args, **kwargs):
@@ -438,41 +447,57 @@ class ElectricalSystem(StackLinearSystem):
         Sources from outside the src to the src must be defined negative.
         """
         # raise NotImplementedError
+        cell_rhs_list = []
 
+        # Current boundary conditions are applied at outer plate
+        # (layer id 0) of cell 0
         cell_0 = self.cells[0]
+        cell_rhs = np.zeros(cell_0.voltage_layer.flatten().shape)
         if self.current_control:
-            v_loss, v_loss_total = self.calc_voltage_loss()
-            i_bc = v_loss[0] * cell_0.electrochemical_conductance
-            i_target = self.i_cd_tar * cell_0.d_area
-            i_correction_factor = i_target \
-                                  / np.average(i_bc, weights=cell_0.d_area)
-            v_loss_total *= - 1.0 * i_correction_factor
-            self.rhs[:] = v_loss_total * cell_0.electrochemical_conductance
+            bc_current = self.i_cd_tar * cell_0.d_area
+            if np.sum(cell_0.voltage_layer[0]) == 0.0:
+                rhs_bc_values = self.i_cd_tar * cell_0.d_area
+            else:
+                inlet_current = (
+                        np.abs(cell_0.voltage_layer[0] - cell_0.voltage_layer[1])
+                        * cell_0.electrical_conductance[0][0])
+                correction_factors = bc_current / inlet_current
+                rhs_bc_values = inlet_current * correction_factors
+
         else:
-            self.rhs[:] = - self.v_loss_tar * cell_0.electrochemical_conductance
+            rhs_bc_values = self.v_loss_tar
+        mtx_func.add_explicit_layer_source(cell_rhs, rhs_bc_values,
+                                           cell_0.index_array, layer_id=0)
+        cell_rhs_list.append(cell_rhs)
+        for i in range(1, len(self.cells)):
+            cell_rhs_list.append(np.zeros(self.cells[i].voltage_layer.flatten().shape))
+        self.rhs[:] = np.hstack(cell_rhs_list)
 
     def update_matrix(self, electrochemical_conductance, *args, **kwargs):
         """
         Updates matrix coefficients
         """
-        # raise NotImplementedError
         mtx_list = \
             [mtx_func.build_cell_conductance_matrix([cond])
              for cond in electrochemical_conductance]
         mtx_dyn = sp_la.block_diag(*mtx_list)
         self.mtx[:] = self.mtx_const + mtx_dyn
+        # Modify matrix for dirichlet boundary conditions in last cell
+        # (and first cell if voltage is given as BC)
+        self.set_matrix_dirichlet_bc([-1], [-1])
+        if not self.current_control:
+            self.set_matrix_dirichlet_bc([0], [0])
 
     def update_cell_solution(self):
-        raise NotImplementedError
-        temp_solution_name = 'temp_layer'
-        if not hasattr(self.cells[0], temp_solution_name):
+        solution_name = 'voltage_layer'
+        if not hasattr(self.cells[0], solution_name):
             raise ValueError('attribute {} is not found in {}'.format(
-                temp_solution_name, self.cells[0].__name__))
-        temp_shape_name = 'temp_shape'
-        if not hasattr(self.cells[0], temp_shape_name):
+                solution_name, self.cells[0].__name__))
+        shape_name = 'voltage_shape'
+        if not hasattr(self.cells[0], shape_name):
             raise ValueError('attribute {} is not found in {}'.format(
-                temp_shape_name, self.cells[0].__name__))
-        self.update_cell_solution_general(temp_solution_name, temp_shape_name)
+                shape_name, self.cells[0].__name__))
+        self.update_cell_solution_general(solution_name, shape_name)
 
     def update(self, current_density=None, voltage=None):
         """
@@ -489,29 +514,13 @@ class ElectricalSystem(StackLinearSystem):
             self.v_loss_tar = self.e_0_stack - self.v_tar
         electrochemical_conductance = [
             cell.electrochemical_conductance for cell in self.cells]
-        active_area = [cell.d_area for cell in self.cells]
-        # if self.n_cells > 1:
-        self.update_matrix(electrochemical_conductance)
-        self.rhs[:self.n_ele] = self.calc_boundary_condition()
-        self.i_cd[:] = self.calc_i(conductance_z, active_area)
-
-        # else:
-        #     i_bc = self.calc_boundary_condition()
-        #     self.i_cd[:] = - i_bc / active_area
-        #     v_diff = - i_bc / np.array([cell.electrochemical_conductance
-        #                                 for cell in self.cells]).flatten()
-        #     v_diff = v_diff.reshape((self.n_cells, self.n_ele))
-        #     self.update_cell_voltage(v_diff)
-
-        self.update_and_solve_linear_system()
+        # self.update_matrix(electrochemical_conductance)
+        # self.update_rhs()
+        self.update_and_solve_linear_system(electrochemical_conductance)
+        # TODO: Update cell voltages and voltage differences (losses)
         self.update_cell_solution()
+        self.update_cell_voltage(v_diff)
 
-    def calc_voltage_loss(self):
-        v_loss = \
-            np.asarray([np.average(cell.v_loss, weights=cell.d_area)
-                        for cell in self.cells])
-        v_loss_total = np.sum(v_loss)
-        return v_loss, v_loss_total
 
     def calc_i(self, conductance, active_area):
         """
@@ -536,6 +545,6 @@ class ElectricalSystem(StackLinearSystem):
     def update_cell_voltage(self, v_diff):
         raise NotImplementedError
         for i, cell in enumerate(self.cells):
-            cell.v[:] = cell.e_0 - v_diff[i]
+            cell.voltage_layer[:] = cell.e_0 - v_diff[i]
             # cell.v_loss[:] = v_diff[i]
             cell.update_voltage_loss(v_diff[i])

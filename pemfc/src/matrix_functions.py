@@ -314,7 +314,7 @@ def create_cell_index_list(shape: tuple[int, ...]):
 
 
 def add_explicit_layer_source(rhs_vector, source_term, index_array,
-                              layer_id=None):
+                              layer_id=None, replace=False):
     if layer_id is None:
         if np.isscalar(source_term):
             source_vector = np.full_like(rhs_vector, -source_term)
@@ -323,11 +323,15 @@ def add_explicit_layer_source(rhs_vector, source_term, index_array,
     else:
         source_vector = np.zeros(rhs_vector.shape)
         np.put(source_vector, index_array[layer_id], -source_term)
-    rhs_vector += source_vector
+    if replace is True:
+        rhs_vector = source_vector
+    else:
+        rhs_vector += source_vector
     return rhs_vector, source_vector
 
 
-def add_implicit_layer_source(matrix, coefficients, index_array, layer_id=None):
+def add_implicit_layer_source(matrix, coefficients, index_array,
+                              layer_id=None, replace=False):
     matrix_size = matrix.shape[0]
     if layer_id is None:
         if np.isscalar(coefficients):
@@ -337,5 +341,8 @@ def add_implicit_layer_source(matrix, coefficients, index_array, layer_id=None):
     else:
         source_vector = np.zeros(matrix_size)
         np.put(source_vector, index_array[layer_id], coefficients)
-    matrix += np.diag(source_vector)
+    if replace is True:
+        matrix = np.diag(source_vector)
+    else:
+        matrix += np.diag(source_vector)
     return matrix, source_vector

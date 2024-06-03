@@ -279,7 +279,7 @@ class Stack:
                                      voltage=voltage)
                 self.i_cd[:] = self.elec_sys.i_cd
             self.v[:] = \
-                np.asarray([np.average(cell.v, weights=cell.d_area)
+                np.asarray([np.average(cell.voltage_layer, weights=cell.d_area)
                             for cell in self.cells])
             if self.current_control:
                 self.v_stack = np.sum(self.v)

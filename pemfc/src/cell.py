@@ -89,7 +89,7 @@ class Cell(OutputObject):
         self.thermal_conductance = self.calculate_conductance('thermal')
 
         # Shape for cell-based temperature solution
-        self.temp_shape = self.thermal_conductance[0].shape
+        self.temp_shape = self.thermal_conductance[1].shape
 
         self.index_array = mtx.create_cell_index_list(
             self.thermal_conductance[1].shape)
@@ -125,38 +125,38 @@ class Cell(OutputObject):
         # Create electric conductance matrix.
         # For new update, matrix setup will be analogous to thermal matrix by
         # ordering along x- (through-plane), y- (along-the-channel),
-        # and z-direction (channel-rib-discretization), where the x-discretization
-        # represents the smallest block matrix entity
+        # and z-direction (channel-rib-discretization), where the
+        # x-discretization represents the smallest block matrix entity
         # Constant x-conductance will be zero for initial constant setup,
         # due to dynamic addition of lumped x-conductance during solution procedure
         # TODO: Check electric conductance matrix assembly with new coordinates
         #  and discretization
         self.electrical_conductance = self.calculate_conductance('electrical')
         # Shape for cell-based voltage solution
-        self.voltage_shape = self.electrical_conductance[0].shape
+        self.voltage_shape = self.electrical_conductance[1].shape
 
         self.elec_mtx_const = \
             mtx.build_cell_conductance_matrix(
                 [self.electrical_conductance[0],
                  sl.SolidLayer.calc_inter_node_conductance(
-                    self.electrical_conductance[1], axis=1) * 0.0,
+                    self.electrical_conductance[1], axis=1),
                  sl.SolidLayer.calc_inter_node_conductance(
-                    self.electrical_conductance[2], axis=2) * 0.0])
+                    self.electrical_conductance[2], axis=2)])
 
         # test = mtx.build_cell_conductance_matrix(
         #     [self.electrical_conductance[0],
         #      0.0,
         #      0.0])
-        # Combine both (heat and electrical) conductance matrices in a unified dictionary
+        # Combine both (heat and electrical) conductance matrices in a unified
+        # dictionary
         self.mtx_const = {'thermal': self.thermal_mtx_const,
                           'electrical': self.elec_mtx_const}
 
-        # Combine both (heat and electrical) conductance arrays in a unified dictionary
         self.conductance = {'thermal': self.thermal_conductance,
                             'electrical': self.electrical_conductance}
         # print(self.elec_x_mat_const)
 
-        # boolean alarm values
+        # Boolean alarm values
         self.v_alarm = False
         # True if :voltage loss > cell voltage
         self.break_program = False
@@ -191,24 +191,24 @@ class Cell(OutputObject):
         # Current density
         self.i_cd = np.zeros(self.voltage_shape)
         # Cell voltage
-        self.v = np.zeros(self.voltage_shape)
-        # Voltage loss
-        self.v_loss = np.zeros(self.voltage_shape)
-        # self.resistance_z = np.zeros(n_ele)
+        self.voltage_layer = np.zeros(self.voltage_shape)
         # Through-plane cell resistance
-        self.electrochemical_conductance = np.zeros(self.voltage_shape)
-
+        self.electrochemical_conductance = np.zeros(
+            self.electrical_conductance[0].shape)
+        # Voltage loss
+        self.v_loss = np.zeros(self.electrochemical_conductance.shape)
         self.add_print_data(self.i_cd, 'Current Density', 'A/m²')
         self.add_print_data(self.temp_layer, 'Temperature', 'K',
                             self.temp_names[:self.n_layer])
-        self.add_print_data(self.v, 'Cell Voltage', 'V')
+        self.add_print_data(self.voltage_layer, 'Cell Voltage', 'V')
 
     def calculate_conductance(self, transport_type: str):
         if transport_type not in ('electrical', 'thermal'):
             raise ValueError("transport_type argument must be either "
                              "'electrical' or 'thermal'")
 
-        # Stack thermal conductances along through-plane direction, i.e. x-coordinate
+        # Stack thermal conductances along through-plane direction,
+        # i.e. x-coordinate
         conductance_x = \
             [self.cathode.bpp.conductance[transport_type][0],
              self.cathode.gde.conductance[transport_type][0],
@@ -365,14 +365,15 @@ class Cell(OutputObject):
         Function to scale internally calculated cell voltage loss with
         externally calculated overall cell voltage loss.
         Args:
-            v_loss: numpy array of externally calculated local voltage losses
+            v_loss: numpy array of externally calculated local
+            voltage losses
         Returns: None
         """
-        v_loss_factor = v_loss / self.v_loss
-        self.v_loss[:] *= v_loss_factor
+        correction_factor = v_loss / self.v_loss
+        self.v_loss[:] *= correction_factor
         for electrode in self.half_cells:
-            electrode.v_loss[:] *= v_loss_factor
-        self.membrane.v_loss[:] *= v_loss_factor
+            electrode.v_loss[:] *= correction_factor
+        self.membrane.v_loss[:] *= correction_factor
 
     def calc_electrochemical_conductance(self, current_density):
         """

@@ -153,6 +153,6 @@ class ElectricalCoupling:
 
     def update_cell_voltage(self, v_diff):
         for i, cell in enumerate(self.cells):
-            cell.v[:] = cell.e_0 - v_diff[i]
+            cell.voltage_layer[:] = cell.e_0 - v_diff[i]
             # cell.v_loss[:] = v_diff[i]
             cell.update_voltage_loss(v_diff[i])

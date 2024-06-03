@@ -145,7 +145,7 @@ class Simulation:
 
             if not self.stack.break_program:
                 # voltage_loss = self.get_voltage_losses(self.stack)
-                cell_voltages.append(np.average([cell.v for cell in
+                cell_voltages.append(np.average([cell.voltage_layer for cell in
                                                  self.stack.cells]))
                 current_densities.append(self.stack.i_cd_avg)
 
