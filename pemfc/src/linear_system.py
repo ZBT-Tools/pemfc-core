@@ -154,18 +154,24 @@ class StackLinearSystem(LinearSystem, ABC):
         """
         pass
 
-    def update_cell_solution_general(self, cell_solution_name: str, cell_shape_name: str):
+    def update_cell_solution_general(self, cell_solution_name: str,
+                                     cell_shape_name: str):
         """
         Transfer the general solution vector (1D) into the single cell solution arrays (3D)
         """
-        # TODO: Rework for 3D required
-        raise NotImplementedError
+
+        cell_solution_vectors = np.array_split(self.solution_vector,
+                                               len(self.cells))
+        cell_solution_list = []
         for i, cell in enumerate(self.cells):
-            n_layer = getattr(cell, cell_shape_name)[0]
-            for j in range(n_layer):
-                index_vector = self.index_list[i][j]
-                cell_solution_vector = getattr(cell, cell_solution_name)
-                cell_solution_vector[j] = self.solution_vector[index_vector]
+            cell_shape = getattr(cell, cell_shape_name)
+            cell_solution_array = np.reshape(cell_solution_vectors[i],
+                                             self.cells[i].voltage_shape,
+                                             order='F')
+            cell_solution = getattr(cell, cell_solution_name)
+            cell_solution[:] = cell_solution_array
+            cell_solution_list.append(cell_solution_array)
+        return np.asarray(cell_solution_list)
 
 
 class TemperatureSystem(StackLinearSystem):
@@ -408,7 +414,8 @@ class TemperatureSystem(StackLinearSystem):
         if not hasattr(self.cells[0], temp_shape_name):
             raise ValueError('attribute {} is not found in {}'.format(
                 temp_shape_name, self.cells[0].__name__))
-        self.update_cell_solution_general(temp_solution_name, temp_shape_name)
+        return self.update_cell_solution_general(temp_solution_name,
+                                                 temp_shape_name)
 
 
 class ElectricalSystem(StackLinearSystem):
@@ -497,7 +504,7 @@ class ElectricalSystem(StackLinearSystem):
         if not hasattr(self.cells[0], shape_name):
             raise ValueError('attribute {} is not found in {}'.format(
                 shape_name, self.cells[0].__name__))
-        self.update_cell_solution_general(solution_name, shape_name)
+        return self.update_cell_solution_general(solution_name, shape_name)
 
     def update(self, current_density=None, voltage=None):
         """
@@ -512,39 +519,28 @@ class ElectricalSystem(StackLinearSystem):
         if voltage is not None:
             self.v_tar = voltage
             self.v_loss_tar = self.e_0_stack - self.v_tar
-        electrochemical_conductance = [
-            cell.electrochemical_conductance for cell in self.cells]
-        # self.update_matrix(electrochemical_conductance)
-        # self.update_rhs()
-        self.update_and_solve_linear_system(electrochemical_conductance)
+
+        dynamic_conductances = self.create_dynamic_conductance_list()
+        self.update_and_solve_linear_system(dynamic_conductances)
         # TODO: Update cell voltages and voltage differences (losses)
-        self.update_cell_solution()
-        self.update_cell_voltage(v_diff)
+        voltage_array = self.update_cell_solution()
+        self.update_cell_voltage(voltage_array)
 
+    def create_dynamic_conductance_list(self):
+        dynamic_cell_conductance_list = []
+        for cell in self.cells:
+            shape = self.cells[0].electrical_conductance[0].shape
 
-    def calc_i(self, conductance, active_area):
-        """
-        Calculates the current density
-        of the elements in z-direction.
-        """
-        raise NotImplementedError
-        self.v_end_plate[:] = - self.rhs[:self.n_ele] / conductance[:self.n_ele]
-        if self.solve_sparse:
-            v_new = spsolve(self.mat, self.rhs)
-            # mat_const = self.mat_const.toarray()
-            # mat = self.mat.toarray()
-        else:
-            v_new = np.linalg.tensorsolve(self.mat, self.rhs)
-        v_new = np.hstack((self.v_end_plate, v_new, np.zeros(self.n_ele)))
-        v_diff = v_new[:-self.n_ele] - v_new[self.n_ele:]
-        i_ca_vec = v_diff * conductance / active_area
-        v_diff = v_diff.reshape((self.n_cells, self.n_ele))
-        self.update_cell_voltage(v_diff)
-        return np.reshape(i_ca_vec.flatten(), (self.n_cells, self.n_ele))
+            dynamic_cell_conductance = np.zeros(shape)
+            layer_id = (
+                self.cells[0].electrical_conductance[0].shape[0] // 2)
+            dynamic_cell_conductance[layer_id] = (
+                cell.electrochemical_conductance)
+            dynamic_cell_conductance_list.append(dynamic_cell_conductance)
+        return dynamic_cell_conductance_list
 
-    def update_cell_voltage(self, v_diff):
-        raise NotImplementedError
+    def update_cell_voltage(self, voltage_array):
         for i, cell in enumerate(self.cells):
-            cell.voltage_layer[:] = cell.e_0 - v_diff[i]
-            # cell.v_loss[:] = v_diff[i]
-            cell.update_voltage_loss(v_diff[i])
+            # cell.voltage_layer[:] = cell.e_0 - cell.voltage_layer
+            cell.v_loss[:] = np.abs(voltage_array[i][0] - voltage_array[i][-1])
+            # cell.update_voltage_loss(v_diff[i])

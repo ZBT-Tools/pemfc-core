@@ -192,10 +192,10 @@ class Cell(OutputObject):
         self.i_cd = np.zeros(self.voltage_shape)
         # Cell voltage
         self.voltage_layer = np.zeros(self.voltage_shape)
-        # Through-plane cell resistance
+        # Through-plane electrochemical (MEA) cell conductance
         self.electrochemical_conductance = np.zeros(
-            self.electrical_conductance[0].shape)
-        # Voltage loss
+            self.electrical_conductance[0][0].shape)
+        # Voltage loss over the single cell stack (bpp-to-bpp)
         self.v_loss = np.zeros(self.electrochemical_conductance.shape)
         self.add_print_data(self.i_cd, 'Current Density', 'A/m²')
         self.add_print_data(self.temp_layer, 'Temperature', 'K',
@@ -369,11 +369,12 @@ class Cell(OutputObject):
             voltage losses
         Returns: None
         """
-        correction_factor = v_loss / self.v_loss
-        self.v_loss[:] *= correction_factor
-        for electrode in self.half_cells:
-            electrode.v_loss[:] *= correction_factor
-        self.membrane.v_loss[:] *= correction_factor
+        pass
+        # correction_factor = v_loss / self.v_loss
+        # self.v_loss[:] *= correction_factor
+        # for electrode in self.half_cells:
+        #     electrode.v_loss[:] *= correction_factor
+        # self.membrane.v_loss[:] *= correction_factor
 
     def calc_electrochemical_conductance(self, current_density):
         """
@@ -386,9 +387,8 @@ class Cell(OutputObject):
         """
         membrane_layer_index = self.electrochemical_conductance.shape[0] // 2
         current = current_density * self.membrane.dsct.d_area
-        electrochemical_resistance = self.v_loss[membrane_layer_index] / current
-        self.electrochemical_conductance[membrane_layer_index, :, :] = (
+        electrochemical_resistance = (
+            (self.cathode.v_loss + self.membrane.v_loss + self.anode.v_loss)
+            / current)
+        self.electrochemical_conductance[:] = (
                 1.0 / electrochemical_resistance)
-
-        # TODO: Update dynamic electrochemical conductance matrix for each
-        #  cell here

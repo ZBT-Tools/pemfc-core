@@ -6,6 +6,7 @@ from itertools import cycle, islice
 import matplotlib
 # configure matplotlib backend here
 import sys
+
 main_name = sys.argv[0]
 if 'main_app.py' in main_name:
     matplotlib.use('Agg')
@@ -16,14 +17,11 @@ import json
 from json import JSONEncoder
 
 # local module imports
-from . import interpolation as ip
-from . import global_functions as g_func
-from . import stack as stack
-# from ..data import input_dicts
+from pemfc.src import interpolation as ip
+from pemfc.src import global_functions as g_func
+from pemfc.src import stack as stack
 
-
-
-# globals
+# Globals
 FONT_SIZE = 14
 NUMBER_SIZE = 14
 MARKER_SIZE = 5.0
@@ -66,7 +64,7 @@ class Output:
 
         # if not os.path.exists(self.output_dir):
         #     os.makedirs(self.output_dir)
-            # shutil.rmtree(self.output_dir, ignore_errors=True)
+        # shutil.rmtree(self.output_dir, ignore_errors=True)
 
     @staticmethod
     def clean_directory(directory):
@@ -154,7 +152,7 @@ class Output:
     def create_figure(self, filepath, x_array, y_array, xlabels, ylabels,
                       xlims=None, ylims=None, xticks=None, yticks=None,
                       titles=None, rows=1, cols=1, **kwargs):
-        nplots = rows*cols
+        nplots = rows * cols
 
         def check_dims(variable, correct_single_dim=False):
             if isinstance(variable, str):
@@ -195,7 +193,7 @@ class Output:
         ylabels = check_dims(ylabels)
 
         for i in range(nplots):
-            ax = fig.add_subplot(rows, cols, i+1)
+            ax = fig.add_subplot(rows, cols, i + 1)
             ax = self.plot_lines(ax, x_array[i], y_array[i],
                                  xlabel=xlabels[i], ylabel=ylabels[i], **kwargs)
             if titles is not None:
@@ -393,9 +391,9 @@ class Output:
         xlabel = 'Channel Location'
 
         data = {'Channel Location':
-                {'value': xvalues, 'units': 'm', 'label': xlabel},
+                    {'value': xvalues, 'units': 'm', 'label': xlabel},
                 'Cells':
-                {'value': [list(range(len(cells)))], 'units': '-'}}
+                    {'value': [list(range(len(cells)))], 'units': '-'}}
         data = get_oo_collection_data(cells, data_dict=data, xkey=xlabel)
         # Save channel values
         cathode_channels = [cell.cathode.channel for cell in fc_stack.cells]
@@ -512,7 +510,7 @@ class Output:
         # anodes = [cell.anode for cell in fc_stack.cells]
         # save_oo_collection(cathodes, xvalues, xlabel)
         data = {'channel_location':
-                {'value': xvalues, 'units': 'm', 'label': xlabel}}
+                    {'value': xvalues, 'units': 'm', 'label': xlabel}}
 
         # Save channel values
         cathode_channels = [cell.cathode.channel for cell in fc_stack.cells]
@@ -612,7 +610,7 @@ class Output:
             for k, v in data.items():
                 file.write('{} [{}]: '.format(k, v['units'])
                            + ('{0:' + v.get('format', '.4f')
-                           + '}\n').format(v['value']))
+                              + '}\n').format(v['value']))
 
     def save_settings(self, settings, fmt='json'):
         # if settings is None:
