@@ -177,7 +177,7 @@ class Simulation:
                 break
 
             average_current_density = \
-                np.average([np.average(cell.i_cd, weights=cell.d_area)
+                np.average([np.average(cell.current_density, weights=cell.d_area)
                             for cell in self.stack.cells])
             if self.stack.coolant_circuit is None:
                 cool_mass_flow = 0.0
@@ -192,9 +192,9 @@ class Simulation:
                      {'value': self.stack.v_stack / self.stack.n_cells,
                       'units': 'V'},
                  'Minimum Cell Voltage':
-                     {'value': np.min(self.stack.v), 'units': 'V'},
+                     {'value': np.min(self.stack.voltage), 'units': 'V'},
                  'Maximum Cell Voltage':
-                     {'value': np.max(self.stack.v), 'units': 'V'},
+                     {'value': np.max(self.stack.voltage), 'units': 'V'},
                  'Average Current Density':
                      {'value': average_current_density, 'units': 'A/m²'},
                  'Stack Power Density':

@@ -289,7 +289,7 @@ class TemperatureSystem(StackLinearSystem):
             mtx_func.add_explicit_layer_source(cell.thermal_rhs_dyn, source,
                                                cell.index_array, layer_id=1)
 
-            current = cell.i_cd * cell.d_area
+            current = cell.current_density * cell.d_area
             half_ohmic_heat_membrane = \
                 0.5 * cell.membrane.omega * np.square(current)
 
@@ -442,11 +442,10 @@ class ElectricalSystem(StackLinearSystem):
             self.e_0_stack = np.sum([cell.e_0 for cell in self.cells])
             self.v_loss_tar = self.e_0_stack - self.v_tar
 
-        # Current density of the elements in z-direction
-        self.i_cd = np.zeros(self.shape)
-
-        # Accumulated voltage loss over the stack at the lower end plate
-        self.v_end_plate = np.zeros(self.shape)
+        # Current density of the elements in trough-plane- / x-direction
+        diff_shape = (len(self.cells),
+                      *self.cells[0].electrical_conductance[0].shape)
+        self.current_density = np.zeros(diff_shape)
 
     def update_rhs(self, *args, **kwargs):
         """
@@ -466,8 +465,8 @@ class ElectricalSystem(StackLinearSystem):
                 rhs_bc_values = self.i_cd_tar * cell_0.d_area
             else:
                 inlet_current = (
-                        np.abs(cell_0.voltage_layer[0] - cell_0.voltage_layer[1])
-                        * cell_0.electrical_conductance[0][0])
+                    np.abs(cell_0.voltage_layer[0] - cell_0.voltage_layer[1])
+                    * cell_0.electrical_conductance[0][0])
                 correction_factors = bc_current / inlet_current
                 rhs_bc_values = inlet_current * correction_factors
 
@@ -477,7 +476,8 @@ class ElectricalSystem(StackLinearSystem):
                                            cell_0.index_array, layer_id=0)
         cell_rhs_list.append(cell_rhs)
         for i in range(1, len(self.cells)):
-            cell_rhs_list.append(np.zeros(self.cells[i].voltage_layer.flatten().shape))
+            cell_rhs_list.append(
+                np.zeros(self.cells[i].voltage_layer.flatten().shape))
         self.rhs[:] = np.hstack(cell_rhs_list)
 
     def update_matrix(self, electrochemical_conductance, *args, **kwargs):
@@ -508,12 +508,9 @@ class ElectricalSystem(StackLinearSystem):
 
     def update(self, current_density=None, voltage=None):
         """
-        Coordinates the program sequence
+        Wrapper function to solve underlying linear system with updated input
+        and update every member results accordingly
         """
-        # raise NotImplementedError
-        # resistance = \
-        #     np.asarray([cell.resistance for cell in self.cells])
-        # self.resistance[:] = resistance.flatten()
         if current_density is not None:
             self.i_cd_tar = current_density
         if voltage is not None:
@@ -522,9 +519,12 @@ class ElectricalSystem(StackLinearSystem):
 
         dynamic_conductances = self.create_dynamic_conductance_list()
         self.update_and_solve_linear_system(dynamic_conductances)
-        # TODO: Update cell voltages and voltage differences (losses)
-        voltage_array = self.update_cell_solution()
-        self.update_cell_voltage(voltage_array)
+        voltage_array = self.update_cell_voltage()
+        constant_conductances = np.asarray([cell.electrical_conductance[0]
+                                            for cell in self.cells])
+        conductance_array = (constant_conductances
+                             + np.asarray(dynamic_conductances))
+        self.update_current_density(voltage_array, conductance_array)
 
     def create_dynamic_conductance_list(self):
         dynamic_cell_conductance_list = []
@@ -539,8 +539,34 @@ class ElectricalSystem(StackLinearSystem):
             dynamic_cell_conductance_list.append(dynamic_cell_conductance)
         return dynamic_cell_conductance_list
 
-    def update_cell_voltage(self, voltage_array):
+    def update_cell_voltage(self):
+        """
+        Wrapper for the update_cell_solution-function which the cell-wise parts
+        of the flattened solution_vector into the corresponding cell member (
+        voltage_layer). Furthermore the area-distribution of the cell voltage
+        loss is calculated from cathode to anode bipolarplate for each cell.
+        Returns: the reshaped voltage_array containing the overpotential in
+        each cell layer discretized according to the y-z-discretization of
+        each cell.
+        """
+        voltage_array = self.update_cell_solution()
         for i, cell in enumerate(self.cells):
             # cell.voltage_layer[:] = cell.e_0 - cell.voltage_layer
             cell.v_loss[:] = np.abs(voltage_array[i][0] - voltage_array[i][-1])
             # cell.update_voltage_loss(v_diff[i])
+        return voltage_array
+
+    def update_current_density(self, voltage_array, conductance):
+        """
+        Calculates the current density in each layer of each in through-plane
+        direction, i.e. the x-direction
+        """
+        v_diff = np.abs(np.diff(voltage_array, axis=1))
+        active_area = np.array([cell.d_area for cell in self.cells])
+        active_area_array = np.asarray(
+            [np.stack([cell.d_area for i in range(v_diff.shape[1])], axis=0)
+             for cell in self.cells])
+        current_density = v_diff * conductance / active_area_array
+        self.current_density[:] = current_density
+        # TODO: Update cell current densities
+        return current_density

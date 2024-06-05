@@ -227,7 +227,7 @@ class Stack:
         # target current density
 
         # current density array
-        self.i_cd = np.zeros(self.elec_sys.i_cd.shape)
+        self.i_cd = np.zeros(self.elec_sys.current_density.shape)
         self.i_cd[:] = self.i_cd_target
         # for i in range(self.n_cells):
         #     self.i_cd[i, :] = \
@@ -237,7 +237,7 @@ class Stack:
         self.i_cd_old = np.copy(self.i_cd)
         self.i_cd_avg = self.i_cd_target
         # voltage array
-        self.v = np.zeros(self.n_cells)
+        self.voltage = np.zeros(self.n_cells)
         self.v_stack = None
         self.v_loss = None
         self.e_0 = self.n_cells * self.cells[0].e_0
@@ -269,7 +269,7 @@ class Stack:
             if cell.break_program:
                 self.break_program = True
                 break
-        self.i_cd_old[:] = self.elec_sys.i_cd
+        self.i_cd_old[:] = self.elec_sys.current_density
         self.temp_old[:] = self.temp_sys.solution_vector
         if not self.break_program:
             if self.calc_temp:
@@ -277,13 +277,16 @@ class Stack:
             if self.calc_electric:
                 self.elec_sys.update(current_density=current_density,
                                      voltage=voltage)
-                self.i_cd[:] = self.elec_sys.i_cd
-            self.v[:] = \
-                np.asarray([np.average(cell.voltage_layer, weights=cell.d_area)
+                self.i_cd[:] = self.elec_sys.current_density
+            self.voltage[:] = \
+                np.asarray([np.average(cell.voltage_layer[0],
+                                       weights=cell.d_area)
                             for cell in self.cells])
             if self.current_control:
-                self.v_stack = np.sum(self.v)
+                self.v_stack = np.sum(self.voltage)
                 self.v_loss = self.e_0 - self.v_stack
+
+            # TODO: Update all current density formulations
             self.i_cd_avg = np.average(self.i_cd[0],
                                        weights=self.cells[0].d_area)
 

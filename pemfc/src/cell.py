@@ -189,7 +189,7 @@ class Cell(OutputObject):
             self.temp_names.insert(-2, 'Anode BPP-BPP')
 
         # Current density
-        self.i_cd = np.zeros(self.voltage_shape)
+        self.current_density = np.zeros(self.electrical_conductance[0].shape)
         # Cell voltage
         self.voltage_layer = np.zeros(self.voltage_shape)
         # Through-plane electrochemical (MEA) cell conductance
@@ -197,7 +197,7 @@ class Cell(OutputObject):
             self.electrical_conductance[0][0].shape)
         # Voltage loss over the single cell stack (bpp-to-bpp)
         self.v_loss = np.zeros(self.electrochemical_conductance.shape)
-        self.add_print_data(self.i_cd, 'Current Density', 'A/m²')
+        self.add_print_data(self.current_density, 'Current Density', 'A/m²')
         self.add_print_data(self.temp_layer, 'Temperature', 'K',
                             self.temp_names[:self.n_layer])
         self.add_print_data(self.voltage_layer, 'Cell Voltage', 'V')
@@ -305,7 +305,7 @@ class Cell(OutputObject):
         """
         if urf is None:
             urf = self.urf
-        current_density = (1.0 - urf) * current_density + urf * self.i_cd
+        current_density = (1.0 - urf) * current_density + urf * self.current_density
         # if g_par.iteration > 50:
         #     self.urf *= 0.99
         # self.urf = max(self.urf, 0.8)
@@ -347,7 +347,7 @@ class Cell(OutputObject):
             #     self.correct_voltage_loss()
                 # raise ValueError('voltage losses greater than '
                 #                  'open circuit voltage')
-            self.i_cd[:] = current_density
+            self.current_density[:] = current_density
 
     def calc_voltage_loss(self):
         """
