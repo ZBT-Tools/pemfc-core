@@ -180,7 +180,7 @@ class TemperatureSystem:
             # Cathode gde-mem source
             source[:] = 0.0
             source += half_ohmic_heat_membrane
-            v_loss = np.minimum(self.e_0, cell.cathode.v_loss)
+            v_loss = np.minimum(self.e_0, cell.cathode.voltage_loss)
             v_loss[v_loss < 0.0] = 0.0
             reaction_heat = \
                 (self.e_tn - self.e_0 + v_loss) * current
@@ -190,7 +190,7 @@ class TemperatureSystem:
             # Anode gde-mem source
             source[:] = 0.0
             source += half_ohmic_heat_membrane
-            v_loss = np.minimum(self.e_0, cell.anode.v_loss)
+            v_loss = np.minimum(self.e_0, cell.anode.voltage_loss)
             v_loss[v_loss < 0.0] = 0.0
             reaction_heat = v_loss * current
             source += reaction_heat
@@ -353,7 +353,7 @@ class TemperatureSystem:
                     temp_layer_vec = (1.0 - under_relaxation) * temp_layer_vec \
                         + under_relaxation * temp_old_array[i]
                 temp_new_list.append(temp_layer_vec)
-                for j in range(cell.n_layer):
+                for j in range(cell.nx):
                     index_vector = cell.index_array[j]
                     cell.temp_layer[j] = temp_layer_vec[index_vector]
             temp_old_array = copy.deepcopy(temp_new_list)
@@ -368,7 +368,7 @@ class TemperatureSystem:
         From 1D temperature vector to 2D cell temperature arrays
         """
         for i, cell in enumerate(self.cells):
-            for j in range(cell.n_layer):
+            for j in range(cell.nx):
                 # index_vector = cell.index_array[j]
                 index_vector = self.index_list[i][j]
                 cell.temp_layer[j] = self.temp_layer_vec[index_vector]

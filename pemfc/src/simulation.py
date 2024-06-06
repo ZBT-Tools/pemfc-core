@@ -147,7 +147,7 @@ class Simulation:
                 # voltage_loss = self.get_voltage_losses(self.stack)
                 cell_voltages.append(np.average([cell.voltage_layer for cell in
                                                  self.stack.cells]))
-                current_densities.append(self.stack.i_cd_avg)
+                current_densities.append(self.stack.current_density_avg)
 
                 case_name = 'Case'+str(i)
                 self.output.save(case_name, self.stack)
@@ -176,44 +176,44 @@ class Simulation:
                 target_value = target_value[0:-i]
                 break
 
-            average_current_density = \
-                np.average([np.average(cell.current_density, weights=cell.d_area)
-                            for cell in self.stack.cells])
+            current_density_avg = np.average(
+                    [np.average(cell.current_density, weights=cell.d_area)
+                     for cell in self.stack.cells])
             if self.stack.coolant_circuit is None:
                 cool_mass_flow = 0.0
             else:
                 cool_mass_flow = self.stack.coolant_circuit.mass_flow_in
-            global_data = \
-                {
-                 'Convergence':
-                     {'value': convergence_flag, 'units': ' '},
-                 'Stack Voltage': {'value': self.stack.v_stack, 'units': 'V'},
-                 'Average Cell Voltage':
-                     {'value': self.stack.v_stack / self.stack.n_cells,
-                      'units': 'V'},
-                 'Minimum Cell Voltage':
-                     {'value': np.min(self.stack.voltage), 'units': 'V'},
-                 'Maximum Cell Voltage':
-                     {'value': np.max(self.stack.voltage), 'units': 'V'},
-                 'Average Current Density':
-                     {'value': average_current_density, 'units': 'A/m²'},
-                 'Stack Power Density':
-                     {'value': self.stack.v_stack * average_current_density,
-                      'units': 'W/m²'},
-                 'Stack Power':
-                     {'value': self.stack.v_stack * average_current_density
-                      * self.stack.cells[0].active_area,
-                      'units': 'W'},
-                 'Cooling Mass Flow Rate:':
-                     {'value': cool_mass_flow,
-                      'units': 'kg/s', 'format': '.4E'},
-                 'Cathode Mass Flow Rate:':
-                     {'value': self.stack.fuel_circuits[0].mass_flow_in,
-                      'units': 'kg/s', 'format': '.4E'},
-                 'Anode Mass Flow Rate:':
-                     {'value': self.stack.fuel_circuits[1].mass_flow_in,
-                      'units': 'kg/s', 'format': '.4E'},
-                 }
+            global_data = {
+                'Convergence':
+                    {'value': convergence_flag, 'units': ' '},
+                'Stack Voltage':
+                    {'value': self.stack.voltage_stack, 'units': 'V'},
+                'Average Cell Voltage':
+                    {'value': self.stack.voltage_stack / self.stack.n_cells,
+                     'units': 'V'},
+                'Minimum Cell Voltage':
+                    {'value': np.min(self.stack.voltage_cells), 'units': 'V'},
+                'Maximum Cell Voltage':
+                    {'value': np.max(self.stack.voltage_cells), 'units': 'V'},
+                'Average Current Density':
+                    {'value': current_density_avg, 'units': 'A/m²'},
+                'Stack Power Density':
+                    {'value': self.stack.voltage_stack * current_density_avg,
+                     'units': 'W/m²'},
+                'Stack Power':
+                    {'value': self.stack.voltage_stack * current_density_avg
+                        * self.stack.cells[0].active_area,
+                     'units': 'W'},
+                'Cooling Mass Flow Rate:':
+                    {'value': cool_mass_flow,
+                     'units': 'kg/s', 'format': '.4E'},
+                'Cathode Mass Flow Rate:':
+                    {'value': self.stack.fuel_circuits[0].mass_flow_in,
+                     'units': 'kg/s', 'format': '.4E'},
+                'Anode Mass Flow Rate:':
+                    {'value': self.stack.fuel_circuits[1].mass_flow_in,
+                     'units': 'kg/s', 'format': '.4E'},
+                }
             global_data_list.append(global_data)
             output_stop_time = timeit.default_timer()
             self.timing['output'] += output_stop_time - output_start_time
@@ -261,7 +261,7 @@ class Simulation:
             np.asarray([cell.cathode.v_loss_gdl_diff
                         for cell in fc_stack.cells])
         voltage_loss['membrane']['cells'] = \
-            np.asarray([cell.membrane.v_loss for cell in fc_stack.cells])
+            np.asarray([cell.membrane.voltage_loss for cell in fc_stack.cells])
 
         voltage_loss['activation']['anode']['average'] = \
             np.average(voltage_loss['activation']['anode']['cells'])
@@ -284,8 +284,8 @@ class Simulation:
         """
         Calculates the convergence criteria according to (Koh, 2003)
         """
-        current_error = gf.calc_rrmse(self.stack.i_cd.flatten(),
-                                      self.stack.i_cd_old.flatten())
+        current_error = gf.calc_rrmse(self.stack.current_density.flatten(),
+                                      self.stack.current_density_old.flatten())
         # self.temp_criteria =\
         #     np.abs(np.sum(((self.temp_old
         #                     - self.stack.temp_sys.temp_layer[0][0, 0]))

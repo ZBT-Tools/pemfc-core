@@ -1,11 +1,11 @@
-# general imports
+# General imports
 from abc import ABC
 import numpy as np
 from scipy import optimize
 
 # local module imports
 from . import interpolation as ip, constants, channel as chl
-from pemfc.src import discretization as dsct
+from . import discretization as dsct
 
 
 class ElectrochemistryModel(ABC):

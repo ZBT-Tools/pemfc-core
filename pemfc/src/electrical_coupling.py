@@ -1,10 +1,10 @@
-# general imports
+# General imports
 import numpy as np
 from scipy import linalg as sp_la
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
 
-# local module imports
+# Local module imports
 from . import matrix_functions as mtx
 
 
@@ -21,13 +21,12 @@ class ElectricalCoupling:
         # Variables
         self.current_control = stack.current_control
         if self.current_control:
-            self.i_cd_tar = stack.i_cd_target
+            self.i_cd_tar = stack.current_density_target
         else:
-            self.v_tar = stack.v_target
+            self.v_tar = stack.voltage_target
             self.e_0_stack = np.sum([cell.e_0 for cell in self.cells])
             self.v_loss_tar = self.e_0_stack - self.v_tar
 
-        # TODO: Update ElectricalCoupling for 3D
         # number of the nodes along the channel
         # self.n_ele = self.cells[0].n_ele
         self.shape = self.cells[0].membrane.dsct.shape
@@ -52,9 +51,6 @@ class ElectricalCoupling:
             self.solve_sparse = True
 
             cell_mat_y_list = [cell.elec_mtx_const for cell in self.cells]
-
-            # TODO: Update stack conductance matrix: in 3D the overlap does not seem suitable,
-            #  just additional x-conductance between bipolar half plates seems correct
 
             stack_y_elec_cond_mat = sp_la.block_diag(*cell_mat_y_list)
             self.mat_const = mtx.block_diag_overlap(cell_mat_y_list,
@@ -111,7 +107,7 @@ class ElectricalCoupling:
 
     def calc_voltage_loss(self):
         v_loss = \
-            np.asarray([np.average(cell.v_loss, weights=cell.d_area)
+            np.asarray([np.average(cell.voltage_loss, weights=cell.d_area)
                         for cell in self.cells])
         v_loss_total = np.sum(v_loss)
         return v_loss, v_loss_total

@@ -1,19 +1,17 @@
-# general imports
+# General imports
 from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
-
 import numpy as np
 from scipy import linalg as sp_la
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
+# Local module imports
+from . import (
+    matrix_functions as mtx_func, stack as stack_module, channel as chl)
 
 if TYPE_CHECKING:
-    from stack import Stack
-
-# local module imports
-from . import matrix_functions as mtx_func, stack as stack_module, channel as chl
+    from pemfc.src.stack import Stack
 
 # import pandas as pd
 # from numba import jit
@@ -43,7 +41,6 @@ class LinearSystem(ABC):
         self.solve_individual_cells = False
 
         # Conductance Matrix as ndarray
-        # TODO: Check shape of mtx, not conform to mtx_const and mtx_dyn
         self.mtx = np.zeros((self.n, self.n))
         # Solution vector
         self.solution_vector = np.zeros(self.n)
@@ -296,7 +293,7 @@ class TemperatureSystem(StackLinearSystem):
             # Cathode gde-mem source
             source[:] = 0.0
             source += half_ohmic_heat_membrane
-            v_loss = np.minimum(self.e_0, cell.cathode.v_loss)
+            v_loss = np.minimum(self.e_0, cell.cathode.voltage_loss)
             v_loss[v_loss < 0.0] = 0.0
             reaction_heat = \
                 (self.e_tn - self.e_0 + v_loss) * current
@@ -307,7 +304,7 @@ class TemperatureSystem(StackLinearSystem):
             # Anode gde-mem source
             source[:] = 0.0
             source += half_ohmic_heat_membrane
-            v_loss = np.minimum(self.e_0, cell.anode.v_loss)
+            v_loss = np.minimum(self.e_0, cell.anode.voltage_loss)
             v_loss[v_loss < 0.0] = 0.0
             reaction_heat = v_loss * current
             source += reaction_heat
@@ -436,9 +433,9 @@ class ElectricalSystem(StackLinearSystem):
         # Variables
         self.current_control = stack.current_control
         if self.current_control:
-            self.i_cd_tar = stack.i_cd_target
+            self.current_density_target = stack.current_density_target
         else:
-            self.v_tar = stack.v_target
+            self.v_tar = stack.voltage_target
             self.e_0_stack = np.sum([cell.e_0 for cell in self.cells])
             self.v_loss_tar = self.e_0_stack - self.v_tar
 
@@ -460,9 +457,9 @@ class ElectricalSystem(StackLinearSystem):
         cell_0 = self.cells[0]
         cell_rhs = np.zeros(cell_0.voltage_layer.flatten().shape)
         if self.current_control:
-            bc_current = self.i_cd_tar * cell_0.d_area
+            bc_current = self.current_density_target * cell_0.d_area
             if np.sum(cell_0.voltage_layer[0]) == 0.0:
-                rhs_bc_values = self.i_cd_tar * cell_0.d_area
+                rhs_bc_values = self.current_density_target * cell_0.d_area
             else:
                 inlet_current = (
                     np.abs(cell_0.voltage_layer[0] - cell_0.voltage_layer[1])
@@ -512,7 +509,7 @@ class ElectricalSystem(StackLinearSystem):
         and update every member results accordingly
         """
         if current_density is not None:
-            self.i_cd_tar = current_density
+            self.current_density_target = current_density
         if voltage is not None:
             self.v_tar = voltage
             self.v_loss_tar = self.e_0_stack - self.v_tar
@@ -552,7 +549,7 @@ class ElectricalSystem(StackLinearSystem):
         voltage_array = self.update_cell_solution()
         for i, cell in enumerate(self.cells):
             # cell.voltage_layer[:] = cell.e_0 - cell.voltage_layer
-            cell.v_loss[:] = np.abs(voltage_array[i][0] - voltage_array[i][-1])
+            cell.voltage_loss[:] = np.abs(voltage_array[i][0] - voltage_array[i][-1])
             # cell.update_voltage_loss(v_diff[i])
         return voltage_array
 
@@ -569,4 +566,6 @@ class ElectricalSystem(StackLinearSystem):
         current_density = v_diff * conductance / active_area_array
         self.current_density[:] = current_density
         # TODO: Update cell current densities
+        for i, cell in enumerate(self.cells):
+            cell.current_density[:] = current_density[i]
         return current_density

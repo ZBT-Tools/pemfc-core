@@ -1,8 +1,7 @@
-# general imports
+# General imports
 import numpy as np
 # from scipy import ndimage
-
-# local module imports
+# Local module imports
 from . import constants
 
 
@@ -303,7 +302,6 @@ def calc_rel_error(array1, array2):
     """
     array_diff = array1 - array2
     average_array = (array1 + array2) / 2.0
-    rel_error_array = np_div(array_diff, average_array)
     return np.inner(array_diff, array_diff) / len(array1)
 
 

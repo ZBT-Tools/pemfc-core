@@ -1,13 +1,13 @@
-# general imports
-import sys
+# General imports
+# import sys
 import numpy as np
 from abc import ABC, abstractmethod
 
-# local module imports
-from pemfc.src.output_object import OutputObject
-from pemfc.src import constants, global_functions as gf
+# Local module imports
+from ..output_object import OutputObject
+from .. import constants, global_functions as gf
 from . import species
-from pemfc.src.global_functions import move_axis
+from ..global_functions import move_axis
 from collections import OrderedDict
 
 try:

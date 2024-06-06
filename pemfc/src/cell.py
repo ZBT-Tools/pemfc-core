@@ -1,11 +1,10 @@
-# general imports
+# General imports
 import numpy as np
-import scipy as sp
 import copy
 import math
 
-# local modul imports
-from . import interpolation as ip, matrix_functions as mtx, half_cell as h_c, \
+# Local modul imports
+from . import matrix_functions as mtx, half_cell as h_c, \
     global_functions as g_func, membrane as membrane, solid_layer as sl
 from .output_object import OutputObject
 
@@ -91,9 +90,14 @@ class Cell(OutputObject):
         # Shape for cell-based temperature solution
         self.temp_shape = self.thermal_conductance[1].shape
 
-        self.index_array = mtx.create_cell_index_list(
-            self.thermal_conductance[1].shape)
-        self.n_layer = self.thermal_conductance[1].shape[0]
+        # Array to link all aggregate elements indexes of 1D-solution vector
+        # in groups of the corresponding layers
+        self.index_array = mtx.create_cell_index_list(self.temp_shape)
+        self.nx = self.temp_shape[0]
+        self.n_layer = self.nx - 1
+
+        # Assign layer id corresponding to material name
+        self.layer_id = self.create_layer_index_dict(self.n_layer)
 
         self.thermal_mtx_const = mtx.build_cell_conductance_matrix(
                 [self.thermal_conductance[0],
@@ -128,9 +132,8 @@ class Cell(OutputObject):
         # and z-direction (channel-rib-discretization), where the
         # x-discretization represents the smallest block matrix entity
         # Constant x-conductance will be zero for initial constant setup,
-        # due to dynamic addition of lumped x-conductance during solution procedure
-        # TODO: Check electric conductance matrix assembly with new coordinates
-        #  and discretization
+        # due to dynamic addition of lumped x-conductance during solution
+        # procedure
         self.electrical_conductance = self.calculate_conductance('electrical')
         # Shape for cell-based voltage solution
         self.voltage_shape = self.electrical_conductance[1].shape
@@ -154,10 +157,9 @@ class Cell(OutputObject):
 
         self.conductance = {'thermal': self.thermal_conductance,
                             'electrical': self.electrical_conductance}
-        # print(self.elec_x_mat_const)
 
         # Boolean alarm values
-        self.v_alarm = False
+        self.voltage_alarm = False
         # True if :voltage loss > cell voltage
         self.break_program = False
         # True if the program aborts because of some critical impact
@@ -175,7 +177,7 @@ class Cell(OutputObject):
         # membrane temperature
         self.temp_mem = np.zeros(self.membrane.temp.shape)
         self.temp_layer = \
-            g_func.full((self.n_layer,) + self.temp_mem.shape, temp_init)
+            g_func.full((self.nx,) + self.temp_mem.shape, temp_init)
         # interface names according to temperature array
         self.temp_names = [
             'Cathode BC-BPP',
@@ -196,11 +198,30 @@ class Cell(OutputObject):
         self.electrochemical_conductance = np.zeros(
             self.electrical_conductance[0][0].shape)
         # Voltage loss over the single cell stack (bpp-to-bpp)
-        self.v_loss = np.zeros(self.electrochemical_conductance.shape)
+        self.voltage_loss = np.zeros(self.electrochemical_conductance.shape)
         self.add_print_data(self.current_density, 'Current Density', 'A/m²')
         self.add_print_data(self.temp_layer, 'Temperature', 'K',
-                            self.temp_names[:self.n_layer])
+                            self.temp_names[:self.nx])
         self.add_print_data(self.voltage_layer, 'Cell Voltage', 'V')
+
+    @staticmethod
+    def create_layer_index_dict(n_layer):
+        layer_id_dict = {}
+        if n_layer % 2 == 0.0:
+            raise ValueError('Number of material layers in fuel cell must be '
+                             'uneven')
+        else:
+            membrane_id = n_layer // 2
+            layer_id_dict['membrane'] = membrane_id
+            layer_id_dict['cathode_gde'] = membrane_id - 1
+            layer_id_dict['anode_gde'] = membrane_id + 1
+
+            layer_id_dict['cathode_bpp'] = []
+            layer_id_dict['anode_bpp'] = []
+            for i in range(membrane_id - 1):
+                layer_id_dict['cathode_bpp'].append(membrane_id - 2 - i)
+                layer_id_dict['anode_bpp'].append(membrane_id + 2 + i)
+        return layer_id_dict
 
     def calculate_conductance(self, transport_type: str):
         if transport_type not in ('electrical', 'thermal'):
@@ -305,26 +326,26 @@ class Cell(OutputObject):
         """
         if urf is None:
             urf = self.urf
-        current_density = (1.0 - urf) * current_density + urf * self.current_density
+        current_density = (
+                (1.0 - urf) * current_density + urf * self.current_density)
         # if g_par.iteration > 50:
         #     self.urf *= 0.99
         # self.urf = max(self.urf, 0.8)
         # self.temp_mem[:] = .5 * (self.temp_layer[2] + self.temp_layer[3])
-        self.membrane.temp[:] = 0.5 * (self.temp_layer[2] + self.temp_layer[3])
+        self.membrane.temp[:] = (
+                0.5 * (self.temp_layer[self.layer_id['cathode_gde']] +
+                       self.temp_layer[self.layer_id['anode_gde']]))
         if isinstance(self.membrane, membrane.WaterTransportMembrane):
             self.cathode.w_cross_flow[:] = self.membrane.water_flux * -1.0
             self.anode.w_cross_flow[:] = self.membrane.water_flux
         # self.cathode.set_layer_temperature([self.temp[2], self.temp[3],
         #                                     self.temp[4]])
         # self.anode.set_layer_temperature([self.temp[0], self.temp[1]])
-        # Find center layer index of uneven layer cell stack
-        membrane_layer_id = self.electrochemical_conductance.shape[0] // 2
-        cathode_layer_id = membrane_layer_id - 1
-        self.cathode.update(current_density[cathode_layer_id],
+
+        self.cathode.update(current_density[self.layer_id['cathode_gde']],
                             update_channel=update_channel,
                             current_control=current_control)
-        anode_layer_id = membrane_layer_id + 1
-        self.anode.update(current_density[anode_layer_id],
+        self.anode.update(current_density[self.layer_id['anode_gde']],
                           update_channel=update_channel,
                           current_control=True)
         if self.cathode.electrochemistry.corrected_current_density is not None:
@@ -338,11 +359,11 @@ class Cell(OutputObject):
             humidity = np.asarray([self.cathode.calc_humidity(),
                                    self.anode.calc_humidity()])
 
-            self.membrane.update(corrected_current_density[membrane_layer_id],
-                                 humidity)
+            self.membrane.update(
+                corrected_current_density[self.layer_id['membrane']], humidity)
             self.calc_voltage_loss()
             self.calc_electrochemical_conductance(
-                corrected_current_density[membrane_layer_id])
+                corrected_current_density[self.layer_id['membrane']])
             # if np.any(self.v_alarm) and current_control:
             #     self.correct_voltage_loss()
                 # raise ValueError('voltage losses greater than '
@@ -355,9 +376,9 @@ class Cell(OutputObject):
         membrane voltage losses.If the cell voltage loss is larger
         than the open circuit cell voltage, the cell voltage is set to zero.
         """
-        self.v_loss[:] = \
-            self.membrane.v_loss + self.cathode.v_loss + self.anode.v_loss
-        self.v_alarm = self.v_loss >= self.e_0
+        self.voltage_loss[:] = \
+            self.membrane.voltage_loss + self.cathode.voltage_loss + self.anode.voltage_loss
+        self.voltage_alarm = self.voltage_loss >= self.e_0
         # self.v_loss[:] = np.minimum(self.v_loss, self.e_0)
 
     def update_voltage_loss(self, v_loss):
@@ -385,10 +406,11 @@ class Cell(OutputObject):
         This conductance is assigned to the central layer (the membrane layer)
         of the conductance array layout assuming an uneven number of layers.
         """
-        membrane_layer_index = self.electrochemical_conductance.shape[0] // 2
         current = current_density * self.membrane.dsct.d_area
         electrochemical_resistance = (
-            (self.cathode.v_loss + self.membrane.v_loss + self.anode.v_loss)
+            (self.cathode.voltage_loss
+             + self.membrane.voltage_loss
+             + self.anode.voltage_loss)
             / current)
         self.electrochemical_conductance[:] = (
                 1.0 / electrochemical_resistance)

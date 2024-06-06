@@ -1,16 +1,13 @@
-# general imports
+# General imports
 import warnings
 import numpy as np
 
-# local module imports
-from . import solid_layer as sl, constants, \
-    global_functions as g_func, flow_field as ff, \
-    channel as chl
+# Local module imports
+from . import solid_layer as sl, constants, flow_field as ff, channel as chl
 from .fluid import fluid as fluids
 from . import electrochemistry as electrochem
 from . import interpolation as ip
-from pemfc.src import discretization as dsct
-
+from . import discretization as dsct
 
 warnings.filterwarnings("ignore")
 
@@ -114,7 +111,7 @@ class HalfCell:
         # cross water flux through the membrane
         self.w_cross_flow = np.zeros(self.gde.dsct.shape)
         # voltage loss
-        self.v_loss = np.zeros(self.gde.dsct.shape)
+        self.voltage_loss = np.zeros(self.gde.dsct.shape)
 
     def update(self, current_density, update_channel=False,
                current_control=True):
@@ -202,7 +199,7 @@ class HalfCell:
         # area = self.discretization.d_area
         bpp_loss = 0.0  # self.bpp.calc_voltage_loss(current_density, area)
         gde_loss = 0.0  # self.gde.calc_voltage_loss(current_density, area)
-        self.v_loss[:] = self.electrochemistry.v_loss + bpp_loss + gde_loss
+        self.voltage_loss[:] = self.electrochemistry.v_loss + bpp_loss + gde_loss
 
     @staticmethod
     def calc_faraday_flow(fluid, current, stoichiometry, reaction_stoichiometry,

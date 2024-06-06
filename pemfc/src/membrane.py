@@ -1,11 +1,11 @@
-# general imports
+# General imports
 import numpy as np
 from abc import ABC, abstractmethod
 
-# local module imports
-from pemfc.src import solid_layer as sl, constants
-from pemfc.src import global_functions as gf
-from pemfc.src import discretization as dsct
+# Local module imports
+from . import solid_layer as sl, constants
+# from pemfc.src import global_functions as gf
+from . import discretization as dsct
 
 
 class Membrane(sl.SolidLayer, ABC):
@@ -48,7 +48,7 @@ class Membrane(sl.SolidLayer, ABC):
         self.calc_loss = membrane_dict.get('calc_loss', True)
 
         # voltage loss at the membrane
-        self.v_loss = np.zeros(self.dsct.shape)
+        self.voltage_loss = np.zeros(self.dsct.shape)
 
         self.ionic_conductance = self.calc_conductance(self.ionic_conductivity)
 
@@ -63,9 +63,9 @@ class Membrane(sl.SolidLayer, ABC):
         Calculates the voltage loss at the membrane.
         """
         if not self.calc_loss:
-            self.v_loss[:] = 0.
+            self.voltage_loss[:] = 0.
         else:
-            self.v_loss[:] = self.omega_ca * current_density
+            self.voltage_loss[:] = self.omega_ca * current_density
 
     def update(self, current_density, humidity, *args):
         self.calc_ionic_resistance(humidity, *args)

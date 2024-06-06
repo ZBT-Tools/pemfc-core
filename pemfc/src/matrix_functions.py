@@ -1,8 +1,13 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
 import numpy as np
 from scipy import linalg as sp_la
 import scipy as sp
 from . import cell
 from . import global_functions as g_func
+
+if TYPE_CHECKING:
+    from pemfc.src.cell import Cell
 
 
 def tile_add_overlap(array, n, m=1):
@@ -276,16 +281,16 @@ def connect_cells(matrix, cell_ids, layer_ids, values, mtx_ids,
 def create_stack_index_list(cells: list[cell.Cell]):
     n_cells = len(cells)
     index_list = []
-    layer_ids = [[] for _ in range(cells[-1].n_layer)]
+    layer_ids = [[] for _ in range(cells[-1].nx)]
     for i in range(n_cells):
         index_array = \
             (np.prod(cells[i-1].membrane.dsct.shape, dtype=np.int32)
-             * cells[i-1].n_layer) * i \
+             * cells[i-1].nx) * i \
             + cells[i].index_array
         index_list.append(index_array.tolist())
 
     for i in range(n_cells):
-        for j in range(cells[i].n_layer):
+        for j in range(cells[i].nx):
             layer_ids[j].append(index_list[i][j])
     layer_index_list = []
     for sub_list in layer_ids:

@@ -1,25 +1,23 @@
-# general imports
+# General imports
 import numpy as np
 import os
 import shutil
 from itertools import cycle, islice
 import matplotlib
-# configure matplotlib backend here
 import sys
-
-main_name = sys.argv[0]
-if 'main_app.py' in main_name:
-    matplotlib.use('Agg')
-
 import matplotlib.pyplot as plt
 import timeit
 import json
 from json import JSONEncoder
 
-# local module imports
-from pemfc.src import interpolation as ip
-from pemfc.src import global_functions as g_func
-from pemfc.src import stack as stack
+# Local module imports
+from . import interpolation as ip
+from . import global_functions as g_func
+from . import stack
+
+main_name = sys.argv[0]
+if 'main_app.py' in main_name:
+    matplotlib.use('Agg')
 
 # Globals
 FONT_SIZE = 14
@@ -441,7 +439,7 @@ class Output:
 
         return data
 
-    def save(self, folder_name, fc_stack):
+    def save(self, folder_name, fc_stack: stack.Stack):
         self.case_name = folder_name
         case_path = os.path.join(self.output_dir, folder_name)
         if not os.path.exists(case_path):
@@ -451,9 +449,10 @@ class Output:
 
         if not self.save_csv and not self.save_plot:
             return None
+
         if not isinstance(fc_stack, stack.Stack):
             raise TypeError('argument fc_stack must be of type Stack from pemfc'
-                            'module')
+                            ' module')
         csv_path = os.path.join(case_path, 'csv_data')
         plot_path = os.path.join(case_path, 'plots')
         if not os.path.exists(csv_path):

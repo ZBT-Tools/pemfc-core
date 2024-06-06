@@ -1,11 +1,11 @@
-# general imports
+# General imports
 import numpy as np
-from abc import ABC, ABCMeta, abstractmethod
-from collections.abc import Callable
+# from abc import ABC, ABCMeta, abstractmethod
+# from collections.abc import Callable
 from collections.abc import Iterable
-# local modul imports
-from pemfc.src import output_object as oo
-from pemfc.src import discretization as dsct
+# Local modul imports
+from . import output_object as oo
+from . import discretization as dsct
 from typing import Self
 
 
