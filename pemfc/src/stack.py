@@ -4,12 +4,14 @@ import numpy as np
 from . import (flow_circuit as flow_circuit, cell as cl, channel as chl,
                linear_system as lin_sys)
 from .fluid import fluid as fluid
+from .output_object import OutputObject
 
 
-class Stack:
+class Stack(OutputObject):
 
     def __init__(self, settings, n_nodes, current_control=False):
 
+        super().__init__('Stack')
         # Read settings dictionaries
         stack_dict = settings['stack']
 
@@ -239,17 +241,15 @@ class Stack:
         self.temp_old = np.zeros(self.temp_sys.solution_vector.shape)
         self.temp_old[:] = self.temp_sys.solution_vector
 
+        # Add data container for output
+        self.add_print_data(self.voltage_cells, 'Cell Voltage', 'V')
+
     def update(self, current_density=None, voltage=None):
         """
         This function coordinates the program sequence
         """
         update_inflows = False
-        if current_density is not None:
-            self.current_density[:] = current_density
-            self.current_density_avg = current_density
-            update_inflows = True
-        elif voltage is not None:
-            self.voltage_stack = voltage
+        if any((current_density, voltage)):
             update_inflows = True
         if self.current_control is False:
             update_inflows = True
@@ -263,30 +263,33 @@ class Stack:
             if cell.break_program:
                 self.break_program = True
                 break
-        self.current_density_old[:] = self.elec_sys.current_density
         self.temp_old[:] = self.temp_sys.solution_vector
         if not self.break_program:
             if self.calc_temp:
                 self.temp_sys.update()
             if self.calc_electric:
-                self.elec_sys.update(current_density=current_density,
-                                     voltage=voltage)
-                self.current_density[:] = self.elec_sys.current_density
-            self.voltage_cells[:] = \
-                np.asarray([np.average(cell.voltage_layer[0],
-                                       weights=cell.d_area)
-                            for cell in self.cells])
-            if self.current_control:
-                self.voltage_stack = np.sum(self.voltage_cells)
-                self.voltage_loss = self.e_0 - self.voltage_stack
+                self.update_electric_system(current_density, voltage)
 
-            # TODO: Update all current density formulations
-            # Calculate average current density from first cell
-            ref_cell = self.cells[-1]
-            ref_current_density = (
-                ref_cell.current_density)[ref_cell.layer_id['membrane']]
-            self.current_density_avg = np.average(ref_current_density,
-                                                  weights=ref_cell.d_area)
+    def update_electric_system(self, current_density, voltage):
+        self.current_density_old[:] = self.elec_sys.current_density
+        self.elec_sys.update(current_density=current_density,
+                             voltage=voltage)
+        self.current_density[:] = self.elec_sys.current_density
+
+        self.voltage_cells[:] = np.asarray(
+            [np.average(cell.e_0 - cell.voltage_loss, weights=cell.d_area)
+             for cell in self.cells])
+
+        if self.current_control:
+            self.voltage_stack = np.sum(self.voltage_cells)
+            self.voltage_loss = self.e_0 - self.voltage_stack
+
+        # Calculate average current density from first cell
+        ref_cell = self.cells[-1]
+        ref_current_density = (
+            ref_cell.current_density)[ref_cell.layer_id['membrane']]
+        self.current_density_avg = np.average(ref_current_density,
+                                              weights=ref_cell.d_area)
 
     def update_flows(self, update_inflows=False,
                      coolant_temp_diff=None, coolant_mass_flow=None):
@@ -295,7 +298,7 @@ class Stack:
         """
         mass_flows_in = [None, None]
         if update_inflows:
-            mass_flows_in[:] = self.calc_mass_flows()
+            mass_flows_in[:] = self.calc_fuel_mass_flows()
         for i in range(len(self.fuel_circuits)):
             self.fuel_circuits[i].update(mass_flows_in[i])
         if self.coolant_circuit is not None:
@@ -320,11 +323,12 @@ class Stack:
                         for channel in self.coolant_circuit.channels])
         return heat / (cp_cool * coolant_temp_diff)  # * n_cool_cell
 
-    def calc_mass_flows(self):
+    def calc_fuel_mass_flows(self):
         mass_flows_in = []
         for i in range(len(self.cells[0].half_cells)):
             cell_mass_flow, cell_mole_flow = \
-                self.cells[0].half_cells[i].calc_inlet_flow(self.current_density_avg)
+                self.cells[0].half_cells[i].calc_inlet_flow(
+                    self.current_density_avg)
             cell_mass_flow = np.sum(cell_mass_flow, axis=0)
             mass_flow = cell_mass_flow \
                 * self.cells[0].half_cells[i].n_channels * self.n_cells

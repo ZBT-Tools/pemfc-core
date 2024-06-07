@@ -540,9 +540,9 @@ class ElectricalSystem(StackLinearSystem):
         """
         Wrapper for the update_cell_solution-function which the cell-wise parts
         of the flattened solution_vector into the corresponding cell member (
-        voltage_layer). Furthermore the area-distribution of the cell voltage
-        loss is calculated from cathode to anode bipolarplate for each cell.
-        Returns: the reshaped voltage_array containing the overpotential in
+        voltage_layer). Furthermore, the area-distribution of the cell voltage
+        loss is calculated from cathode to anode bipolar plate for each cell.
+        Returns: the reshaped voltage_array containing the over-potential in
         each cell layer discretized according to the y-z-discretization of
         each cell.
         """

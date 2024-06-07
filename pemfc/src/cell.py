@@ -179,7 +179,7 @@ class Cell(OutputObject):
         self.temp_layer = \
             g_func.full((self.nx,) + self.temp_mem.shape, temp_init)
         # interface names according to temperature array
-        self.temp_names = [
+        self.nx_names = [
             'Cathode BC-BPP',
             'Cathode BPP-GDE',
             'Cathode GDE-MEM',
@@ -187,8 +187,8 @@ class Cell(OutputObject):
             'Anode GDE-BPP',
             'Anode BPP-BC']
         if self.channel_land_discretization:
-            self.temp_names.insert(1, 'Cathode BPP-BPP')
-            self.temp_names.insert(-2, 'Anode BPP-BPP')
+            self.nx_names.insert(1, 'Cathode BPP-BPP')
+            self.nx_names.insert(-2, 'Anode BPP-BPP')
 
         # Current density
         self.current_density = np.zeros(self.electrical_conductance[0].shape)
@@ -199,10 +199,12 @@ class Cell(OutputObject):
             self.electrical_conductance[0][0].shape)
         # Voltage loss over the single cell stack (bpp-to-bpp)
         self.voltage_loss = np.zeros(self.electrochemical_conductance.shape)
-        self.add_print_data(self.current_density, 'Current Density', 'A/m²')
+
+        # Assign results to output data
+        self.add_print_data(self.current_density[self.layer_id['membrane']],
+                            'Current Density', 'A/m²', plot_axis=-2)
         self.add_print_data(self.temp_layer, 'Temperature', 'K',
-                            self.temp_names[:self.nx])
-        self.add_print_data(self.voltage_layer, 'Cell Voltage', 'V')
+                            sub_names=self.nx_names[:self.nx], plot_axis=-2)
 
     @staticmethod
     def create_layer_index_dict(n_layer):
@@ -361,7 +363,7 @@ class Cell(OutputObject):
 
             self.membrane.update(
                 corrected_current_density[self.layer_id['membrane']], humidity)
-            self.calc_voltage_loss()
+            # self.calc_voltage_loss()
             self.calc_electrochemical_conductance(
                 corrected_current_density[self.layer_id['membrane']])
             # if np.any(self.v_alarm) and current_control:
@@ -375,6 +377,10 @@ class Cell(OutputObject):
         Calculates the cell voltage loss consisting of the half cell and
         membrane voltage losses.If the cell voltage loss is larger
         than the open circuit cell voltage, the cell voltage is set to zero.
+
+        WARNING: For now this function is deprecated since cell voltage losses
+        are calculated via the voltage difference between BPP in the
+        ElectricSystem class.
         """
         self.voltage_loss[:] = \
             self.membrane.voltage_loss + self.cathode.voltage_loss + self.anode.voltage_loss

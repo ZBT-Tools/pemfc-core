@@ -104,12 +104,16 @@ class Output:
         y = np.asarray(y)
         ny = len(y)
 
-        if x.ndim != y.ndim:
-            if x.ndim in (0, 1):
+        plot_axis = kwargs.get('plot_axis', 0)
+        if plot_axis < 0:
+            plot_axis = list(range(y.ndim))[plot_axis]
+        if x.shape[0] != y.shape[plot_axis]:
+            if x.shape[0] == 1:
                 x = np.tile(x, (ny, 1))
             else:
-                raise ValueError('Outer dimension of x is not one and not '
-                                 'equal to outer dimension of y')
+                raise ValueError('Dimension of plotting axis of x-array is not '
+                                 'one or equal to dimension of plotting axis '
+                                 'of y-array')
         if y.ndim == 1:
             ax.plot(x, y, marker=kwargs.get('marker', '.'),
                     markersize=kwargs.get('markersize', MARKER_SIZE),
@@ -118,27 +122,50 @@ class Output:
                     linestyle=kwargs.get('linestyle', '-'),
                     color=kwargs.get('color', 'k'))
         else:
+            if y.ndim == 2:
+                var_axis = 1 - plot_axis
+                if var_axis > plot_axis:
+                    n_colors = 1
+                    n_linestyles = y.shape[var_axis]
+                else:
+                    n_colors = y.shape[var_axis]
+                    n_linestyles = 1
+            elif y.ndim == 3:
+                ax_ids = [i for i in range(y.ndim) if i != plot_axis]
+                n_colors = y.shape[ax_ids[0]]
+                n_linestyles = y.shape[ax_ids[1]]
+            else:
+                raise ValueError('y-array is limited to three dimensions')
+
             if colormap is not None:
                 cmap = plt.get_cmap(colormap)
-                colors = cmap(np.linspace(0.0, 1.0, ny))
+                colors = cmap(np.linspace(0.0, 1.0, n_colors))
             else:
-                colors = \
-                    kwargs.get('color',
-                               list(islice(cycle(['k', 'b', 'r', 'g', 'y']),
-                                           ny)))
-            linestyles = \
-                list(islice(cycle(kwargs.get('linestyle', ['-'])), ny))
-            markers = \
-                list(islice(cycle(kwargs.get('marker', ['.'])), ny))
-            fillstyles = \
-                list(islice(cycle(kwargs.get('fillstyle', ['full'])), ny))
-            for i in range(ny):
-                ax.plot(x[i], y[i], marker=markers[i],
-                        markersize=kwargs.get('markersize', MARKER_SIZE),
-                        fillstyle=fillstyles[i],
-                        linewidth=kwargs.get('linewidth', LINE_WIDTH),
-                        linestyle=linestyles[i],
-                        color=colors[i])
+                colors = kwargs.get(
+                    'color', list(islice(cycle(['k', 'b', 'r', 'g', 'y']),
+                                         n_colors)))
+
+            linestyles = list(islice(cycle(kwargs.get(
+                'linestyle', ['-', ':', '--', '-.'])), n_linestyles))
+            markers = list(islice(cycle(kwargs.get('marker', ['.'])),
+                                  n_linestyles))
+            fillstyles = list(islice(cycle(kwargs.get('fillstyle', ['full'])),
+                                     n_linestyles))
+
+            for i in range(n_colors):
+                for j in range(n_linestyles):
+                    x_plot = x[i]
+                    raise NotImplementedError('Continue here')
+                    y_plot = np.take(y, i , axis=ax_ids[j])
+                    ax.plot(x[i], np.take(y, i, axis=ax_ids[0]),
+                            marker=markers[0],
+                            markersize=kwargs.get('markersize', MARKER_SIZE),
+                            fillstyle=fillstyles[0],
+                            linewidth=kwargs.get('linewidth', LINE_WIDTH),
+                            linestyle=linestyles[0],
+                            color=colors[i])
+
+
         ax.grid(True)
         ax.use_sticky_edges = False
         ax.autoscale()
@@ -476,10 +503,11 @@ class Output:
                     var_array[i] = item.print_data[0][name]['value']
                     # data_dict[item.name + ' ' + str(i)] =
                 x = x_values
-                if var_array.shape[-1] == (len(x_values) - 1):
+                if var_array.shape[-2] == (len(x_values) - 1):
                     x = ip.interpolate_1d(x_values)
                 self.write_data(x, var_array, x_label, name, content['units'],
-                                plot_dir=plot_path, csv_dir=csv_path, **kwargs)
+                                plot_dir=plot_path, csv_dir=csv_path,
+                                plot_axis=content['plot_axis'], **kwargs)
 
             for base_name, sub_dict in oo_collection[0].print_data[1].items():
                 for sub_name, content in sub_dict.items():

@@ -179,7 +179,7 @@ class HalfCell:
         return mass_source, mole_source
 
     def surface_flux_to_channel_source(self, flux: np.ndarray):
-        if np.isscalar(flux) or flux.ndim == 1:
+        if np.isscalar(flux) or flux.ndim in (0, 1):
             return np.sum(self.discretization.d_area, axis=-1) * flux
         elif flux.ndim == 2:
             return np.sum(self.discretization.d_area * flux, axis=-1)
