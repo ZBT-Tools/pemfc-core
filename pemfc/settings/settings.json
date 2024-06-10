@@ -362,7 +362,7 @@
         "coolant_control": "Temperature Difference"
     },
     "output": {
-        "save_csv": true,
+        "save_csv": false,
         "save_plot": true,
         "show_loss": false,
         "directory": "../output"

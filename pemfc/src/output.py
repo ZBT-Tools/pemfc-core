@@ -102,14 +102,17 @@ class Output:
     def plot_lines(self, ax, x, y, colormap=None, **kwargs):
         x = np.asarray(x)
         y = np.asarray(y)
-        ny = len(y)
 
         plot_axis = kwargs.get('plot_axis', 0)
+        if isinstance(plot_axis, (list, tuple)):
+            raise TypeError('variable plot_axis must be of type integer')
         if plot_axis < 0:
             plot_axis = list(range(y.ndim))[plot_axis]
         if x.shape[0] != y.shape[plot_axis]:
             if x.shape[0] == 1:
-                x = np.tile(x, (ny, 1))
+                x = np.tile(x, (len(y), 1))
+            elif x.shape[0] == y.shape[plot_axis] + 1:
+                x = ip.interpolate_1d(x)
             else:
                 raise ValueError('Dimension of plotting axis of x-array is not '
                                  'one or equal to dimension of plotting axis '
@@ -123,17 +126,17 @@ class Output:
                     color=kwargs.get('color', 'k'))
         else:
             if y.ndim == 2:
-                var_axis = 1 - plot_axis
-                if var_axis > plot_axis:
+                var_axis = [1 - plot_axis]
+                if var_axis[0] > plot_axis:
                     n_colors = 1
-                    n_linestyles = y.shape[var_axis]
+                    n_linestyles = y.shape[var_axis[0]]
                 else:
-                    n_colors = y.shape[var_axis]
+                    n_colors = y.shape[var_axis[0]]
                     n_linestyles = 1
             elif y.ndim == 3:
-                ax_ids = [i for i in range(y.ndim) if i != plot_axis]
-                n_colors = y.shape[ax_ids[0]]
-                n_linestyles = y.shape[ax_ids[1]]
+                var_axis = [i for i in range(y.ndim) if i != plot_axis]
+                n_colors = y.shape[var_axis[0]]
+                n_linestyles = y.shape[var_axis[1]]
             else:
                 raise ValueError('y-array is limited to three dimensions')
 
@@ -152,19 +155,43 @@ class Output:
             fillstyles = list(islice(cycle(kwargs.get('fillstyle', ['full'])),
                                      n_linestyles))
 
-            for i in range(n_colors):
-                for j in range(n_linestyles):
-                    x_plot = x[i]
-                    raise NotImplementedError('Continue here')
-                    y_plot = np.take(y, i , axis=ax_ids[j])
-                    ax.plot(x[i], np.take(y, i, axis=ax_ids[0]),
-                            marker=markers[0],
-                            markersize=kwargs.get('markersize', MARKER_SIZE),
-                            fillstyle=fillstyles[0],
-                            linewidth=kwargs.get('linewidth', LINE_WIDTH),
-                            linestyle=linestyles[0],
-                            color=colors[i])
-
+            if y.ndim == 2:
+                if n_colors == 1:
+                    for i in range(n_linestyles):
+                        y_plot = np.moveaxis(y, source=var_axis[0],
+                                             destination=0)[i]
+                        ax.plot(x, y_plot,
+                                marker=markers[0],
+                                markersize=kwargs.get('markersize', MARKER_SIZE),
+                                fillstyle=fillstyles[0],
+                                linewidth=kwargs.get('linewidth', LINE_WIDTH),
+                                linestyle=linestyles[i],
+                                color=colors[0])
+                else:
+                    for i in range(n_colors):
+                        y_plot = np.moveaxis(y, source=var_axis[0],
+                                             destination=0)[i]
+                        ax.plot(x, y_plot,
+                                marker=markers[0],
+                                markersize=kwargs.get('markersize', MARKER_SIZE),
+                                fillstyle=fillstyles[0],
+                                linewidth=kwargs.get('linewidth', LINE_WIDTH),
+                                linestyle=linestyles[0],
+                                color=colors[i])
+            elif y.ndim == 3:
+                for i in range(n_colors):
+                    for j in range(n_linestyles):
+                        y_plot = np.moveaxis(y, source=var_axis,
+                                             destination=[0, 1])[i, j, :]
+                        ax.plot(x, y_plot,
+                                marker=markers[0],
+                                markersize=kwargs.get('markersize', MARKER_SIZE),
+                                fillstyle=fillstyles[0],
+                                linewidth=kwargs.get('linewidth', LINE_WIDTH),
+                                linestyle=linestyles[j],
+                                color=colors[i])
+            else:
+                NotImplementedError('y-array are limited to three dimensions')
 
         ax.grid(True)
         ax.use_sticky_edges = False
@@ -503,8 +530,8 @@ class Output:
                     var_array[i] = item.print_data[0][name]['value']
                     # data_dict[item.name + ' ' + str(i)] =
                 x = x_values
-                if var_array.shape[-2] == (len(x_values) - 1):
-                    x = ip.interpolate_1d(x_values)
+                # if var_array.shape[-2] == (len(x_values) - 1):
+                #     x = ip.interpolate_1d(x_values)
                 self.write_data(x, var_array, x_label, name, content['units'],
                                 plot_dir=plot_path, csv_dir=csv_path,
                                 plot_axis=content['plot_axis'], **kwargs)
@@ -523,6 +550,7 @@ class Output:
                     name = sub_name + ' ' + base_name
                     self.write_data(x, var_array, x_label, name,
                                     content['units'], plot_dir=plot_path,
+                                    plot_axis=content['plot_axis'],
                                     csv_dir=csv_path, **kwargs)
 
         # Save cell values

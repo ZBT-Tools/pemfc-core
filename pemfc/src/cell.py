@@ -6,10 +6,10 @@ import math
 # Local modul imports
 from . import matrix_functions as mtx, half_cell as h_c, \
     global_functions as g_func, membrane as membrane, solid_layer as sl
-from .output_object import OutputObject
+from .output_object import OutputObject2D
 
 
-class Cell(OutputObject):
+class Cell(OutputObject2D):
 
     def __init__(self, cell_dict, membrane_dict, half_cell_dicts,
                  channels, number=None):
@@ -202,9 +202,9 @@ class Cell(OutputObject):
 
         # Assign results to output data
         self.add_print_data(self.current_density[self.layer_id['membrane']],
-                            'Current Density', 'A/m²', plot_axis=-2)
+                            'Current Density', 'A/m²')
         self.add_print_data(self.temp_layer, 'Temperature', 'K',
-                            sub_names=self.nx_names[:self.nx], plot_axis=-2)
+                            sub_names=self.nx_names[:self.nx])
 
     @staticmethod
     def create_layer_index_dict(n_layer):

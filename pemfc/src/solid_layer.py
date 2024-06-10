@@ -9,7 +9,7 @@ from . import discretization as dsct
 from typing import Self
 
 
-class SolidLayer(oo.OutputObject):
+class SolidLayer(oo.OutputObject2D):
     """
     Class for describing a basic solid layer as a cuboid (width,
     length, thickness) with physical properties (electrical and thermal

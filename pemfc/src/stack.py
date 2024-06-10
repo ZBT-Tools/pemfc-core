@@ -4,10 +4,10 @@ import numpy as np
 from . import (flow_circuit as flow_circuit, cell as cl, channel as chl,
                linear_system as lin_sys)
 from .fluid import fluid as fluid
-from .output_object import OutputObject
+from .output_object import OutputObject1D
 
 
-class Stack(OutputObject):
+class Stack(OutputObject1D):
 
     def __init__(self, settings, n_nodes, current_control=False):
 

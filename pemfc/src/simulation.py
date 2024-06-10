@@ -165,19 +165,19 @@ class Simulation:
                 if self.output.save_plot:
                     path = os.path.join(self.output.output_dir, case_name,
                                         'plots', 'Convergence.png')
-                    self.output.create_figure(path, list(range(counter)),
-                                              [current_errors, temp_errors],
-                                              xlabels='Iteration',
-                                              ylabels='Error',
-                                              yscale='log',
-                                              legend=['Current Density',
-                                                      'Temperature'])
+                    self.output.create_figure(
+                        path, list(range(counter)),
+                        [current_errors, temp_errors],
+                        xlabels='Iteration', ylabels='Error',
+                        yscale='log', legend=['Current Density', 'Temperature'],
+                        plot_axis=-1)
             else:
                 target_value = target_value[0:-i]
                 break
 
             current_density_avg = np.average(
-                    [np.average(cell.current_density, weights=cell.d_area)
+                    [np.average(np.average(cell.current_density, axis=0),
+                                weights=cell.d_area)
                      for cell in self.stack.cells])
             if self.stack.coolant_circuit is None:
                 cool_mass_flow = 0.0
