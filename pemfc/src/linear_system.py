@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 import numpy as np
+from numpy import linalg
 from scipy import linalg as sp_la
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
@@ -83,6 +84,7 @@ class LinearSystem(ABC):
         Solves for the solution vector.
         """
         if self.sparse_solve:
+            cond_number = np.linalg.cond(self.mtx)
             mtx = sparse.csr_matrix(self.mtx)
             self.solution_vector[:] = spsolve(mtx, self.rhs)
         else:
@@ -204,7 +206,7 @@ class TemperatureSystem(StackLinearSystem):
                 self.cool_ch_bc = True
             else:
                 self.cool_ch_bc = False
-            self.n_cool_sub_channels = stack.coolant_circuit.n_subchannels
+            self.n_cell_cool_channels = stack.coolant_circuit.n_subchannels
 
         # Thermo-neutral cell potential
         self.e_tn = self.cells[0].e_tn
@@ -305,6 +307,7 @@ class TemperatureSystem(StackLinearSystem):
             v_loss[v_loss < 0.0] = 0.0
             reaction_heat = (self.e_tn - self.e_0 + v_loss) * current
             source += reaction_heat
+            source *= 1.0
             mtx_func.add_explicit_layer_source(
                 cell.thermal_rhs_dyn, source, cell.index_array,
                 layer_id=layer_id)
@@ -319,6 +322,7 @@ class TemperatureSystem(StackLinearSystem):
             v_loss[v_loss < 0.0] = 0.0
             reaction_heat = v_loss * current
             source += reaction_heat
+            source *= 1.0
             mtx_func.add_explicit_layer_source(
                 cell.thermal_rhs_dyn, source, cell.index_array,
                 layer_id=layer_id)
@@ -335,31 +339,41 @@ class TemperatureSystem(StackLinearSystem):
                 cell.thermal_rhs_dyn, source, cell.index_array,
                 layer_id=layer_id)
 
-            # Cooling channels
+            # Coolant source coefficients
             if self.cool_flow:
                 if self.cool_ch_bc:
-                    cool_chl = self.cool_channels[i]
+                    cell_cool_channels = [self.cool_channels[i],
+                                          self.cool_channels[i + 1]]
+                    n_gas_channels = [self.n_cat_channels, self.n_ano_channels]
+                    factors = [0.5, 0.5]
+                    if cell.first_cell:
+                        factors[0] += 0.5
+                    if cell.last_cell:
+                        factors[1] += 0.5
+                    layer_ids = [0, -1]
+                else:
+                    cell_cool_channels = [self.cool_channels[i - 1],
+                                          self.cool_channels[i]]
+                    n_gas_channels = [self.n_ano_channels, self.n_cat_channels]
+                    factors = [0.5, 0.5]
+                    layer_ids = [0, -1]
+                    if cell.first_cell:
+                        cell_cool_channels.pop(0)
+                        factors.pop(0)
+                        layer_ids.pop(0)
+                        n_gas_channels.pop(0)
+                    if cell.last_cell:
+                        cell_cool_channels.pop(1)
+                        factors.pop(1)
+                        layer_ids.pop(1)
+                        n_gas_channels.pop(1)
+                for j, cool_chl in enumerate(cell_cool_channels):
                     source = cool_chl.k_coeff * cool_chl.temp_ele
-                    source *= self.n_cool_sub_channels
+                    source *= self.n_cell_cool_channels / n_gas_channels[j]
+                    source *= factors[j]
                     mtx_func.add_explicit_layer_source(
                         cell.thermal_rhs_dyn, source,
-                        cell.index_array, layer_id=0)
-                    if cell.last_cell:
-                        cool_chl = self.cool_channels[i + 1]
-                        source = cool_chl.k_coeff * cool_chl.temp_ele
-                        source *= self.n_cool_sub_channels
-                        mtx_func.add_explicit_layer_source(
-                            cell.thermal_rhs_dyn, source,
-                            cell.index_array, layer_id=-1)
-                else:
-                    if not cell.first_cell:
-                        cool_chl = self.cool_channels[i - 1]
-                        source = cool_chl.k_coeff * cool_chl.temp_ele
-                        source *= self.n_cool_sub_channels
-                        mtx_func.add_explicit_layer_source(
-                            cell.thermal_rhs_dyn, source,
-                            cell.index_array, layer_id=0)
-
+                        cell.index_array, layer_id=layer_ids[j])
         rhs_dyn = np.hstack([cell.thermal_rhs_dyn for cell in self.cells])
         self.rhs[:] = self.rhs_const + rhs_dyn
 
@@ -392,31 +406,41 @@ class TemperatureSystem(StackLinearSystem):
 
             # Add thermal conductance for heat transfer to coolant
             source_vec_3 = np.zeros(source_vec_1.shape)
-            # TODO: implement correct cooling with new discretization
-            raise NotImplementedError('implement correct cooling')
             if self.cool_flow:
                 if self.cool_ch_bc:
-                    source = - self.cool_channels[i].k_coeff
-                    source *= self.n_cool_sub_channels / self.n_cat_channels
-                    matrix, source_vec = mtx_func.add_implicit_layer_source(
-                        cell.thermal_mtx_dyn, source,
-                        cell.index_array, layer_id=0)
-                    source_vec_3[:] = source_vec
+                    cell_cool_channels = [self.cool_channels[i],
+                                          self.cool_channels[i + 1]]
+                    n_gas_channels = [self.n_cat_channels, self.n_ano_channels]
+                    factors = [0.5, 0.5]
+                    if cell.first_cell:
+                        factors[0] += 0.5
                     if cell.last_cell:
-                        source = - self.cool_channels[i + 1].k_coeff
-                        source *= self.n_cool_sub_channels / self.n_ano_channels
-                        matrix, source_vec = mtx_func.add_implicit_layer_source(
-                            cell.thermal_mtx_dyn, source,
-                            cell.index_array, layer_id=-1)
-                        source_vec_3[:] += source_vec
+                        factors[1] += 0.5
+                    layer_ids = [0, -1]
                 else:
-                    if not cell.first_cell:
-                        source = - self.cool_channels[i - 1].k_coeff
-                        source *= self.n_cool_sub_channels / self.n_cat_channels
-                        matrix, source_vec = mtx_func.add_implicit_layer_source(
-                            cell.thermal_mtx_dyn, source,
-                            cell.index_array, layer_id=0)
-                        source_vec_3[:] = source_vec
+                    cell_cool_channels = [self.cool_channels[i - 1],
+                                          self.cool_channels[i]]
+                    n_gas_channels = [self.n_ano_channels, self.n_cat_channels]
+                    factors = [0.5, 0.5]
+                    layer_ids = [0, -1]
+                    if cell.first_cell:
+                        cell_cool_channels.pop(0)
+                        factors.pop(0)
+                        layer_ids.pop(0)
+                        n_gas_channels.pop(0)
+                    if cell.last_cell:
+                        cell_cool_channels.pop(1)
+                        factors.pop(1)
+                        layer_ids.pop(1)
+                        n_gas_channels.pop(1)
+                for j in range(len(cell_cool_channels)):
+                    source = - cell_cool_channels[j].k_coeff
+                    source *= self.n_cell_cool_channels / n_gas_channels[j]
+                    source *= factors[j]
+                    matrix, source_vec = mtx_func.add_implicit_layer_source(
+                        cell.thermal_mtx_dyn, source, cell.index_array,
+                        layer_id=layer_ids[j])
+                    source_vec_3[:] += source_vec
 
             source_vectors[i][:] = source_vec_1 + source_vec_2 + source_vec_3
 

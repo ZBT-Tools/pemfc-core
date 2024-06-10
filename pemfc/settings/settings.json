@@ -1,8 +1,7 @@
 {
     "stack": {
         "cell_number": 1,
-        "heat_power": 0.0,
-        "cool_flow": true,
+        "cool_flow": false,
         "calc_temperature": true,
         "calc_current_density": true
     },
@@ -14,7 +13,7 @@
         "current_control": true,
         "operation_control": "Current",
         "elements": 10,
-        "current_density": 30000.0,
+        "current_density": 20000.0,
         "average_cell_voltage": 0.5,
         "channel_land_discretization": true
     },
@@ -313,7 +312,7 @@
         "name": "Coolant Flow Circuit",
         "type": "VariableResistance",
         "shape": "U",
-        "calc_distribution": true,
+        "calc_distribution": false,
         "tolerance": 1e-07,
         "min_iter": 3,
         "max_iter": 100,
@@ -354,10 +353,10 @@
     "temperature_system": {
         "temp_amb": 293.15,
         "alpha_amb": 10.0,
-        "heat_flux": 0.0,
+        "heat_flux": -500.0,
         "cool_ch_bc": true,
         "cool_ch_numb": 20,
-        "cool_temp_diff": 5.0,
+        "cool_temp_diff": 10.0,
         "cool_mass_flow": null,
         "coolant_control": "Temperature Difference"
     },
