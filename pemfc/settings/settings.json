@@ -1,9 +1,9 @@
 {
     "stack": {
-        "cell_number": 3,
+        "cell_number": 1,
         "heat_power": 0.0,
         "cool_flow": true,
-        "calc_temperature": false,
+        "calc_temperature": true,
         "calc_current_density": true
     },
     "simulation": {
@@ -14,7 +14,7 @@
         "current_control": true,
         "operation_control": "Current",
         "elements": 10,
-        "current_density": 5000.0,
+        "current_density": 30000.0,
         "average_cell_voltage": 0.5,
         "channel_land_discretization": true
     },
@@ -25,7 +25,7 @@
         "thermoneutral_voltage": 1.25
     },
     "membrane": {
-        "type": "YeWang2007",
+        "type": "Constant",
         "underrelaxation_factor": 0.5,
         "thickness": 1.5e-05,
         "ionic_conductivity": 15.0,

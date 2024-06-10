@@ -280,6 +280,7 @@ class Cell(OutputObject2D):
 
         cell_property = [np.asarray(item) for item in cell_property]
 
+        # Channel: index 1, Land: index 0
         if self.channel_land_discretization and modify_values:
             for i in range(len(cell_property)):
                 cell_property[i][[1, -2], :,  1] = 0.0

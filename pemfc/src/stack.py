@@ -17,7 +17,6 @@ class Stack(OutputObject1D):
 
         self.n_cells = stack_dict['cell_number']
         # number of cells of the stack
-        n_ele = n_nodes - 1
         # node points/elements along the x-axis
         self.calc_temp = stack_dict['calc_temperature']
         # switch to calculate the temperature distribution

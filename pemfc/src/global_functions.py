@@ -328,3 +328,10 @@ def calc_mean_squared_error(array1, array2):
     array_diff = array1 - array2
     return np.inner(array_diff, array_diff) / len(array1)
 
+
+def retrieve_dimension(array, axis=0):
+    if array.ndim > 1:
+        return move_axis(array)[axis]
+    else:
+        return array
+
