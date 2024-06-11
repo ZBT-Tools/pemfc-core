@@ -293,7 +293,7 @@ class TemperatureSystem(StackLinearSystem):
             # channel (index 1 of z-direction)
             if cell.channel_land_discretization:
                 source = np.asarray([np.zeros(source.shape), source])
-            mtx_func.add_explicit_layer_source(
+            cell.thermal_rhs_dyn[:], _ = mtx_func.add_explicit_layer_source(
                 cell.thermal_rhs_dyn, source, cell.index_array,
                 layer_id=layer_id)
 
@@ -308,7 +308,7 @@ class TemperatureSystem(StackLinearSystem):
             reaction_heat = (self.e_tn - self.e_0 + v_loss) * current
             source += reaction_heat
             source *= 1.0
-            mtx_func.add_explicit_layer_source(
+            cell.thermal_rhs_dyn[:], _ = mtx_func.add_explicit_layer_source(
                 cell.thermal_rhs_dyn, source, cell.index_array,
                 layer_id=layer_id)
 
@@ -323,7 +323,7 @@ class TemperatureSystem(StackLinearSystem):
             reaction_heat = v_loss * current
             source += reaction_heat
             source *= 1.0
-            mtx_func.add_explicit_layer_source(
+            cell.thermal_rhs_dyn[:], _ = mtx_func.add_explicit_layer_source(
                 cell.thermal_rhs_dyn, source, cell.index_array,
                 layer_id=layer_id)
 
@@ -335,7 +335,7 @@ class TemperatureSystem(StackLinearSystem):
             source += getattr(channel, 'condensation_heat', 0.0)  # * 0.0
             if cell.channel_land_discretization:
                 source = np.asarray([np.zeros(source.shape), source])
-            mtx_func.add_explicit_layer_source(
+            cell.thermal_rhs_dyn[:], _ = mtx_func.add_explicit_layer_source(
                 cell.thermal_rhs_dyn, source, cell.index_array,
                 layer_id=layer_id)
 
@@ -371,9 +371,11 @@ class TemperatureSystem(StackLinearSystem):
                     source = cool_chl.k_coeff * cool_chl.temp_ele
                     source *= self.n_cell_cool_channels / n_gas_channels[j]
                     source *= factors[j]
-                    mtx_func.add_explicit_layer_source(
-                        cell.thermal_rhs_dyn, source,
-                        cell.index_array, layer_id=layer_ids[j])
+                    cell.thermal_rhs_dyn[:], _ = (
+                        mtx_func.add_explicit_layer_source(
+                            cell.thermal_rhs_dyn, source, cell.index_array,
+                            layer_id=layer_ids[j]))
+
         rhs_dyn = np.hstack([cell.thermal_rhs_dyn for cell in self.cells])
         self.rhs[:] = self.rhs_const + rhs_dyn
 
@@ -388,7 +390,7 @@ class TemperatureSystem(StackLinearSystem):
 
             # Add thermal conductance for heat transfer to cathode gas
             layer_id = cell.layer_id['cathode_gde']
-            source = -cell.cathode.channel.k_coeff  # * self.n_cat_channels
+            source = - cell.cathode.channel.k_coeff  # * self.n_cat_channels
             if cell.channel_land_discretization:
                 source = np.asarray([np.zeros(source.shape), source])
             matrix, source_vec_1 = mtx_func.add_implicit_layer_source(
@@ -397,7 +399,7 @@ class TemperatureSystem(StackLinearSystem):
 
             # Add thermal conductance for heat transfer to anode gas
             layer_id = cell.layer_id['anode_gde'] + 1
-            source = -cell.anode.channel.k_coeff  # * self.n_ano_channels
+            source = - cell.anode.channel.k_coeff  # * self.n_ano_channels
             if cell.channel_land_discretization:
                 source = np.asarray([np.zeros(source.shape), source])
             matrix, source_vec_2 = mtx_func.add_implicit_layer_source(
@@ -405,7 +407,7 @@ class TemperatureSystem(StackLinearSystem):
                 layer_id=layer_id)
 
             # Add thermal conductance for heat transfer to coolant
-            source_vec_3 = np.zeros(source_vec_1.shape)
+            source_vec_3 = np.zeros(cell.thermal_rhs_dyn.shape)
             if self.cool_flow:
                 if self.cool_ch_bc:
                     cell_cool_channels = [self.cool_channels[i],
@@ -442,7 +444,10 @@ class TemperatureSystem(StackLinearSystem):
                         layer_id=layer_ids[j])
                     source_vec_3[:] += source_vec
 
-            source_vectors[i][:] = source_vec_1 + source_vec_2 + source_vec_3
+            source_vectors[i][:] = (
+                    source_vec_1
+                    + source_vec_2
+                    + source_vec_3)
 
         dyn_vec = np.hstack(source_vectors)
         # if self.sparse_solve:

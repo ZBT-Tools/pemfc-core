@@ -319,18 +319,20 @@ def create_cell_index_list(shape: tuple[int, ...]):
 
 
 def add_explicit_layer_source(rhs_vector, source_term, index_array,
-                              layer_id=None, replace=False):
-    if layer_id is None:
-        if np.isscalar(source_term):
-            source_vector = np.full_like(rhs_vector, -source_term)
-        else:
-            source_vector = np.asarray(-source_term)
+                              layer_id, replace=False):
+    # if layer_id is None:
+    #     if np.isscalar(source_term):
+    #         source_vector = np.full_like(rhs_vector, -source_term)
+    #     else:
+    #         source_vector = np.asarray(-source_term)
+    # else:
+    if replace is True:
+        source_vector = np.copy(rhs_vector)
+        np.put(source_vector, index_array[layer_id], -source_term)
+        rhs_vector = source_vector
     else:
         source_vector = np.zeros(rhs_vector.shape)
         np.put(source_vector, index_array[layer_id], -source_term)
-    if replace is True:
-        rhs_vector = source_vector
-    else:
         rhs_vector += source_vector
     return rhs_vector, source_vector
 
@@ -351,3 +353,19 @@ def add_implicit_layer_source(matrix, coefficients, index_array,
     else:
         matrix += np.diag(source_vector)
     return matrix, source_vector
+
+
+def set_implicit_layer_fixed(matrix, index_array, layer_id):
+    row_length = matrix.shape[0]
+    for row_id in index_array[layer_id]:
+        row = np.zeros(row_length)
+        row[row_id] = 1.0
+        matrix[row_id] = row
+    return matrix
+
+
+def set_single_unit_entry(matrix, index):
+    row = np.zeros(matrix.shape[0])
+    row[index] = 1.0
+    matrix[index, :] = row
+    return matrix

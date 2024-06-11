@@ -100,7 +100,7 @@ class Output:
         return ax
 
     def plot_lines(self, ax, x, y, colormap=None, **kwargs):
-        x = np.asarray(x)
+        x = np.asarray(g_func.ensure_list(x))
         y = np.asarray(y)
 
         plot_axis = kwargs.get('plot_axis', 0)
@@ -150,7 +150,8 @@ class Output:
 
             linestyles = list(islice(cycle(kwargs.get(
                 'linestyle', ['-', ':', '--', '-.'])), n_linestyles))
-            markers = list(islice(cycle(kwargs.get('marker', ['.'])),
+            markers = list(islice(cycle(kwargs.get('marker',
+                                                   ['o', 'x', 'D', 's'])),
                                   n_linestyles))
             fillstyles = list(islice(cycle(kwargs.get('fillstyle', ['full'])),
                                      n_linestyles))
@@ -161,7 +162,7 @@ class Output:
                         y_plot = np.moveaxis(y, source=var_axis[0],
                                              destination=0)[i]
                         ax.plot(x, y_plot,
-                                marker=markers[0],
+                                marker=markers[i],
                                 markersize=kwargs.get('markersize', MARKER_SIZE),
                                 fillstyle=fillstyles[0],
                                 linewidth=kwargs.get('linewidth', LINE_WIDTH),
@@ -184,7 +185,7 @@ class Output:
                         y_plot = np.moveaxis(y, source=var_axis,
                                              destination=[0, 1])[i, j, :]
                         ax.plot(x, y_plot,
-                                marker=markers[0],
+                                marker=markers[j],
                                 markersize=kwargs.get('markersize', MARKER_SIZE),
                                 fillstyle=fillstyles[0],
                                 linewidth=kwargs.get('linewidth', LINE_WIDTH),

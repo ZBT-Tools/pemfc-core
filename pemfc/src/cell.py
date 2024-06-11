@@ -102,9 +102,9 @@ class Cell(OutputObject2D):
         self.thermal_mtx_const = mtx.build_cell_conductance_matrix(
                 [self.thermal_conductance[0],
                  sl.SolidLayer.calc_inter_node_conductance(
-                    self.thermal_conductance[1], axis=1),
+                    self.thermal_conductance[1], axis=1) * 1.0,
                  sl.SolidLayer.calc_inter_node_conductance(
-                    self.thermal_conductance[2], axis=2)])
+                    self.thermal_conductance[2], axis=2) * 1.0])
 
         # self.heat_mtx_const = np.zeros(self.heat_cond_mtx.shape)
         self.thermal_mtx_dyn = np.zeros(self.thermal_mtx_const.shape)
@@ -114,17 +114,11 @@ class Cell(OutputObject2D):
         self.thermal_rhs_dyn = np.zeros(self.thermal_rhs_const.shape)
         self.thermal_rhs = np.zeros(self.thermal_rhs_dyn.shape)
 
-        # Set constant thermal boundary conditions
+        # Set thermal boundary conditions at end plates
         if self.first_cell:
-            end_plate_heat = cell_dict['heat_flux']
-            thermal_bc = end_plate_heat * self.cathode.discretization.d_area
-            mtx.add_explicit_layer_source(self.thermal_rhs_const, thermal_bc,
-                                          self.index_array, 0)
+            self.set_layer_boundary_conditions(layer_id=0)
         if self.last_cell:
-            end_plate_heat = cell_dict['heat_flux']
-            thermal_bc = end_plate_heat * self.anode.discretization.d_area
-            mtx.add_explicit_layer_source(self.thermal_rhs_const, thermal_bc,
-                                          self.index_array, -1)
+            self.set_layer_boundary_conditions(layer_id=-1)
 
         # Create electric conductance matrix.
         # For new update, matrix setup will be analogous to thermal matrix by
@@ -146,10 +140,6 @@ class Cell(OutputObject2D):
                  sl.SolidLayer.calc_inter_node_conductance(
                     self.electrical_conductance[2], axis=2)])
 
-        # test = mtx.build_cell_conductance_matrix(
-        #     [self.electrical_conductance[0],
-        #      0.0,
-        #      0.0])
         # Combine both (heat and electrical) conductance matrices in a unified
         # dictionary
         self.mtx_const = {'thermal': self.thermal_mtx_const,
@@ -254,6 +244,24 @@ class Cell(OutputObject2D):
         conductance = [conductance_x, conductance_y, conductance_z]
         return self.stack_cell_property(conductance, exp=(-1.0, 1.0, 1.0),
                                         stacking_axis=0, modify_values=True)
+
+    def set_layer_boundary_conditions(self, layer_id):
+        if 'flux_endplate' in self.cell_dict:
+            flux_endplate = self.cell_dict['flux_endplate']
+            source = flux_endplate * self.cathode.discretization.d_area
+            mtx.add_explicit_layer_source(self.thermal_rhs_const, source,
+                                          self.index_array, layer_id)
+
+        elif 'temp_endplate' in self.cell_dict:
+            mtx.set_implicit_layer_fixed(self.thermal_mtx_const,
+                                         self.index_array, layer_id)
+            source = self.cell_dict['temp_endplate']
+            self.thermal_rhs_const[:], _ = mtx.add_explicit_layer_source(
+                self.thermal_rhs_const, -source, self.index_array, layer_id,
+                replace=True)
+        else:
+            raise KeyError('either values for "flux_endplate" or '
+                           '"temp_endplate" must be provided')
 
     def stack_cell_property(self, cell_property: list, stacking_axis, exp: tuple,
                             modify_values=False, shift_along_axis=(False, True, True)):

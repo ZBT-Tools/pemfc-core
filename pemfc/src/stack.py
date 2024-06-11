@@ -73,23 +73,29 @@ class Stack(OutputObject1D):
 
         # Initialize fuel cells
         self.cells = []
-        endplate_heat_flux = temperature_dict['heat_flux']
+        if temperature_dict.get('bc_endplate') == 'fixed':
+            try:
+                cell_dict['temp_endplate'] = temperature_dict['temp_endplate']
+            except KeyError:
+                raise KeyError('value for "temp_endplate" must be provided, '
+                               'when using "fixed" end-plate boundary '
+                               'conditions')
+        else:
+            cell_dict['flux_endplate'] = temperature_dict['flux_endplate']
+
         for i in range(self.n_cells):
             if self.n_cells == 1:
                 cell_dict['first_cell'] = True
                 cell_dict['last_cell'] = True
-                cell_dict['heat_flux'] = endplate_heat_flux
             elif i == 0:
                 cell_dict['first_cell'] = True
                 cell_dict['last_cell'] = False
-                cell_dict['heat_flux'] = endplate_heat_flux
             elif i == self.n_cells-1:
                 cell_dict['first_cell'] = False
                 cell_dict['last_cell'] = True
             else:
                 cell_dict['first_cell'] = False
                 cell_dict['last_cell'] = False
-                cell_dict['heat_flux'] = endplate_heat_flux
 
             cell_channels = [channels[0][i], channels[1][i]]
             # Cell constructor
