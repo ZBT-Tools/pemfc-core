@@ -35,11 +35,12 @@ class ElectrochemistryModel(ABC):
         # channel-land-discretization with channel located at index 1 and
         # land located at index 0
         self.diff_coeff_gdl_by_length = self.diff_coeff_gdl / self.th_gdl
-        if shape[-1] == 2:
-            self.diff_coeff_gdl_by_length[:, 0] = (
-                1.0 / (self.th_gdl + discretization.dx[-1, :, 0] /
-                       self.diff_coeff_gdl[:, 0])
-            )
+        # TODO: Test discretization in electrochemistry
+        # if shape[-1] == 2:
+        #     self.diff_coeff_gdl_by_length[:, 0] = (
+        #         1.0 / (self.th_gdl + discretization.dx[-1, :, 0] /
+        #                self.diff_coeff_gdl[:, 0])
+        #     )
         # Tafel slope of the electrode
         self.tafel_slope = input_dict['tafel_slope']
 

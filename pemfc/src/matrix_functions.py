@@ -319,39 +319,54 @@ def create_cell_index_list(shape: tuple[int, ...]):
 
 
 def add_explicit_layer_source(rhs_vector, source_term, index_array,
-                              layer_id, replace=False):
-    # if layer_id is None:
-    #     if np.isscalar(source_term):
-    #         source_vector = np.full_like(rhs_vector, -source_term)
-    #     else:
-    #         source_vector = np.asarray(-source_term)
-    # else:
-    if replace is True:
-        source_vector = np.copy(rhs_vector)
-        np.put(source_vector, index_array[layer_id], -source_term)
-        rhs_vector = source_vector
+                              layer_id=None, replace=False):
+    if isinstance(source_term, np.ndarray):
+        if rhs_vector.ndim != source_term.ndim:
+            raise ValueError('source_term must have same dimensions as '
+                             'rhs_vector')
+    if layer_id is None:
+        if np.isscalar(source_term):
+            source_vector = np.full_like(rhs_vector, -source_term)
+        else:
+            source_vector = np.asarray(-source_term)
     else:
-        source_vector = np.zeros(rhs_vector.shape)
-        np.put(source_vector, index_array[layer_id], -source_term)
+        if replace is True:
+            source_vector = np.copy(rhs_vector)
+            np.put(source_vector, index_array[layer_id], -source_term)
+        else:
+            source_vector = np.zeros(rhs_vector.shape)
+            np.put(source_vector, index_array[layer_id], -source_term)
+    if replace is True:
+        rhs_vector[:] = source_vector
+    else:
         rhs_vector += source_vector
     return rhs_vector, source_vector
 
 
 def add_implicit_layer_source(matrix, coefficients, index_array,
                               layer_id=None, replace=False):
-    matrix_size = matrix.shape[0]
-    if layer_id is None:
-        if np.isscalar(coefficients):
-            source_vector = g_func.full(matrix_size, coefficients)
-        else:
-            source_vector = np.asarray(coefficients)
-    else:
-        source_vector = np.zeros(matrix_size)
-        np.put(source_vector, index_array[layer_id], coefficients)
-    if replace is True:
-        matrix = np.diag(source_vector)
-    else:
-        matrix += np.diag(source_vector)
+    # matrix_size = matrix.shape[0]
+    diag_vector = np.diagonal(matrix).copy()
+    # if layer_id is None:
+    #     if np.isscalar(coefficients):
+    #         source_vector = np.full_like(diag_vector, coefficients)
+    #     else:
+    #         source_vector = np.asarray(coefficients)
+    # else:
+    #     if replace is True:
+    #         source_vector = np.copy(diag_vector)
+    #         np.put(source_vector, index_array[layer_id], coefficients)
+    #     else:
+    #         source_vector = np.zeros(matrix_size)
+    #         np.put(source_vector, index_array[layer_id], coefficients)
+    # if replace is True:
+    #     diag_vector = source_vector
+    # else:
+    #     diag_vector += source_vector
+    new_diag_vector, source_vector = add_explicit_layer_source(
+        diag_vector, -coefficients.flatten(order='F'), index_array,
+        layer_id=layer_id, replace=replace)
+    np.fill_diagonal(matrix, new_diag_vector)
     return matrix, source_vector
 
 

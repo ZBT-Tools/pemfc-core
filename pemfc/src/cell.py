@@ -136,9 +136,9 @@ class Cell(OutputObject2D):
             mtx.build_cell_conductance_matrix(
                 [self.electrical_conductance[0],
                  sl.SolidLayer.calc_inter_node_conductance(
-                    self.electrical_conductance[1], axis=1),
+                    self.electrical_conductance[1], axis=1) * 1.0,
                  sl.SolidLayer.calc_inter_node_conductance(
-                    self.electrical_conductance[2], axis=2)])
+                    self.electrical_conductance[2], axis=2) * 1.0])
 
         # Combine both (heat and electrical) conductance matrices in a unified
         # dictionary
@@ -190,11 +190,14 @@ class Cell(OutputObject2D):
         # Voltage loss over the single cell stack (bpp-to-bpp)
         self.voltage_loss = np.zeros(self.electrochemical_conductance.shape)
 
+        self.voltage = np.zeros(self.electrochemical_conductance.shape)
+
         # Assign results to output data
         self.add_print_data(self.current_density[self.layer_id['membrane']],
                             'Current Density', 'A/m²')
         self.add_print_data(self.temp_layer, 'Temperature', 'K',
                             sub_names=self.nx_names[:self.nx])
+        self.add_print_data(self.voltage, 'Voltage', 'K')
 
     @staticmethod
     def create_layer_index_dict(n_layer):
@@ -249,8 +252,9 @@ class Cell(OutputObject2D):
         if 'flux_endplate' in self.cell_dict:
             flux_endplate = self.cell_dict['flux_endplate']
             source = flux_endplate * self.cathode.discretization.d_area
-            mtx.add_explicit_layer_source(self.thermal_rhs_const, source,
-                                          self.index_array, layer_id)
+            mtx.add_explicit_layer_source(
+                self.thermal_rhs_const, source.flatten(order='F'),
+                self.index_array, layer_id)
 
         elif 'temp_endplate' in self.cell_dict:
             mtx.set_implicit_layer_fixed(self.thermal_mtx_const,
@@ -288,10 +292,11 @@ class Cell(OutputObject2D):
 
         cell_property = [np.asarray(item) for item in cell_property]
 
-        # Channel: index 1, Land: index 0
-        if self.channel_land_discretization and modify_values:
-            for i in range(len(cell_property)):
-                cell_property[i][[1, -2], :,  1] = 0.0
+        # # Channel: index 1, Land: index 0
+        # TODO: Test discretization in conductance
+        # if self.channel_land_discretization and modify_values:
+        #     for i in range(len(cell_property)):
+        #         cell_property[i][[1, -2], :,  1] = 0.0
 
         for i in range(len(cell_property)):
             if shift_along_axis[i]:
@@ -380,6 +385,7 @@ class Cell(OutputObject2D):
                 # raise ValueError('voltage losses greater than '
                 #                  'open circuit voltage')
             self.current_density[:] = current_density
+            self.voltage[:] = self.e_0 - self.voltage_loss
 
     def calc_voltage_loss(self):
         """
