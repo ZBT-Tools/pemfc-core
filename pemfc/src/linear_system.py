@@ -241,7 +241,7 @@ class TemperatureSystem(StackLinearSystem):
             self.update_coolant_channel()
         self.update_gas_channel()
 
-        self.update_and_solve_linear_system(gas_transfer=True,
+        self.update_and_solve_linear_system(gas_transfer=False,
                                             electrochemical_heat=True)
         A = self.mtx
         b = self.rhs
@@ -269,9 +269,9 @@ class TemperatureSystem(StackLinearSystem):
                 channel = cell.cathode.channel
                 source = - channel.k_coeff  # * self.n_cat_channels
 
-                # k_test = np.copy(channel.k_coeff)
-                # k_test[:] = 0.5  # channel.k_coeff[0]
-                # source = - k_test
+                k_test = np.copy(channel.k_coeff)
+                k_test[:] = 0.5  # channel.k_coeff[0]
+                source = - k_test
 
                 # if cell.channel_land_discretization:
                 #     source = np.asarray([np.zeros(source.shape), source])
@@ -286,10 +286,10 @@ class TemperatureSystem(StackLinearSystem):
                 channel = cell.anode.channel
                 source = - channel.k_coeff  # * self.n_ano_channels
 
-                # k_test = np.copy(channel.k_coeff)
-                # # k_test[:] = 0.5  # channel.k_coeff[0]
-                # # k_test[:] += np.linspace(0, 0.1, k_test.shape[0])
-                # source = - k_test
+                k_test = np.copy(channel.k_coeff)
+                k_test[:] = 0.5  # channel.k_coeff[0]
+                # k_test[:] += np.linspace(0, 0.1, k_test.shape[0])
+                source = - k_test
 
                 # if cell.channel_land_discretization:
                 #     source = np.asarray([np.zeros(source.shape), source])
@@ -332,6 +332,7 @@ class TemperatureSystem(StackLinearSystem):
                     source = - cell_cool_channels[j].k_coeff
                     source *= self.n_cell_cool_channels / n_gas_channels[j]
                     source *= factors[j]
+                    source /= cell.thermal_conductance[0].shape[-1]
                     matrix, source_vec = mtx_func.add_implicit_layer_source(
                         cell.thermal_mtx_dyn, source, cell.index_array,
                         layer_id=layer_ids[j])
@@ -363,11 +364,11 @@ class TemperatureSystem(StackLinearSystem):
                 channel = cell.cathode.channel
                 source = channel.k_coeff * channel.temp_ele  # * self.n_cat_channels
 
-                # temp_test = np.copy(channel.temp_ele)
-                # temp_test[:] = 343.15  # channel.temp_ele[0] + 100.0
-                # k_test = np.copy(channel.k_coeff)
-                # # k_test[:] = 0.5  # channel.k_coeff[0]
-                # source = k_test * temp_test
+                temp_test = np.copy(channel.temp_ele)
+                temp_test[:] = 343.15  # channel.temp_ele[0] + 100.0
+                k_test = np.copy(channel.k_coeff)
+                k_test[:] = 0.5  # channel.k_coeff[0]
+                source = k_test * temp_test
 
                 source += getattr(channel, 'condensation_heat', 0.0)
 
@@ -386,12 +387,12 @@ class TemperatureSystem(StackLinearSystem):
                 channel = cell.anode.channel
                 source = channel.k_coeff * channel.temp_ele  # * self.n_ano_channels
 
-                # temp_test = np.copy(channel.temp_ele)
-                # temp_test[:] = 343.15  # channel.temp_ele[0] + 100.0
-                # k_test = np.copy(channel.k_coeff)
-                # # k_test[:] = 0.5  # channel.k_coeff[0]
-                # # k_test[:] += np.linspace(0, 0.1, k_test.shape[0])
-                # source = k_test * temp_test
+                temp_test = np.copy(channel.temp_ele)
+                temp_test[:] = 343.15  # channel.temp_ele[0] + 100.0
+                k_test = np.copy(channel.k_coeff)
+                k_test[:] = 0.5  # channel.k_coeff[0]
+                # k_test[:] += np.linspace(0, 0.1, k_test.shape[0])
+                source = k_test * temp_test
 
                 source += getattr(channel, 'condensation_heat', 0.0)  # * 0.0
 
@@ -482,6 +483,7 @@ class TemperatureSystem(StackLinearSystem):
                 for j, cool_chl in enumerate(cell_cool_channels):
                     source = cool_chl.k_coeff * cool_chl.temp_ele
                     source *= self.n_cell_cool_channels / n_gas_channels[j]
+                    source /= cell.thermal_conductance[0].shape[-1]
                     source *= factors[j]
                     cell.thermal_rhs_dyn[:], _ = (
                         mtx_func.add_explicit_layer_source(

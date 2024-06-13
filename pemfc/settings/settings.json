@@ -8,11 +8,11 @@
     "simulation": {
         "maximum_iteration": 500,
         "minimum_iteration": 3,
-        "convergence_criteria": 1e-07,
+        "convergence_criteria": 1e-09,
         "underrelaxation_factor": 0.5,
         "current_control": true,
         "operation_control": "Current",
-        "elements": 1,
+        "elements": 10,
         "current_density": 30000.0,
         "average_cell_voltage": 0.5,
         "channel_land_discretization": false
