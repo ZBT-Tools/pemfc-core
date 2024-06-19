@@ -102,9 +102,9 @@ class Cell(OutputObject2D):
         self.thermal_mtx_const = mtx.build_cell_conductance_matrix(
                 [self.thermal_conductance[0],
                  sl.SolidLayer.calc_inter_node_conductance(
-                    self.thermal_conductance[1], axis=1) * 1.0,
+                    self.thermal_conductance[1], axis=1) * 0.0,
                  sl.SolidLayer.calc_inter_node_conductance(
-                    self.thermal_conductance[2], axis=2) * 1.0])
+                    self.thermal_conductance[2], axis=2) * 0.0])
 
         # self.heat_mtx_const = np.zeros(self.heat_cond_mtx.shape)
         self.thermal_mtx_dyn = np.zeros(self.thermal_mtx_const.shape)
@@ -136,9 +136,9 @@ class Cell(OutputObject2D):
             mtx.build_cell_conductance_matrix(
                 [self.electrical_conductance[0],
                  sl.SolidLayer.calc_inter_node_conductance(
-                    self.electrical_conductance[1], axis=1) * 1.0,
+                    self.electrical_conductance[1], axis=1) * 0.0,
                  sl.SolidLayer.calc_inter_node_conductance(
-                    self.electrical_conductance[2], axis=2) * 1.0])
+                    self.electrical_conductance[2], axis=2) * 0.0])
 
         # Combine both (heat and electrical) conductance matrices in a unified
         # dictionary
@@ -272,7 +272,8 @@ class Cell(OutputObject2D):
 
         # Split bipolar plate in two elements among x-direction if
         # channel-land-discretization is applied
-        if self.channel_land_discretization:
+        # if self.channel_land_discretization:
+        if True:
             cat_bpp_split_ratio = (
                     self.cathode.channel.height / self.cathode.bpp.thickness)
             ano_bpp_split_ratio = (

@@ -15,7 +15,7 @@
         "elements": 10,
         "current_density": 30000.0,
         "average_cell_voltage": 0.5,
-        "channel_land_discretization": false
+        "channel_land_discretization": true
     },
     "cell": {
         "width": 0.1,

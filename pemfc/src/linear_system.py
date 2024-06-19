@@ -157,7 +157,8 @@ class StackLinearSystem(LinearSystem, ABC):
     def update_cell_solution_general(self, cell_solution_name: str,
                                      cell_shape_name: str):
         """
-        Transfer the general solution vector (1D) into the single cell solution arrays (3D)
+        Transfer the general solution vector (1D) into the
+        single cell solution arrays (3D)
         """
 
         cell_solution_vectors = np.array_split(self.solution_vector,
@@ -257,6 +258,7 @@ class TemperatureSystem(StackLinearSystem):
         """
         Updates matrix coefficients, add implicit sources here.
         """
+
         gas_transfer = kwargs.get('gas_transfer', True)
         source_vectors = []
         for i, cell in enumerate(self.cells):
@@ -275,6 +277,7 @@ class TemperatureSystem(StackLinearSystem):
 
                 # if cell.channel_land_discretization:
                 #     source = np.asarray([np.zeros(source.shape), source])
+                source /= cell.thermal_conductance[0].shape[-1]
 
                 matrix, source_vec_1 = mtx_func.add_implicit_layer_source(
                     cell.thermal_mtx_dyn, source, cell.index_array,
@@ -293,6 +296,7 @@ class TemperatureSystem(StackLinearSystem):
 
                 # if cell.channel_land_discretization:
                 #     source = np.asarray([np.zeros(source.shape), source])
+                source /= cell.thermal_conductance[0].shape[-1]
 
                 matrix, source_vec_2 = mtx_func.add_implicit_layer_source(
                     cell.thermal_mtx_dyn, source, cell.index_array,
@@ -364,11 +368,11 @@ class TemperatureSystem(StackLinearSystem):
                 channel = cell.cathode.channel
                 source = channel.k_coeff * channel.temp_ele  # * self.n_cat_channels
 
-                # temp_test = np.copy(channel.temp_ele)
-                # temp_test[:] = 343.15  # channel.temp_ele[0] + 100.0
-                # k_test = np.copy(channel.k_coeff)
+                temp_test = np.copy(channel.temp_ele)
+                temp_test[:] = 343.15  # channel.temp_ele[0] + 100.0
+                k_test = np.copy(channel.k_coeff)
                 # k_test[:] = 0.5  # channel.k_coeff[0]
-                # source = k_test * temp_test
+                source = k_test * temp_test
 
                 source += getattr(channel, 'condensation_heat', 0.0)
 
@@ -376,6 +380,7 @@ class TemperatureSystem(StackLinearSystem):
                 # channel (index 1 of z-direction)
                 # if cell.channel_land_discretization:
                 #     source = np.asarray([np.zeros(source.shape), source])
+                source /= cell.thermal_conductance[0].shape[-1]
 
                 cell.thermal_rhs_dyn[:], _ = mtx_func.add_explicit_layer_source(
                     cell.thermal_rhs_dyn, source.flatten(order='F'),
@@ -387,17 +392,18 @@ class TemperatureSystem(StackLinearSystem):
                 channel = cell.anode.channel
                 source = channel.k_coeff * channel.temp_ele  # * self.n_ano_channels
 
-                # temp_test = np.copy(channel.temp_ele)
-                # temp_test[:] = 343.15  # channel.temp_ele[0] + 100.0
-                # k_test = np.copy(channel.k_coeff)
+                temp_test = np.copy(channel.temp_ele)
+                temp_test[:] = 343.15  # channel.temp_ele[0] + 100.0
+                k_test = np.copy(channel.k_coeff)
                 # k_test[:] = 0.5  # channel.k_coeff[0]
-                # # k_test[:] += np.linspace(0, 0.1, k_test.shape[0])
-                # source = k_test * temp_test
+                # k_test[:] += np.linspace(0, 0.1, k_test.shape[0])
+                source = k_test * temp_test
 
                 source += getattr(channel, 'condensation_heat', 0.0)  # * 0.0
 
                 # if cell.channel_land_discretization:
                 #     source = np.asarray([np.zeros(source.shape), source])
+                source /= cell.thermal_conductance[0].shape[-1]
 
                 cell.thermal_rhs_dyn[:], _ = mtx_func.add_explicit_layer_source(
                     cell.thermal_rhs_dyn, source.flatten(order='F'),
@@ -412,44 +418,44 @@ class TemperatureSystem(StackLinearSystem):
                     0.5 * cell.membrane.omega * np.square(current)
                 source = cathode_ohmic_heat_membrane
 
-                # test_current = np.copy(current)
-                # test_current[:] = 0.5
-                # test_omega = np.copy(cell.membrane.omega)
-                # test_omega[:] = test_omega[0]
-                # test_ohmic_heat = 0.5 * test_omega * np.square(test_current)
-                # source = test_ohmic_heat
+                test_current = np.copy(current)
+                test_current[:] = 10.0
+                test_omega = np.copy(cell.membrane.omega)
+                test_omega[:] = test_omega[0]
+                test_ohmic_heat = 0.5 * test_omega * np.square(test_current)
+                source = np.copy(test_ohmic_heat)
 
                 v_loss = np.minimum(self.e_0, cell.cathode.voltage_loss)
                 v_loss[v_loss < 0.0] = 0.0
                 reaction_heat = (self.e_tn - self.e_0 + v_loss) * current
                 # reaction_heat_sum = np.sum(reaction_heat)
 
-                # test_v_loss = np.copy(v_loss)
-                # test_v_loss[:] = 0.3
-                # test_reaction_heat = (
-                #         (self.e_tn - self.e_0 + test_v_loss) * current)
-                # test_reaction_heat_sum = np.sum(test_reaction_heat)
+                test_v_loss = np.copy(v_loss)
+                test_v_loss[:] = 0.3
+                test_reaction_heat = (
+                        (self.e_tn - self.e_0 + test_v_loss) * test_current)
+                test_reaction_heat_sum = np.sum(test_reaction_heat)
 
-                source += reaction_heat
+                source += test_reaction_heat
                 # source *= 1.0
                 cell.thermal_rhs_dyn[:], _ = mtx_func.add_explicit_layer_source(
                     cell.thermal_rhs_dyn, source.flatten(order='F'),
                     cell.index_array, layer_id=layer_id)
 
-                # Anode gde-mem source
-                layer_id = cell.layer_id['anode_gde']
-                current = (cell.current_density[layer_id] * cell.d_area)
-                anode_ohmic_heat_membrane = (
-                        0.5 * cell.membrane.omega * np.square(current))
-                source = anode_ohmic_heat_membrane
-                v_loss = np.minimum(self.e_0, cell.anode.voltage_loss)
-                v_loss[v_loss < 0.0] = 0.0
-                reaction_heat = v_loss * current
-                source += reaction_heat
-                source *= 1.0
-                cell.thermal_rhs_dyn[:], _ = mtx_func.add_explicit_layer_source(
-                    cell.thermal_rhs_dyn, source.flatten(order='F'),
-                    cell.index_array, layer_id=layer_id)
+                # # Anode gde-mem source
+                # layer_id = cell.layer_id['anode_gde']
+                # current = (cell.current_density[layer_id] * cell.d_area)
+                # anode_ohmic_heat_membrane = (
+                #         0.5 * cell.membrane.omega * np.square(current))
+                # source = anode_ohmic_heat_membrane
+                # v_loss = np.minimum(self.e_0, cell.anode.voltage_loss)
+                # v_loss[v_loss < 0.0] = 0.0
+                # reaction_heat = v_loss * current
+                # source += reaction_heat
+                # source *= 1.0
+                # cell.thermal_rhs_dyn[:], _ = mtx_func.add_explicit_layer_source(
+                #     cell.thermal_rhs_dyn, source.flatten(order='F'),
+                #     cell.index_array, layer_id=layer_id)
 
             # Coolant source coefficients
             # TODO: Cool flow is not consistent for channel_discretization
