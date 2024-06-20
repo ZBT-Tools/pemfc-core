@@ -1,9 +1,10 @@
 import string
 import weakref
 from copy import deepcopy
+from abc import ABC, abstractmethod
 
 
-class OutputObject:
+class OutputObject(ABC):
 
     # PRINT_HIERARCHY = 3
     # CLUSTER_NAMES = [['Cell', 'Flow Circuit']]
@@ -79,20 +80,24 @@ class OutputObject:
         self._instances.add(weakref.ref(copy))
         return copy
 
-    def add_print_data(self, data_array, name, units='-', sub_names=None,
-                       multi_data=False):
+    @abstractmethod
+    def add_print_data(self, data_array, name, units, sub_names=None,
+                       multi_data=False, **kwargs):
+        plot_axis = kwargs['plot_axis']
         if sub_names is not None or multi_data:
             if sub_names is None:
                 sub_names = [str(i+1) for i in range(len(data_array))]
             self.multi_print_data[name] = \
                 {sub_names[i]:
-                 {'value': data_array[i], 'units': str(units), 'save': True}
+                 {'value': data_array[i], 'units': str(units),
+                  'plot_axis': plot_axis, 'save': True}
                  for i in range(len(sub_names))}
         else:
             self.single_print_data[name] = \
-                {'value': data_array, 'units': str(units), 'save': True}
+                {'value': data_array, 'units': str(units),
+                 'plot_axis': plot_axis, 'save': True}
 
-    def add_print_variables(self, print_variables):
+    def add_print_variables(self, print_variables, **kwargs):
         for i, name in enumerate(print_variables['names']):
             attr = eval('self.' + name)
             description = string.capwords(name.replace('_', ' '))
@@ -100,8 +105,8 @@ class OutputObject:
             sub_names = print_variables.get('sub_names', None)
             if sub_names is not None:
                 sub_names = eval(sub_names[i])
-            self.add_print_data(attr, description, units=units,
-                                sub_names=sub_names)
+            self.add_print_data(attr, description, units,
+                                sub_names=sub_names, **kwargs)
 
     @staticmethod
     def combine_print_variables(dict_a, dict_b):
@@ -122,4 +127,23 @@ class OutputObject:
     # def cluster_objects(cls):
     #     cluster = []
 
+
+class OutputObject1D(OutputObject):
+    def __init__(self, name, **kwargs):
+        super().__init__(name, **kwargs)
+
+    def add_print_data(self, data_array, name, units, sub_names=None,
+                       multi_data=False, **kwargs):
+        super().add_print_data(data_array, name, units, sub_names=sub_names,
+                               multi_data=multi_data, plot_axis=-1, **kwargs)
+
+
+class OutputObject2D(OutputObject):
+    def __init__(self, name, **kwargs):
+        super().__init__(name, **kwargs)
+
+    def add_print_data(self, data_array, name, units, sub_names=None,
+                       multi_data=False, **kwargs):
+        super().add_print_data(data_array, name, units, sub_names=sub_names,
+                               multi_data=multi_data, plot_axis=-2, **kwargs)
 

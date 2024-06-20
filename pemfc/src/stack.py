@@ -1,26 +1,22 @@
-# general imports
+# General imports
 import numpy as np
-
-# local module imports
-from . import electrical_coupling as el_cpl, flow_circuit as flow_circuit, \
-    cell as cl, temperature_system as therm_cpl, channel as chl
+# Local module imports
+from . import (flow_circuit as flow_circuit, cell as cl, channel as chl,
+               linear_system as lin_sys)
 from .fluid import fluid as fluid
-# from data import input_dicts
-# from ..gui import data_transfer
-
-# gui_data = True
+from .output_object import OutputObject1D
 
 
-class Stack:
+class Stack(OutputObject1D):
 
     def __init__(self, settings, n_nodes, current_control=False):
 
+        super().__init__('Stack')
         # Read settings dictionaries
         stack_dict = settings['stack']
 
         self.n_cells = stack_dict['cell_number']
         # number of cells of the stack
-        n_ele = n_nodes - 1
         # node points/elements along the x-axis
         self.calc_temp = stack_dict['calc_temperature']
         # switch to calculate the temperature distribution
@@ -77,23 +73,29 @@ class Stack:
 
         # Initialize fuel cells
         self.cells = []
-        endplate_heat_flux = temperature_dict['heat_flux']
+        if temperature_dict.get('bc_endplate') == 'fixed':
+            try:
+                cell_dict['temp_endplate'] = temperature_dict['temp_endplate']
+            except KeyError:
+                raise KeyError('value for "temp_endplate" must be provided, '
+                               'when using "fixed" end-plate boundary '
+                               'conditions')
+        else:
+            cell_dict['flux_endplate'] = temperature_dict['flux_endplate']
+
         for i in range(self.n_cells):
             if self.n_cells == 1:
                 cell_dict['first_cell'] = True
                 cell_dict['last_cell'] = True
-                cell_dict['heat_flux'] = endplate_heat_flux
             elif i == 0:
                 cell_dict['first_cell'] = True
                 cell_dict['last_cell'] = False
-                cell_dict['heat_flux'] = endplate_heat_flux
             elif i == self.n_cells-1:
                 cell_dict['first_cell'] = False
                 cell_dict['last_cell'] = True
             else:
                 cell_dict['first_cell'] = False
                 cell_dict['last_cell'] = False
-                cell_dict['heat_flux'] = endplate_heat_flux
 
             cell_channels = [channels[0][i], channels[1][i]]
             # Cell constructor
@@ -201,21 +203,22 @@ class Stack:
 
         self.current_control = current_control
 
-        i_cd_target = np.asarray(stack_dict['init_current_density'])
-        if i_cd_target.ndim > 0:
-            self.i_cd_target = i_cd_target[0]
+        current_density_target = np.asarray(stack_dict['init_current_density'])
+        if current_density_target.ndim > 0:
+            self.current_density_target = current_density_target[0]
         else:
-            self.i_cd_target = i_cd_target
-        v_target = np.asarray(stack_dict['init_current_density'])
-        if v_target.ndim > 0:
-            self.v_target = v_target[0]
+            self.current_density_target = current_density_target
+        voltage_target = np.asarray(stack_dict['init_current_density'])
+        if voltage_target.ndim > 0:
+            self.voltage_target = voltage_target[0]
         else:
-            self.v_target = v_target
+            self.voltage_target = voltage_target
 
         # Initialize temperature system
-        self.temp_sys = therm_cpl.TemperatureSystem(self, temperature_dict)
+        # self.temp_sys = therm_cpl.TemperatureSystem(self, temperature_dict)
+        self.temp_sys = lin_sys.TemperatureSystem(self, temperature_dict)
         # Initialize the electrical coupling
-        self.elec_sys = el_cpl.ElectricalCoupling(self)
+        self.elec_sys = lin_sys.ElectricalSystem(self, {})
 
         """Boolean alarms"""
         self.v_alarm = False
@@ -223,39 +226,35 @@ class Stack:
         self.break_program = False
         # True if the program aborts because of some critical impact
 
-        # target current density
-
-        # current density array
-        self.i_cd = np.zeros((self.n_cells, *self.cells[0].membrane.dsct.shape))
-        self.i_cd[:] = self.i_cd_target
+        # Stack current density array
+        self.current_density = np.zeros(self.elec_sys.current_density.shape)
+        self.current_density[:] = self.current_density_target
         # for i in range(self.n_cells):
         #     self.i_cd[i, :] = \
         #         g_func.exponential_distribution(self.i_target, n_ele,
         #                                         a=0.5, b=0.0)
-        # current density array of previous iteration step
-        self.i_cd_old = np.copy(self.i_cd)
-        self.i_cd_avg = self.i_cd_target
-        # voltage array
-        self.v = np.zeros(self.n_cells)
-        self.v_stack = None
-        self.v_loss = None
+        # Current density array of previous iteration step
+        self.current_density_old = np.copy(self.current_density)
+        self.current_density_avg = self.current_density_target
+        # Voltage array
+        self.voltage_cells = np.zeros(self.n_cells)
+        self.voltage_stack = None
+        self.voltage_loss = None
         self.e_0 = self.n_cells * self.cells[0].e_0
 
         # old temperature for convergence calculation
-        self.temp_old = np.zeros(self.temp_sys.temp_layer_vec.shape)
-        self.temp_old[:] = self.temp_sys.temp_layer_vec
+        self.temp_old = np.zeros(self.temp_sys.solution_vector.shape)
+        self.temp_old[:] = self.temp_sys.solution_vector
+
+        # Add data container for output
+        self.add_print_data(self.voltage_cells, 'Cell Voltage', 'V')
 
     def update(self, current_density=None, voltage=None):
         """
         This function coordinates the program sequence
         """
         update_inflows = False
-        if current_density is not None:
-            self.i_cd[:] = current_density
-            self.i_cd_avg = current_density
-            update_inflows = True
-        elif voltage is not None:
-            self.v_stack = voltage
+        if any((current_density, voltage)):
             update_inflows = True
         if self.current_control is False:
             update_inflows = True
@@ -263,28 +262,39 @@ class Stack:
                           coolant_temp_diff=self.coolant_temp_diff,
                           coolant_mass_flow=self.coolant_mass_flow)
         for i, cell in enumerate(self.cells):
-            cell.update(self.i_cd[i, :], current_control=self.current_control,
+            cell.update(self.current_density[i, :],
+                        current_control=self.current_control,
                         update_channel=False)
             if cell.break_program:
                 self.break_program = True
                 break
-        self.i_cd_old[:] = self.elec_sys.i_cd
-        self.temp_old[:] = self.temp_sys.temp_layer_vec
+        self.temp_old[:] = self.temp_sys.solution_vector
         if not self.break_program:
             if self.calc_temp:
                 self.temp_sys.update()
             if self.calc_electric:
-                self.elec_sys.update(current_density=current_density,
-                                     voltage=voltage)
-                self.i_cd[:] = self.elec_sys.i_cd
-            self.v[:] = \
-                np.asarray([np.average(cell.v, weights=cell.d_area)
-                            for cell in self.cells])
-            if self.current_control:
-                self.v_stack = np.sum(self.v)
-                self.v_loss = self.e_0 - self.v_stack
-            self.i_cd_avg = np.average(self.i_cd[0],
-                                       weights=self.cells[0].d_area)
+                self.update_electric_system(current_density, voltage)
+
+    def update_electric_system(self, current_density, voltage):
+        self.current_density_old[:] = self.elec_sys.current_density
+        self.elec_sys.update(current_density=current_density,
+                             voltage=voltage)
+        self.current_density[:] = self.elec_sys.current_density
+
+        self.voltage_cells[:] = np.asarray(
+            [np.average(cell.e_0 - cell.voltage_loss, weights=cell.d_area)
+             for cell in self.cells])
+
+        if self.current_control:
+            self.voltage_stack = np.sum(self.voltage_cells)
+            self.voltage_loss = self.e_0 - self.voltage_stack
+
+        # Calculate average current density from first cell
+        ref_cell = self.cells[-1]
+        ref_current_density = (
+            ref_cell.current_density)[ref_cell.layer_id['membrane']]
+        self.current_density_avg = np.average(ref_current_density,
+                                              weights=ref_cell.d_area)
 
     def update_flows(self, update_inflows=False,
                      coolant_temp_diff=None, coolant_mass_flow=None):
@@ -293,7 +303,7 @@ class Stack:
         """
         mass_flows_in = [None, None]
         if update_inflows:
-            mass_flows_in[:] = self.calc_mass_flows()
+            mass_flows_in[:] = self.calc_fuel_mass_flows()
         for i in range(len(self.fuel_circuits)):
             self.fuel_circuits[i].update(mass_flows_in[i])
         if self.coolant_circuit is not None:
@@ -307,22 +317,23 @@ class Stack:
 
     def calc_cool_mass_flow(self, coolant_temp_diff):
         n_cool_cell = self.coolant_circuit.n_subchannels
-        if self.v_loss is None:
+        if self.voltage_loss is None:
             v_loss = 0.5 * self.n_cells
         else:
-            v_loss = self.v_loss
+            v_loss = self.voltage_loss
         v_heat = self.temp_sys.e_tn * self.n_cells - self.e_0 + v_loss
-        heat = self.i_cd_avg * self.cells[0].active_area * v_heat
+        heat = self.current_density_avg * self.cells[0].active_area * v_heat
         cp_cool = \
             np.average([np.average(channel.fluid.specific_heat)
                         for channel in self.coolant_circuit.channels])
         return heat / (cp_cool * coolant_temp_diff)  # * n_cool_cell
 
-    def calc_mass_flows(self):
+    def calc_fuel_mass_flows(self):
         mass_flows_in = []
         for i in range(len(self.cells[0].half_cells)):
             cell_mass_flow, cell_mole_flow = \
-                self.cells[0].half_cells[i].calc_inlet_flow(self.i_cd_avg)
+                self.cells[0].half_cells[i].calc_inlet_flow(
+                    self.current_density_avg)
             cell_mass_flow = np.sum(cell_mass_flow, axis=0)
             mass_flow = cell_mass_flow \
                 * self.cells[0].half_cells[i].n_channels * self.n_cells

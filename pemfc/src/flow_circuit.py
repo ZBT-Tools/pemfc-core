@@ -10,7 +10,7 @@ from . import interpolation as ip, global_functions as g_func, \
 from .fluid import fluid as fluids
 
 
-class ParallelFlowCircuit(ABC, oo.OutputObject):
+class ParallelFlowCircuit(oo.OutputObject1D, ABC):
     def __new__(cls, dict_flow_circuit, manifolds, channels,
                 n_subchannels=1.0, **kwargs):
         circuit_type = dict_flow_circuit.get('type', 'Koh')

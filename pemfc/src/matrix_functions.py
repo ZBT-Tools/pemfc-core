@@ -1,8 +1,13 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
 import numpy as np
 from scipy import linalg as sp_la
 import scipy as sp
-import pandas as pd
 from . import cell
+from . import global_functions as g_func
+
+if TYPE_CHECKING:
+    from pemfc.src.cell import Cell
 
 
 def tile_add_overlap(array, n, m=1):
@@ -167,27 +172,89 @@ def build_one_dimensional_conductance_matrix(conductance_array, axis,
         + np.diag(off_diag, k=offset)
 
 
-def build_cell_conductance_matrix(x_cond_vector, y_cond_vector, z_cond_vector):
-    x_cond_mtx = build_x_cell_conductance_matrix(x_cond_vector)
-    # x_cond_mtx_1 = build_one_dimensional_conductance_matrix(x_cond_vector, axis=0)
-    # raise ValueError('code adaption for 2D only up until this point')
-
-    # TODO: Urgently correct conductance serial connection via convolution:
-    #  conductances must be converted to resistances first
-
-    if y_cond_vector.shape[1] > 1:
-        # y_cond_mtx = build_y_cell_conductance_matrix(y_cond_vector, axis=1)
-        y_cond_mtx = build_one_dimensional_conductance_matrix(y_cond_vector, axis=1)
-        # test = y_cond_mtx - y_cond_mtx_1
-        # test_1 = np.sum(np.abs(y_cond_mtx - y_cond_mtx_1))
+def calculate_center_diagonal_2(array, axis):
+    if not array.ndim == 3:
+        raise ValueError('only three-dimensional arrays supported at the moment')
+    if axis not in (0, 1, 2, -1):
+        raise ValueError('axis must be 0, 1, 2, or -1')
+    shape = list(array.shape)
+    shape[axis] += 1
+    result = np.zeros(shape)
+    if axis == 0:
+        result[1:-1, :, :] = array[:-1, :, :] + array[1:, :, :]
+        result[0, :, :] = array[0, :, :]
+        result[-1, :, :] = array[-1, :, :]
+    elif axis == 1:
+        result[:, 1:-1, :] = array[:, :-1, :] + array[:, 1:, :]
+        result[:, 0, :] = array[:, 0, :]
+        result[:, -1, :] = array[:, -1, :]
+    elif axis == 2 or axis == -1:
+        result[:, :, 1:-1] = array[:, :, :-1] + array[:, :, 1:]
+        result[:, :, 0] = array[:, :, 0]
+        result[:, :, -1] = array[:, :, -1]
     else:
-        y_cond_mtx = 0.0
-    if z_cond_vector.shape[2] > 1:
-        z_cond_mtx = build_one_dimensional_conductance_matrix(z_cond_vector, axis=2)
+        raise ValueError('only three-dimensional arrays supported')
+    return result.flatten(order='F')
+
+
+def calculate_off_diagonal_2(array, axis):
+    if not array.ndim == 3:
+        raise ValueError('only three-dimensional arrays supported at the moment')
+    if axis not in (0, 1, 2, -1):
+        raise ValueError('axis must be 0, 1, 2, or -1')
+    shape = list(array.shape)
+    shape[axis] += 1
+    result = np.zeros(shape)
+    if axis == 0:
+        result[:-1, :, :] = array
+    elif axis == 1:
+        result[:, :-1, :] = array
+    elif axis == 2:
+        result[:, :, :-1] = array
     else:
-        z_cond_mtx = 0.0
-    # TODO: Check 3D matrix assembly
-    return x_cond_mtx + y_cond_mtx + z_cond_mtx
+        raise ValueError('only three-dimensional arrays supported at the moment')
+    return result.flatten(order='F')
+
+
+def create_one_dimensional_conductance_matrix(conductance_array, axis):
+    """
+    Calculate a tri-diagonal matrix for conduction in one dimension along the
+    given axis, while the order of arranging from inner to outer axis in the
+    matrix structure is from lowest to highest axis index 0, 1, 2 i.e. x, y, z
+    The conductance array for the provided axis should already give the
+    inter-nodal conductances so that the array is one element smaller compared
+    to the final solution vector. This should not be true for the remaining
+    axis.
+
+    Args:
+        conductance_array: k, l, m - sized conductance array while the axis index
+                           indicates the connected axis with a reduced dimension
+        axis: axis for one-dimensional conduction
+
+    Returns: tri-diagonal matrix for conduction with off-diagonal position
+             according to the conduction axis
+    """
+    if axis == -1:
+        axis = len(conductance_array.shape) - 1
+    offset = 1
+    for i in range(axis):
+        offset *= conductance_array.shape[i]
+    center_diag = calculate_center_diagonal_2(conductance_array, axis=axis)
+    off_diag = calculate_off_diagonal_2(conductance_array, axis)[:-offset]
+    center_diag *= -1.0
+    return np.diag(center_diag, k=0) \
+        + np.diag(off_diag, k=-offset) \
+        + np.diag(off_diag, k=offset)
+
+
+def build_cell_conductance_matrix(conductance_list: list[np.ndarray]):
+    cond_mtx_list = []
+    for i, conductance_array in enumerate(conductance_list):
+        if (isinstance(conductance_array, np.ndarray)
+                and conductance_array.shape[i] > 0):
+            cond_mtx_list.append(create_one_dimensional_conductance_matrix(
+                conductance_array, axis=i))
+    return np.sum(cond_mtx_list, axis=0)
 
 
 def connect_cells(matrix, cell_ids, layer_ids, values, mtx_ids,
@@ -214,16 +281,16 @@ def connect_cells(matrix, cell_ids, layer_ids, values, mtx_ids,
 def create_stack_index_list(cells: list[cell.Cell]):
     n_cells = len(cells)
     index_list = []
-    layer_ids = [[] for _ in range(cells[-1].n_layer)]
+    layer_ids = [[] for _ in range(cells[-1].nx)]
     for i in range(n_cells):
         index_array = \
             (np.prod(cells[i-1].membrane.dsct.shape, dtype=np.int32)
-             * cells[i-1].n_layer) * i \
+             * cells[i-1].nx) * i \
             + cells[i].index_array
         index_list.append(index_array.tolist())
 
     for i in range(n_cells):
-        for j in range(cells[i].n_layer):
+        for j in range(cells[i].nx):
             layer_ids[j].append(index_list[i][j])
     layer_index_list = []
     for sub_list in layer_ids:
@@ -231,7 +298,7 @@ def create_stack_index_list(cells: list[cell.Cell]):
     return index_list, layer_index_list
 
 
-def create_cell_index_list(shape: tuple[int]):
+def create_cell_index_list(shape: tuple[int, ...]):
     """
     Create list of lists with each list containing flattened order of indices
     for a continuous functional layer (either for thermal or conductance matrix).
@@ -249,3 +316,71 @@ def create_cell_index_list(shape: tuple[int]):
         index_list.append(
             [(j * shape[0]) + i for j in range(shape[1] * shape[2])])
     return index_list
+
+
+def add_explicit_layer_source(rhs_vector, source_term, index_array,
+                              layer_id=None, replace=False):
+    if isinstance(source_term, np.ndarray):
+        if rhs_vector.ndim != source_term.ndim:
+            raise ValueError('source_term must have same dimensions as '
+                             'rhs_vector')
+    if layer_id is None:
+        if np.isscalar(source_term):
+            source_vector = np.full_like(rhs_vector, -source_term)
+        else:
+            source_vector = np.asarray(-source_term)
+    else:
+        if replace is True:
+            source_vector = np.copy(rhs_vector)
+            np.put(source_vector, index_array[layer_id], -source_term)
+        else:
+            source_vector = np.zeros(rhs_vector.shape)
+            np.put(source_vector, index_array[layer_id], -source_term)
+    if replace is True:
+        rhs_vector[:] = source_vector
+    else:
+        rhs_vector += source_vector
+    return rhs_vector, source_vector
+
+
+def add_implicit_layer_source(matrix, coefficients, index_array,
+                              layer_id=None, replace=False):
+    # matrix_size = matrix.shape[0]
+    diag_vector = np.diagonal(matrix).copy()
+    # if layer_id is None:
+    #     if np.isscalar(coefficients):
+    #         source_vector = np.full_like(diag_vector, coefficients)
+    #     else:
+    #         source_vector = np.asarray(coefficients)
+    # else:
+    #     if replace is True:
+    #         source_vector = np.copy(diag_vector)
+    #         np.put(source_vector, index_array[layer_id], coefficients)
+    #     else:
+    #         source_vector = np.zeros(matrix_size)
+    #         np.put(source_vector, index_array[layer_id], coefficients)
+    # if replace is True:
+    #     diag_vector = source_vector
+    # else:
+    #     diag_vector += source_vector
+    new_diag_vector, source_vector = add_explicit_layer_source(
+        diag_vector, -coefficients.flatten(order='F'), index_array,
+        layer_id=layer_id, replace=replace)
+    np.fill_diagonal(matrix, new_diag_vector)
+    return matrix, source_vector
+
+
+def set_implicit_layer_fixed(matrix, index_array, layer_id):
+    row_length = matrix.shape[0]
+    for row_id in index_array[layer_id]:
+        row = np.zeros(row_length)
+        row[row_id] = 1.0
+        matrix[row_id] = row
+    return matrix
+
+
+def set_single_unit_entry(matrix, index):
+    row = np.zeros(matrix.shape[0])
+    row[index] = 1.0
+    matrix[index, :] = row
+    return matrix

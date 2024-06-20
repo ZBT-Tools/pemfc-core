@@ -14,7 +14,7 @@ except ModuleNotFoundError:
     CHT_FOUND = False
 
 
-class Channel(ABC, oo.OutputObject):
+class Channel(oo.OutputObject1D, ABC):
     def __new__(cls, channel_dict, fluid, number=None):
 
         if type(fluid) is fluids.IncompressibleFluid \

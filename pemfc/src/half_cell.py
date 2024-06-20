@@ -1,16 +1,13 @@
-# general imports
+# General imports
 import warnings
 import numpy as np
 
-# local module imports
-from . import solid_layer as sl, constants, \
-    global_functions as g_func, flow_field as ff, \
-    channel as chl
+# Local module imports
+from . import solid_layer as sl, constants, flow_field as ff, channel as chl
 from .fluid import fluid as fluids
 from . import electrochemistry as electrochem
 from . import interpolation as ip
-from pemfc.src import discretization as dsct
-
+from . import discretization as dsct
 
 warnings.filterwarnings("ignore")
 
@@ -114,7 +111,7 @@ class HalfCell:
         # cross water flux through the membrane
         self.w_cross_flow = np.zeros(self.gde.dsct.shape)
         # voltage loss
-        self.v_loss = np.zeros(self.gde.dsct.shape)
+        self.voltage_loss = np.zeros(self.gde.dsct.shape)
 
     def update(self, current_density, update_channel=False,
                current_control=True):
@@ -182,7 +179,7 @@ class HalfCell:
         return mass_source, mole_source
 
     def surface_flux_to_channel_source(self, flux: np.ndarray):
-        if np.isscalar(flux) or flux.ndim == 1:
+        if np.isscalar(flux) or flux.ndim in (0, 1):
             return np.sum(self.discretization.d_area, axis=-1) * flux
         elif flux.ndim == 2:
             return np.sum(self.discretization.d_area * flux, axis=-1)
@@ -190,27 +187,36 @@ class HalfCell:
             raise ValueError('flux variable must be one- or two-dimensional numpy array')
 
     def update_voltage_loss(self, current_density: np.ndarray):
-        area = self.discretization.d_area
-        bpp_loss = self.bpp.calc_voltage_loss(current_density, area)
-        gde_loss = self.gde.calc_voltage_loss(current_density, area)
-        self.v_loss[:] = self.electrochemistry.v_loss \
-            + bpp_loss \
-            + gde_loss
+        """
+        Calculates voltage loss at electrode. Solid layer losses are set to zero at the current
+        implementation, due to its inclusion in the overall electrical system calculation at
+        stack level.
+        Args:
+            current_density: numpy array of local area-specific current density
+                             distribution
+        Returns: None
+        """
+        # area = self.discretization.d_area
+        bpp_loss = 0.0  # self.bpp.calc_voltage_loss(current_density, area)
+        gde_loss = 0.0  # self.gde.calc_voltage_loss(current_density, area)
+        self.voltage_loss[:] = self.electrochemistry.v_loss + bpp_loss + gde_loss
 
     @staticmethod
     def calc_faraday_flow(fluid, current, stoichiometry, reaction_stoichiometry,
                           charge_number, reactant_index=0):
         """
         Calculates the corresponding species mass and molar flows
-        :param fluid: object of type GasMixture, CanteraGasMixture, TwoPhaseMixture,
-        or CanteraTwoPhaseMixture from module pemfc.fluid.fluid
-        :param current: scalar value providing electrical current (A)
-        :param stoichiometry: scalar for flow stoichiometry
-        :param reaction_stoichiometry: scalar for reaction stoichiometry,
-        moles of reactants used in reaction balance
-        :param charge_number: number of electron charges transferred in reaction balance
-        :param reactant_index: index in species array for the reactant species
-        :return: mass_flow, mole_flow (species array according to fluid object)
+
+        Args:
+            fluid: object of type GasMixture, CanteraGasMixture, TwoPhaseMixture,
+                   or CanteraTwoPhaseMixture from module pemfc.fluid.fluid
+            current: scalar value providing electrical current (A)
+            stoichiometry: scalar for flow stoichiometry
+            reaction_stoichiometry: scalar for reaction stoichiometry,
+                                    moles of reactants used in reaction balance
+            charge_number: number of electron charges transferred in reaction balance
+            reactant_index: index in species array for the reactant species
+        Returns: mass_flow, mole_flow (species array according to fluid object)
         """
         if not isinstance(fluid, (fluids.GasMixture, fluids.TwoPhaseMixture,
                                   fluids.CanteraGasMixture, fluids.CanteraTwoPhaseMixture)):
@@ -219,9 +225,9 @@ class HalfCell:
                             'from module pemfc.fluid.fluid')
         mole_flow = np.zeros(fluid.n_species)
 
-        mole_flow[reactant_index] = current * stoichiometry \
-                                    * abs(reaction_stoichiometry) / (
-                                                charge_number * constants.FARADAY)
+        mole_flow[reactant_index] = (
+                current * stoichiometry * abs(reaction_stoichiometry)
+                / (charge_number * constants.FARADAY))
         composition = fluid.mole_fraction[:, 0]
         for i in range(len(mole_flow)):
             if i != reactant_index:
@@ -237,6 +243,6 @@ class HalfCell:
         approximation according to composition gradients and thermodynamics
         should be implemented
         """
-
         humidity = ip.interpolate_1d(self.channel.fluid.humidity)
-        return np.asarray([humidity for i in range(self.discretization.shape[-1])]).transpose()
+        return np.asarray([humidity for i in
+                           range(self.discretization.shape[-1])]).transpose()

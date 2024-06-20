@@ -1,13 +1,13 @@
-# general imports
-import sys
+# General imports
+# import sys
 import numpy as np
 from abc import ABC, abstractmethod
 
-# local module imports
-from pemfc.src.output_object import OutputObject
-from pemfc.src import constants, global_functions as gf
+# Local module imports
+from ..output_object import OutputObject1D
+from .. import constants, global_functions as gf
 from . import species
-from pemfc.src.global_functions import move_axis
+from ..global_functions import move_axis
 from collections import OrderedDict
 
 try:
@@ -29,7 +29,7 @@ except ImportError:
 #         super().__init__()
 
 
-class DiscreteFluid(ABC, OutputObject):
+class DiscreteFluid(OutputObject1D, ABC):
 
     PROPERTY_NAMES = ['density', 'specific_heat', 'viscosity',
                       'thermal_conductivity']
@@ -50,8 +50,9 @@ class DiscreteFluid(ABC, OutputObject):
                 'units': ['K', 'Pa'],
                 # 'sub_names': ['None', 'None']
             }
-        self.print_variables = self.combine_print_variables(
-            self.print_variables, kwargs.get('print_variables', None))
+        if 'print_variables' in kwargs:
+            self.print_variables = self.combine_print_variables(
+                self.print_variables, kwargs['print_variables'])
         temperature = np.asarray(temperature)
         pressure = np.asarray(pressure)
         self._temperature = np.zeros(self.array_shape)

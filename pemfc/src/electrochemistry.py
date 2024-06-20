@@ -1,11 +1,11 @@
-# general imports
+# General imports
 from abc import ABC
 import numpy as np
 from scipy import optimize
 
 # local module imports
 from . import interpolation as ip, constants, channel as chl
-from pemfc.src import discretization as dsct
+from . import discretization as dsct
 
 
 class ElectrochemistryModel(ABC):
@@ -16,51 +16,68 @@ class ElectrochemistryModel(ABC):
 
         shape = discretization.shape
         self.faraday = constants.FARADAY
-        # index of fuel component in gas mixture
+        # Index of fuel component in gas mixture
         self.id_fuel = input_dict['fuel_index']
-        # charge number of reaction
+        # Charge number of reaction
         self.n_charge = input_dict['charge_number']
 
-        # proton conductivity of the catalyst layer
-        self.prot_con_cl = input_dict['prot_con_cl']
-        # diffusion coefficient of the reactant in the catalyst layer
-        self.diff_coeff_cl = input_dict['diff_coeff_cl']
-        # diffusion coefficient of the reactant in the gas diffusion layer
-        self.diff_coeff_gdl = input_dict['diff_coeff_gdl']
-        # tafel slope of the electrode
-        self.tafel_slope = input_dict['tafel_slope']
         self.th_gdl = input_dict['thickness_gdl']
         self.th_cl = input_dict['thickness_cl']
-        # could use a better name see (Kulikovsky, 2013) not sure if 2-D
+
+        # Proton conductivity of the catalyst layer
+        self.prot_con_cl = input_dict['prot_con_cl']
+        # Diffusion coefficient of the reactant in the catalyst layer
+        self.diff_coeff_cl = input_dict['diff_coeff_cl']
+        # Diffusion coefficient of the reactant in the gas diffusion layer
+        self.diff_coeff_gdl = np.full(shape, input_dict['diff_coeff_gdl'])
+
+        # Additional in-plane diffusion resistance for
+        # channel-land-discretization with channel located at index 1 and
+        # land located at index 0
+        self.diff_coeff_gdl_by_length = self.diff_coeff_gdl / self.th_gdl
+        # TODO: Factors > 2.0 between Diff-Coeffs are not stable at the moment
+        if shape[-1] == 2:
+            self.diff_coeff_gdl_by_length[:, 0] = (
+                1.0 / (self.th_gdl + discretization.dx[-1, :, 0] /
+                       self.diff_coeff_gdl[:, 0])
+            )
+            # self.diff_coeff_gdl_by_length[:, 0] = (
+            #     1.0 / (2.0 * self.th_gdl /
+            #            self.diff_coeff_gdl[:, 0])
+            # )
+        # Tafel slope of the electrode
+        self.tafel_slope = input_dict['tafel_slope']
+
+        # Could use a better name see (Kulikovsky, 2013) not sure if 2-D
         # exchange current density
         vol_ex_cd = input_dict['vol_ex_cd']
         self.i_sigma = np.sqrt(2. * vol_ex_cd * self.prot_con_cl
                                * self.tafel_slope)
-        # index of the first element with negative cell voltage
+        # Index of the first element with negative cell voltage
         self.index_cat = shape[0]
-        # characteristic current density, see (Kulikovsky, 2013)
+        # Characteristic current density, see (Kulikovsky, 2013)
         self.i_star = self.prot_con_cl * self.tafel_slope / self.th_cl
-        # concentration at channel inlet
+        # Concentration at channel inlet
         self.conc_in = None
-        # limiting current density due to diffusion through the gdl
+        # Limiting current density due to diffusion through the gdl
         # at channel inlet (calculated when inlet concentration is known)
         self.i_lim_star = None
-        # numerical parameters for tangent line extension at limiting current
+        # Numerical parameters for tangent line extension at limiting current
         self.conc_eps = input_dict['c_eps']
         self.delta_i = input_dict['delta_i']
-        # critical local current density where Kulikovsky model transitions
+        # Critical local current density where Kulikovsky model transitions
         # into linear tangent line near limiting current
         self.i_crit = np.zeros(shape)
-        # switch to include activation contribution to voltage losses
+        # Switch to include activation contribution to voltage losses
         self.calc_act_loss = input_dict['calc_act_loss']
-        # switch to include catalyst layer diffusion contribution to voltage
+        # Switch to include catalyst layer diffusion contribution to voltage
         # losses
         self.calc_cl_diff_loss = input_dict['calc_cl_diff_loss']
-        # switch to include gas diffusion layer diffusion contribution to
+        # Switch to include gas diffusion layer diffusion contribution to
         # voltage losses
         self.calc_gdl_diff_loss = input_dict['calc_gdl_diff_loss']
 
-        # cell voltage loss
+        # Cell voltage loss
         self.v_loss = np.zeros(shape)
         self.updated_v_loss = False
         self.corrected_current_density = None
@@ -112,7 +129,7 @@ class ElectrochemistryModel(ABC):
         return v_loss_act
 
     def calc_transport_loss_catalyst_layer(self, current_density: np.ndarray,
-                                           var: float, conc: np.ndarray):
+                                           var: np.ndarray, conc: np.ndarray):
         """
         Calculates the diffusion voltage loss in the catalyst layer
         according to (Kulikovsky, 2013).
@@ -137,12 +154,12 @@ class ElectrochemistryModel(ABC):
         #     raise
         return v_loss_cl_diff
 
-    def calc_transport_loss_diffusion_layer(self, var: float):
+    def calc_transport_loss_diffusion_layer(self, var: np.ndarray):
         """
         Calculates the diffusion voltage loss in the gas diffusion layer
         according to (Kulikovsky, 2013).
         """
-        v_loss_gdl_diff = -self.tafel_slope * np.log10(var)
+        v_loss_gdl_diff = - self.tafel_slope * np.log10(var)
         # nan_list = np.isnan(self.v_loss_gdl_diff)
         # if nan_list.any():
         #     v_loss_gdl_diff[np.argwhere(nan_list)[0, 0]:] = 1.e50
@@ -158,63 +175,65 @@ class ElectrochemistryModel(ABC):
 
         conc_ref = conc[channel.id_in]
         conc_ele = ip.interpolate_1d(conc)
-        # TODO: Include concentration gradient due to in-plane GDL diffusion
-        conc_ele = np.asarray([conc_ele for i in range(current_density.shape[-1])]).transpose()
+        conc_ele = np.asarray([
+            conc_ele for i in range(current_density.shape[-1])]).transpose()
         conc_star = conc_ele / conc_ref
         conc_in = conc[channel.id_in]
         if conc_in != self.conc_in:
-            self.i_lim_star = self.n_charge * self.faraday * conc_in \
-                              * self.diff_coeff_gdl / self.th_gdl
+            self.i_lim_star = (self.n_charge * self.faraday * conc_in
+                               * self.diff_coeff_gdl_by_length)
             self.conc_in = conc_in
         self.i_crit[:] = self.i_lim_star * (conc_ele - self.conc_eps) / conc_ref
-        id_lin = np.argwhere(current_density >= self.i_crit)[:, 0]
-        id_reg = np.argwhere(current_density < self.i_crit)[:, 0]
-        if len(id_lin) > 0:
+
+        id_lin = np.nonzero(current_density >= self.i_crit)
+        id_reg = np.nonzero(current_density < self.i_crit)
+        if np.any(id_lin):
             i_crit = self.i_crit[id_lin]
             conc_crit = conc_ele[id_lin]
-            conc_crit = \
-                np.vstack((conc_crit, conc_crit, conc_crit))
-            i_crit = np.vstack(
-                (i_crit - self.delta_i, i_crit, i_crit + self.delta_i))
-            conc_crit = conc_crit.transpose()
-            i_crit = i_crit.transpose()
+            conc_crit_stack = np.stack((conc_crit, conc_crit, conc_crit),
+                                        axis=conc_crit.ndim)
+            i_crit_stack = np.stack(
+                (i_crit - self.delta_i, i_crit, i_crit + self.delta_i),
+                axis=i_crit.ndim)
+            # conc_crit = conc_crit.transpose()
+            # i_crit = i_crit.transpose()
             # if np.any(i_crit < 0.0):
             #     raise ValueError
-            eta_crit = \
-                self.calc_electrode_loss_kulikovsky(i_crit, conc_crit, conc_ref,
-                                                    update_members=False)
+            i_lim_star = self.i_lim_star[id_lin]
+            i_lim_star_stack = np.stack((i_lim_star, i_lim_star, i_lim_star),
+                                        axis=i_lim_star.ndim)
+            eta_crit_stack = self.calc_electrode_loss_kulikovsky(
+                i_crit_stack, conc_crit_stack, conc_ref, i_lim_star_stack)
 
-            grad_eta = np.gradient(eta_crit, self.delta_i, axis=-1)[:, 1]
-            b = eta_crit[:, 1] - grad_eta * i_crit[:, 1]
-            curr_den_lin = current_density[id_lin]
-            eta_lin = grad_eta * curr_den_lin + b
+            grad_eta = np.moveaxis(
+                np.gradient(eta_crit_stack, self.delta_i, axis=-1), -1, 0)[1]
+            eta_crit = np.moveaxis(eta_crit_stack, -1, 0)[1]
+            b = eta_crit - grad_eta * i_crit
+            eta_lin = grad_eta * current_density[id_lin] + b
 
             # curr_lin = current_density[id_lin[0]] \
             #     + current_density[id_lin] - self.i_crit[id_lin]
             # eta_lin = grad_eta * curr_lin + b
 
-            eta_reg = \
-                self.calc_electrode_loss_kulikovsky(current_density[id_reg],
-                                                    conc_ele[id_reg], conc_ref,
-                                                    update_members=False)
+            eta_reg = self.calc_electrode_loss_kulikovsky(
+                current_density[id_reg], conc_ele[id_reg], conc_ref,
+                self.i_lim_star[id_reg])
             eta = np.zeros(current_density.shape)
             eta[id_lin] = eta_lin
             eta[id_reg] = eta_reg
             return eta
         else:
-            return self.calc_electrode_loss_kulikovsky(current_density,
-                                                       conc_ele,
-                                                       conc_ref)
+            return self.calc_electrode_loss_kulikovsky(
+                current_density, conc_ele, conc_ref, self.i_lim_star)
 
-    def calc_electrode_loss_kulikovsky(self, current_density: np.ndarray,
-                                       conc: np.ndarray,
-                                       conc_ref: float,
-                                       update_members: bool = True):
+    def calc_electrode_loss_kulikovsky(
+            self, current_density: np.ndarray, conc: np.ndarray,
+            conc_ref: float, i_lim_star: np.ndarray):
         """
         Calculates the full voltage losses of the electrode
         """
         conc_star = conc / conc_ref
-        var = 1. - current_density / (self.i_lim_star * conc_star)
+        var = 1. - current_density / (i_lim_star * conc_star)
         # var = np.where(var0 < 1e-4, 1e-4, var0)
         v_loss = np.zeros(current_density.shape)
         if self.calc_act_loss:

@@ -335,7 +335,7 @@
     "temperature_system": {
         "temp_amb": 293.15,
         "alpha_amb": 10.0,
-        "heat_flux": 0.0,
+        "flux_endplate": 0.0,
         "cool_ch_bc": false,
         "cool_ch_numb": 20,
         "cool_temp_diff": 5.0,

@@ -219,12 +219,12 @@ class JunctionFlowResistance(FlowResistance, ABC):
         self.dict = zeta_dict
         # self.coeffs = zeta_dict['coefficients']
         self.value = np.zeros(self.channel.n_ele)
-        self.main_flow_ratio = np.zeros(self.channel.n_ele)
-        self.velocity = np.zeros(self.channel.n_ele)
-        self.density = np.zeros(self.channel.n_ele)
-        self.viscosity = np.zeros(self.channel.n_ele)
-        self.mass_source_sign = np.zeros(self.channel.n_ele)
-        self.pressure = np.zeros(self.channel.n_ele)
+        self.main_flow_ratio = np.zeros(self.value.shape)
+        self.velocity = np.zeros(self.value.shape)
+        self.density = np.zeros(self.value.shape)
+        self.viscosity = np.zeros(self.value.shape)
+        self.mass_source_sign = np.zeros(self.value.shape)
+        self.pressure = np.zeros(self.value.shape)
         self.combined_ids = None
         self.reduced_ids = None
 

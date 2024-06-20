@@ -1,29 +1,25 @@
-# general imports
+# General imports
 import numpy as np
 import os
 import shutil
 from itertools import cycle, islice
 import matplotlib
-# configure matplotlib backend here
 import sys
-main_name = sys.argv[0]
-if 'main_app.py' in main_name:
-    matplotlib.use('Agg')
-
 import matplotlib.pyplot as plt
 import timeit
 import json
 from json import JSONEncoder
 
-# local module imports
+# Local module imports
 from . import interpolation as ip
 from . import global_functions as g_func
-from . import stack as stack
-# from ..data import input_dicts
+from . import stack
 
+main_name = sys.argv[0]
+if 'main_app.py' in main_name:
+    matplotlib.use('Agg')
 
-
-# globals
+# Globals
 FONT_SIZE = 14
 NUMBER_SIZE = 14
 MARKER_SIZE = 5.0
@@ -66,7 +62,7 @@ class Output:
 
         # if not os.path.exists(self.output_dir):
         #     os.makedirs(self.output_dir)
-            # shutil.rmtree(self.output_dir, ignore_errors=True)
+        # shutil.rmtree(self.output_dir, ignore_errors=True)
 
     @staticmethod
     def clean_directory(directory):
@@ -104,16 +100,23 @@ class Output:
         return ax
 
     def plot_lines(self, ax, x, y, colormap=None, **kwargs):
-        x = np.asarray(x)
+        x = np.asarray(g_func.ensure_list(x))
         y = np.asarray(y)
-        ny = len(y)
 
-        if x.ndim != y.ndim:
-            if x.ndim in (0, 1):
-                x = np.tile(x, (ny, 1))
+        plot_axis = kwargs.get('plot_axis', 0)
+        if isinstance(plot_axis, (list, tuple)):
+            raise TypeError('variable plot_axis must be of type integer')
+        if plot_axis < 0:
+            plot_axis = list(range(y.ndim))[plot_axis]
+        if x.shape[0] != y.shape[plot_axis]:
+            if x.shape[0] == 1:
+                x = np.tile(x, (len(y), 1))
+            elif x.shape[0] == y.shape[plot_axis] + 1:
+                x = ip.interpolate_1d(x)
             else:
-                raise ValueError('Outer dimension of x is not one and not '
-                                 'equal to outer dimension of y')
+                raise ValueError('Dimension of plotting axis of x-array is not '
+                                 'one or equal to dimension of plotting axis '
+                                 'of y-array')
         if y.ndim == 1:
             ax.plot(x, y, marker=kwargs.get('marker', '.'),
                     markersize=kwargs.get('markersize', MARKER_SIZE),
@@ -122,27 +125,75 @@ class Output:
                     linestyle=kwargs.get('linestyle', '-'),
                     color=kwargs.get('color', 'k'))
         else:
+            if y.ndim == 2:
+                var_axis = [1 - plot_axis]
+                if var_axis[0] > plot_axis:
+                    n_colors = 1
+                    n_linestyles = y.shape[var_axis[0]]
+                else:
+                    n_colors = y.shape[var_axis[0]]
+                    n_linestyles = 1
+            elif y.ndim == 3:
+                var_axis = [i for i in range(y.ndim) if i != plot_axis]
+                n_colors = y.shape[var_axis[0]]
+                n_linestyles = y.shape[var_axis[1]]
+            else:
+                raise ValueError('y-array is limited to three dimensions')
+
             if colormap is not None:
                 cmap = plt.get_cmap(colormap)
-                colors = cmap(np.linspace(0.0, 1.0, ny))
+                colors = cmap(np.linspace(0.0, 1.0, n_colors))
             else:
-                colors = \
-                    kwargs.get('color',
-                               list(islice(cycle(['k', 'b', 'r', 'g', 'y']),
-                                           ny)))
-            linestyles = \
-                list(islice(cycle(kwargs.get('linestyle', ['-'])), ny))
-            markers = \
-                list(islice(cycle(kwargs.get('marker', ['.'])), ny))
-            fillstyles = \
-                list(islice(cycle(kwargs.get('fillstyle', ['full'])), ny))
-            for i in range(ny):
-                ax.plot(x[i], y[i], marker=markers[i],
-                        markersize=kwargs.get('markersize', MARKER_SIZE),
-                        fillstyle=fillstyles[i],
-                        linewidth=kwargs.get('linewidth', LINE_WIDTH),
-                        linestyle=linestyles[i],
-                        color=colors[i])
+                colors = kwargs.get(
+                    'color', list(islice(cycle(['k', 'b', 'r', 'g', 'y']),
+                                         n_colors)))
+
+            linestyles = list(islice(cycle(kwargs.get(
+                'linestyle', ['-', ':', '--', '-.'])), n_linestyles))
+            markers = list(islice(cycle(kwargs.get('marker',
+                                                   ['o', 'x', 'D', 's'])),
+                                  n_linestyles))
+            fillstyles = list(islice(cycle(kwargs.get('fillstyle', ['full'])),
+                                     n_linestyles))
+
+            if y.ndim == 2:
+                if n_colors == 1:
+                    for i in range(n_linestyles):
+                        y_plot = np.moveaxis(y, source=var_axis[0],
+                                             destination=0)[i]
+                        ax.plot(x, y_plot,
+                                marker=markers[i],
+                                markersize=kwargs.get('markersize', MARKER_SIZE),
+                                fillstyle=fillstyles[0],
+                                linewidth=kwargs.get('linewidth', LINE_WIDTH),
+                                linestyle=linestyles[i],
+                                color=colors[0])
+                else:
+                    for i in range(n_colors):
+                        y_plot = np.moveaxis(y, source=var_axis[0],
+                                             destination=0)[i]
+                        ax.plot(x, y_plot,
+                                marker=markers[0],
+                                markersize=kwargs.get('markersize', MARKER_SIZE),
+                                fillstyle=fillstyles[0],
+                                linewidth=kwargs.get('linewidth', LINE_WIDTH),
+                                linestyle=linestyles[0],
+                                color=colors[i])
+            elif y.ndim == 3:
+                for i in range(n_colors):
+                    for j in range(n_linestyles):
+                        y_plot = np.moveaxis(y, source=var_axis,
+                                             destination=[0, 1])[i, j, :]
+                        ax.plot(x, y_plot,
+                                marker=markers[j],
+                                markersize=kwargs.get('markersize', MARKER_SIZE),
+                                fillstyle=fillstyles[0],
+                                linewidth=kwargs.get('linewidth', LINE_WIDTH),
+                                linestyle=linestyles[j],
+                                color=colors[i])
+            else:
+                NotImplementedError('y-array are limited to three dimensions')
+
         ax.grid(True)
         ax.use_sticky_edges = False
         ax.autoscale()
@@ -154,7 +205,7 @@ class Output:
     def create_figure(self, filepath, x_array, y_array, xlabels, ylabels,
                       xlims=None, ylims=None, xticks=None, yticks=None,
                       titles=None, rows=1, cols=1, **kwargs):
-        nplots = rows*cols
+        nplots = rows * cols
 
         def check_dims(variable, correct_single_dim=False):
             if isinstance(variable, str):
@@ -195,7 +246,7 @@ class Output:
         ylabels = check_dims(ylabels)
 
         for i in range(nplots):
-            ax = fig.add_subplot(rows, cols, i+1)
+            ax = fig.add_subplot(rows, cols, i + 1)
             ax = self.plot_lines(ax, x_array[i], y_array[i],
                                  xlabel=xlabels[i], ylabel=ylabels[i], **kwargs)
             if titles is not None:
@@ -393,9 +444,9 @@ class Output:
         xlabel = 'Channel Location'
 
         data = {'Channel Location':
-                {'value': xvalues, 'units': 'm', 'label': xlabel},
+                    {'value': xvalues, 'units': 'm', 'label': xlabel},
                 'Cells':
-                {'value': [list(range(len(cells)))], 'units': '-'}}
+                    {'value': [list(range(len(cells)))], 'units': '-'}}
         data = get_oo_collection_data(cells, data_dict=data, xkey=xlabel)
         # Save channel values
         cathode_channels = [cell.cathode.channel for cell in fc_stack.cells]
@@ -443,7 +494,7 @@ class Output:
 
         return data
 
-    def save(self, folder_name, fc_stack):
+    def save(self, folder_name, fc_stack: stack.Stack):
         self.case_name = folder_name
         case_path = os.path.join(self.output_dir, folder_name)
         if not os.path.exists(case_path):
@@ -453,9 +504,10 @@ class Output:
 
         if not self.save_csv and not self.save_plot:
             return None
+
         if not isinstance(fc_stack, stack.Stack):
             raise TypeError('argument fc_stack must be of type Stack from pemfc'
-                            'module')
+                            ' module')
         csv_path = os.path.join(case_path, 'csv_data')
         plot_path = os.path.join(case_path, 'plots')
         if not os.path.exists(csv_path):
@@ -479,10 +531,11 @@ class Output:
                     var_array[i] = item.print_data[0][name]['value']
                     # data_dict[item.name + ' ' + str(i)] =
                 x = x_values
-                if var_array.shape[-1] == (len(x_values) - 1):
-                    x = ip.interpolate_1d(x_values)
+                # if var_array.shape[-2] == (len(x_values) - 1):
+                #     x = ip.interpolate_1d(x_values)
                 self.write_data(x, var_array, x_label, name, content['units'],
-                                plot_dir=plot_path, csv_dir=csv_path, **kwargs)
+                                plot_dir=plot_path, csv_dir=csv_path,
+                                plot_axis=content['plot_axis'], **kwargs)
 
             for base_name, sub_dict in oo_collection[0].print_data[1].items():
                 for sub_name, content in sub_dict.items():
@@ -498,6 +551,7 @@ class Output:
                     name = sub_name + ' ' + base_name
                     self.write_data(x, var_array, x_label, name,
                                     content['units'], plot_dir=plot_path,
+                                    plot_axis=content['plot_axis'],
                                     csv_dir=csv_path, **kwargs)
 
         # Save cell values
@@ -512,7 +566,7 @@ class Output:
         # anodes = [cell.anode for cell in fc_stack.cells]
         # save_oo_collection(cathodes, xvalues, xlabel)
         data = {'channel_location':
-                {'value': xvalues, 'units': 'm', 'label': xlabel}}
+                    {'value': xvalues, 'units': 'm', 'label': xlabel}}
 
         # Save channel values
         cathode_channels = [cell.cathode.channel for cell in fc_stack.cells]
@@ -612,7 +666,7 @@ class Output:
             for k, v in data.items():
                 file.write('{} [{}]: '.format(k, v['units'])
                            + ('{0:' + v.get('format', '.4f')
-                           + '}\n').format(v['value']))
+                              + '}\n').format(v['value']))
 
     def save_settings(self, settings, fmt='json'):
         # if settings is None:

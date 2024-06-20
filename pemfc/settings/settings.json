@@ -1,20 +1,19 @@
 {
     "stack": {
-        "cell_number": 3,
-        "heat_power": 0.0,
+        "cell_number": 1,
         "cool_flow": true,
-        "calc_temperature": false,
+        "calc_temperature": true,
         "calc_current_density": true
     },
     "simulation": {
         "maximum_iteration": 500,
         "minimum_iteration": 3,
-        "convergence_criteria": 1e-07,
+        "convergence_criteria": 1e-09,
         "underrelaxation_factor": 0.5,
         "current_control": true,
         "operation_control": "Current",
-        "elements": 5,
-        "current_density": 5000.0,
+        "elements": 10,
+        "current_density": 30000.0,
         "average_cell_voltage": 0.5,
         "channel_land_discretization": true
     },
@@ -25,7 +24,7 @@
         "thermoneutral_voltage": 1.25
     },
     "membrane": {
-        "type": "YeWang2007",
+        "type": "Constant",
         "underrelaxation_factor": 0.5,
         "thickness": 1.5e-05,
         "ionic_conductivity": 15.0,
@@ -313,7 +312,7 @@
         "name": "Coolant Flow Circuit",
         "type": "VariableResistance",
         "shape": "U",
-        "calc_distribution": true,
+        "calc_distribution": false,
         "tolerance": 1e-07,
         "min_iter": 3,
         "max_iter": 100,
@@ -353,16 +352,18 @@
     },
     "temperature_system": {
         "temp_amb": 293.15,
-        "alpha_amb": 10.0,
-        "heat_flux": 0.0,
+        "alpha_amb": 0.0,
+        "flux_endplate": 0.0,
+        "temp_endplate": 343.15,
+        "bc_endplate": "gradient",
         "cool_ch_bc": true,
         "cool_ch_numb": 20,
-        "cool_temp_diff": 5.0,
+        "cool_temp_diff": 10.0,
         "cool_mass_flow": null,
         "coolant_control": "Temperature Difference"
     },
     "output": {
-        "save_csv": true,
+        "save_csv": false,
         "save_plot": true,
         "show_loss": false,
         "directory": "../output"

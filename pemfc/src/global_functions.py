@@ -1,8 +1,7 @@
-# general imports
+# General imports
 import numpy as np
 # from scipy import ndimage
-
-# local module imports
+# Local module imports
 from . import constants
 
 
@@ -303,7 +302,6 @@ def calc_rel_error(array1, array2):
     """
     array_diff = array1 - array2
     average_array = (array1 + array2) / 2.0
-    rel_error_array = np_div(array_diff, average_array)
     return np.inner(array_diff, array_diff) / len(array1)
 
 
@@ -320,7 +318,6 @@ def calc_rrmse(array1, array2):
     return np.sqrt(np_div(diff_squared_sum, array2_squared_sum))
 
 
-
 def calc_mean_squared_error(array1, array2):
     """
     Calculates mean squared error of array1 and array2 (same shapes)
@@ -330,4 +327,11 @@ def calc_mean_squared_error(array1, array2):
     """
     array_diff = array1 - array2
     return np.inner(array_diff, array_diff) / len(array1)
+
+
+def reduce_dimension(array, axis=0):
+    if array.ndim > 1:
+        return move_axis(array)[axis]
+    else:
+        return array
 
