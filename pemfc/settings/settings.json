@@ -1,7 +1,7 @@
 {
     "stack": {
         "cell_number": 1,
-        "cool_flow": false,
+        "cool_flow": true,
         "calc_temperature": true,
         "calc_current_density": true
     },
@@ -355,7 +355,7 @@
         "alpha_amb": 0.0,
         "flux_endplate": 0.0,
         "temp_endplate": 343.15,
-        "bc_endplate": "fixed",
+        "bc_endplate": "gradient",
         "cool_ch_bc": true,
         "cool_ch_numb": 20,
         "cool_temp_diff": 10.0,

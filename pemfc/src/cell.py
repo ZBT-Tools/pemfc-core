@@ -33,6 +33,15 @@ class Cell(OutputObject2D):
         self.channel_land_discretization = \
             cell_dict['channel_land_discretization']
 
+        # Additional resolution in through-plane direction (x-axis) either
+        # if channel_land_discretization is True or
+        # if given as keyword argument
+        if self.channel_land_discretization:
+            self.additional_layer = True
+        else:
+            self.additional_layer = cell_dict.get('additional_layer', False)
+        # self.additional_layer = True
+
         # Underrelaxation factor
         self.urf = cell_dict['underrelaxation_factor']
 
@@ -102,9 +111,9 @@ class Cell(OutputObject2D):
         self.thermal_mtx_const = mtx.build_cell_conductance_matrix(
                 [self.thermal_conductance[0],
                  sl.SolidLayer.calc_inter_node_conductance(
-                    self.thermal_conductance[1], axis=1) * 0.0,
+                    self.thermal_conductance[1], axis=1) * 1.0,
                  sl.SolidLayer.calc_inter_node_conductance(
-                    self.thermal_conductance[2], axis=2) * 0.0])
+                    self.thermal_conductance[2], axis=2) * 1.0])
 
         # self.heat_mtx_const = np.zeros(self.heat_cond_mtx.shape)
         self.thermal_mtx_dyn = np.zeros(self.thermal_mtx_const.shape)
@@ -136,9 +145,9 @@ class Cell(OutputObject2D):
             mtx.build_cell_conductance_matrix(
                 [self.electrical_conductance[0],
                  sl.SolidLayer.calc_inter_node_conductance(
-                    self.electrical_conductance[1], axis=1) * 0.0,
+                    self.electrical_conductance[1], axis=1) * 1.0,
                  sl.SolidLayer.calc_inter_node_conductance(
-                    self.electrical_conductance[2], axis=2) * 0.0])
+                    self.electrical_conductance[2], axis=2) * 1.0])
 
         # Combine both (heat and electrical) conductance matrices in a unified
         # dictionary
@@ -176,7 +185,7 @@ class Cell(OutputObject2D):
             'Anode MEM-GDE',
             'Anode GDE-BPP',
             'Anode BPP-BC']
-        if self.channel_land_discretization:
+        if self.additional_layer:
             self.nx_names.insert(1, 'Cathode BPP-BPP')
             self.nx_names.insert(-2, 'Anode BPP-BPP')
 
@@ -272,8 +281,7 @@ class Cell(OutputObject2D):
 
         # Split bipolar plate in two elements among x-direction if
         # channel-land-discretization is applied
-        # if self.channel_land_discretization:
-        if True:
+        if self.additional_layer:
             cat_bpp_split_ratio = (
                     self.cathode.channel.height / self.cathode.bpp.thickness)
             ano_bpp_split_ratio = (
@@ -290,14 +298,12 @@ class Cell(OutputObject2D):
                     1.0 - ano_bpp_split_ratio, exp[i]))
                 cell_property[i][-2] = (
                         value * math.pow(ano_bpp_split_ratio, exp[i]))
-
         cell_property = [np.asarray(item) for item in cell_property]
 
-        # # Channel: index 1, Land: index 0
-        # TODO: Test discretization in conductance
-        # if self.channel_land_discretization and modify_values:
-        #     for i in range(len(cell_property)):
-        #         cell_property[i][[1, -2], :,  1] = 0.0
+        # Channel: index 1, Land: index 0
+        if self.channel_land_discretization and modify_values:
+            for i in range(len(cell_property)):
+                cell_property[i][[1, -2], :,  1] = 0.0
 
         for i in range(len(cell_property)):
             if shift_along_axis[i]:
