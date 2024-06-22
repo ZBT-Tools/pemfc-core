@@ -10,11 +10,10 @@ from scipy.sparse.linalg import spsolve
 # Local module imports
 from . import (
     matrix_functions as mtx_func, stack as stack_module, channel as chl,
-    global_functions as g_func)
+    global_functions as g_func, transport_layer as tl)
 
 if TYPE_CHECKING:
     from pemfc.src.stack import Stack
-    from pemfc.src.transport_layer import TransportLayer
     from pemfc.src.cell import Cell
 
 # import pandas as pd
@@ -101,6 +100,31 @@ class CellLinearSystem(LinearSystem):
             self.cell.layers, transport_type)
         shape = self.conductance[1].shape
         super().__init__(shape)
+
+        self.mtx_const = mtx_func.build_cell_conductance_matrix(
+                [self.conductance[0],
+                 tl.TransportLayer.calc_inter_node_conductance(
+                    self.conductance[1], axis=1) * 1.0,
+                 tl.TransportLayer.calc_inter_node_conductance(
+                    self.conductance[2], axis=2) * 1.0])
+
+        self.mtx_dyn = np.zeros(self.mtx_const.shape)
+        self.rhs_const = np.zeros(self.rhs.shape)
+        self.rhs_dyn = np.zeros(self.rhs.shape)
+
+    def update_rhs(self, *args, **kwargs):
+        """
+        Create vector with the right hand side entries,
+        Sources from outside the src to the src must be defined negative.
+        """
+        pass
+
+    def update_matrix(self, *args, **kwargs):
+        """
+        Updates matrix coefficients
+        """
+        pass
+
 
 class StackLinearSystem(LinearSystem, ABC):
 

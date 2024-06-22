@@ -4,8 +4,10 @@ import copy
 import math
 
 # Local modul imports
-from . import matrix_functions as mtx, half_cell as h_c, \
-    global_functions as g_func, membrane as membrane, transport_layer as sl
+from . import (
+    matrix_functions as mtx, half_cell as h_c,
+    global_functions as g_func, membrane as membrane, transport_layer as sl,
+    linear_system as ls)
 from .output_object import OutputObject2D
 
 
@@ -162,6 +164,8 @@ class Cell(OutputObject2D):
         self.conductance = {'thermal': self.thermal_conductance,
                             'electrical': self.electrical_conductance}
 
+        self.thermal_system = ls.CellLinearSystem(self, 'thermal')
+        self.electrical_system = ls.CellLinearSystem(self, 'electrical')
         # Boolean alarm values
         self.voltage_alarm = False
         # True if :voltage loss > cell voltage
