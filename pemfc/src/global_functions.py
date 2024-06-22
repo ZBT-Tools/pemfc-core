@@ -252,7 +252,7 @@ def calc_temp_heat_transfer(wall_temp, fluid_temp, capacity_rate, heat_coeff,
         else:
             fluid_temp[i + 1] = fluid_out
     if np.any(fluid_temp < 200.0):
-        raise ValueError
+        raise ValueError('fluid temperature decreases below 200 K')
     fluid_temp_avg = np.asarray(fluid_temp[:-1] + fluid_temp[1:]) * .5
     heat = heat_coeff * (wall_temp - fluid_temp_avg)
     return fluid_temp, heat

@@ -2,6 +2,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
+import math
 import numpy as np
 from numpy import linalg
 from scipy import linalg as sp_la
@@ -51,6 +52,9 @@ class LinearSystem(ABC):
         # contains the power sources and explicit coupled terms
         self.rhs = np.zeros(self.solution_vector.shape)
 
+        self.solution_array = np.reshape(
+            self.solution_vector, self.shape, order='F')
+
     def update(self, *args, **kwargs):
         """
         Wrapper to update the overall linear system.
@@ -94,12 +98,13 @@ class LinearSystem(ABC):
 
 class CellLinearSystem(LinearSystem):
 
-    def __init__(self, cell: Cell, transport_type: str):
+    def __init__(self, cell: Cell, transport_type: str, init_value=0.0):
         self.cell = cell
-        self.conductance = self.cell.calculate_conductance(
+        self.conductance = self.calculate_conductance(
             self.cell.layers, transport_type)
         shape = self.conductance[1].shape
         super().__init__(shape)
+        self.type = transport_type
 
         self.mtx_const = mtx_func.build_cell_conductance_matrix(
                 [self.conductance[0],
@@ -111,6 +116,108 @@ class CellLinearSystem(LinearSystem):
         self.mtx_dyn = np.zeros(self.mtx_const.shape)
         self.rhs_const = np.zeros(self.rhs.shape)
         self.rhs_dyn = np.zeros(self.rhs.shape)
+        self.index_array = self.create_cell_index_list(self.shape)
+
+        # Initialize solution values
+        self.solution_vector[:] = init_value
+        self.solution_array[:] = init_value
+
+    def calculate_conductance(self, layers: list[tl.TransportLayer],
+                              transport_type: str):
+        if transport_type not in ('electrical', 'thermal'):
+            raise ValueError("transport_type argument must be either "
+                             "'electrical' or 'thermal'")
+
+        # Stack thermal conductances along through-plane direction,
+        # i.e. x-coordinate
+        dims = len(layers[0].conductance[transport_type])
+        conductance = [
+            [layer.conductance[transport_type][i] for layer in layers]
+            for i in range(dims)]
+        return self.stack_cell_property(conductance, exp=(-1.0, 1.0, 1.0),
+                                        stacking_axis=0, modify_values=True)
+
+    def set_layer_boundary_conditions(self, layer_id):
+        if 'flux_endplate' in self.cell.cell_dict:
+            flux_endplate = self.cell.cell_dict['flux_endplate']
+            source = flux_endplate * self.cell.cathode.discretization.d_area
+            mtx_func.add_explicit_layer_source(
+                self.rhs_const, source.flatten(order='F'),
+                self.index_array, layer_id)
+
+        elif 'temp_endplate' in self.cell.cell_dict:
+            mtx_func.set_implicit_layer_fixed(self.mtx_const,
+                                         self.index_array, layer_id)
+            source = self.cell.cell_dict['temp_endplate']
+            self.rhs_const[:], _ = mtx_func.add_explicit_layer_source(
+                self.rhs_const, -source, self.index_array, layer_id,
+                replace=True)
+        else:
+            raise KeyError('either values for "flux_endplate" or '
+                           '"temp_endplate" must be provided')
+
+    def stack_cell_property(self, cell_property: list, stacking_axis,
+                            exp: tuple,
+                            modify_values=False,
+                            shift_along_axis=(False, True, True)):
+
+        # Split bipolar plate in two elements among x-direction if
+        # channel-land-discretization is applied
+        if self.cell.additional_layer:
+            cat_bpp_split_ratio = (self.cell.cathode.channel.height
+                                   / self.cell.cathode.bpp.thickness)
+            ano_bpp_split_ratio = (self.cell.anode.channel.height
+                                   / self.cell.anode.bpp.thickness)
+            for i in range(len(cell_property)):
+                value = np.copy(cell_property[i][0])
+                cell_property[i].insert(0, value * math.pow(
+                    1.0 - cat_bpp_split_ratio, exp[i]))
+                cell_property[i][1] = value * math.pow(
+                    cat_bpp_split_ratio, exp[i])
+                value = np.copy(cell_property[i][-1])
+                cell_property[i].append(value * math.pow(
+                    1.0 - ano_bpp_split_ratio, exp[i]))
+                cell_property[i][-2] = (
+                        value * math.pow(ano_bpp_split_ratio, exp[i]))
+        cell_property = [np.asarray(item) for item in cell_property]
+
+        # Set solid transport property to zero at channel domain
+        # Channel: index 1, Land: index 0
+        if self.cell.channel_land_discretization and modify_values:
+            for i in range(len(cell_property)):
+                cell_property[i][[1, -2], :, 1] = 0.0
+
+        for i in range(len(cell_property)):
+            if shift_along_axis[i]:
+                cell_property[i] = (
+                        (cell_property[i]
+                         + np.roll(cell_property[i], 1, axis=0)) * 0.5)
+                cell_property[i] = np.concatenate(
+                    (cell_property[i], [cell_property[i][0]]),
+                    axis=stacking_axis)
+                cell_property[i][0] *= 0.5
+                cell_property[i][-1] *= 0.5
+        return cell_property
+
+    @staticmethod
+    def create_cell_index_list(shape: tuple[int, ...]):
+        """
+        Create list of lists with each list containing flattened order of indices
+        for a continuous functional layer (for the conductance matrix).
+        Functional layers a discretized in x-direction (z-direction in old version),
+        the remaining flattened order is equal to the order in the overall matrix
+        and the corresponding right-hand side vector
+        (typically first y-, then z-direction within a layer a.k.a x-plane)
+
+        Args:
+            shape: tuple of size 3 containing the number of layers (index 0),
+            the number of y-elements (index 1) and the number z-elements (index 2)
+        """
+        index_list = []
+        for i in range(shape[0]):
+            index_list.append(
+                [(j * shape[0]) + i for j in range(shape[1] * shape[2])])
+        return index_list
 
     def update_rhs(self, *args, **kwargs):
         """
@@ -132,30 +239,33 @@ class StackLinearSystem(LinearSystem, ABC):
         super().__init__(shape)
         self.cells = stack.cells
         # self.transport_type = transport_type
-        self.index_list, self.layer_index_list = (
-            mtx_func.create_stack_index_list(self.cells))
-
         # Setup constant part of conductance matrix
         if isinstance(self, TemperatureSystem):
-            transport_type = 'thermal'
+            self.transport_type = 'thermal'
         elif isinstance(self, ElectricalSystem):
-            transport_type = 'electrical'
+            self.transport_type = 'electrical'
         else:
             raise NotImplementedError('subclass {} of class StackLinearSystem '
                                       'is not implemented'.format(type(self)))
-        self.mtx_const = self.connect_cells(transport_type)
+
+        self.cell_systems = [cell.linear_systems[self.transport_type]
+                             for cell in self.cells]
+        self.index_list, self.layer_index_list = (
+            self.create_stack_index_list(self.cells, self.transport_type))
+
+        self.mtx_const = self.connect_cells(self.transport_type)
         # if self.sparse_solve:
         #     self.mtx_const = sparse.csr_matrix(self.mtx_const)
 
     def connect_cells(self, transport_type: str):
-        matrix = sp_la.block_diag(*[cell.mtx_const[transport_type]
-                                    for cell in self.cells])
-        n_cells = len(self.cells)
+        matrix = sp_la.block_diag(
+            *[lin_sys.mtx_const for lin_sys in self.cell_systems])
+        n_cells = len(self.cell_systems)
         cell_ids = np.asarray([list(range(n_cells-1)),
                                list(range(1, n_cells))]).transpose()
         layer_ids = np.asarray([(-1, 0) for i in range(n_cells-1)])
         conductance = np.asarray(
-            [self.cells[i].conductance[transport_type][0][layer_ids[i][0]]
+            [self.cell_systems[i].conductance[0][layer_ids[i][0]]
              for i in range(n_cells-1)])
         # old_matrix = np.copy(matrix)
         mtx_func.connect_cells(matrix, cell_ids, layer_ids,
@@ -179,18 +289,27 @@ class StackLinearSystem(LinearSystem, ABC):
         """
         pass
 
-    @abstractmethod
+    @staticmethod
+    def create_stack_index_list(cells: list[Cell], transport_type: str):
+        n_cells = len(cells)
+        index_list = []
+        layer_ids = [[] for _ in range(cells[-1].nx)]
+        for i in range(n_cells):
+            index_array = \
+                (np.prod(cells[i - 1].membrane.dsct.shape, dtype=np.int32)
+                 * cells[i - 1].nx) * i \
+                + cells[i].linear_systems[transport_type].index_array
+            index_list.append(index_array.tolist())
+
+        for i in range(n_cells):
+            for j in range(cells[i].nx):
+                layer_ids[j].append(index_list[i][j])
+        layer_index_list = []
+        for sub_list in layer_ids:
+            layer_index_list.append(np.hstack(sub_list))
+        return index_list, layer_index_list
+
     def update_cell_solution(self):
-        """
-        This function coordinates the program sequence
-
-        Returns:
-
-        """
-        pass
-
-    def update_cell_solution_general(self, cell_solution_name: str,
-                                     cell_shape_name: str):
         """
         Transfer the general solution vector (1D) into the
         single cell solution arrays (3D)
@@ -199,13 +318,11 @@ class StackLinearSystem(LinearSystem, ABC):
         cell_solution_vectors = np.array_split(self.solution_vector,
                                                len(self.cells))
         cell_solution_list = []
-        for i, cell in enumerate(self.cells):
-            # cell_shape = getattr(cell, cell_shape_name)
-            cell_solution_array = np.reshape(cell_solution_vectors[i],
-                                             self.cells[i].voltage_shape,
-                                             order='F')
-            cell_solution = getattr(cell, cell_solution_name)
-            cell_solution[:] = cell_solution_array
+        for i, cell_sys in enumerate(self.cell_systems):
+            new_cell_solution_array = np.reshape(
+                cell_solution_vectors[i], cell_sys.shape, order='F')
+            cell_solution_array = cell_sys.solution_array
+            cell_solution_array[:] = new_cell_solution_array
             cell_solution_list.append(cell_solution_array)
         return np.asarray(cell_solution_list)
 
@@ -214,7 +331,7 @@ class TemperatureSystem(StackLinearSystem):
 
     def __init__(self, stack: stack_module.Stack, input_dict: dict):
 
-        shape = (len(stack.cells), *stack.cells[0].temp_shape)
+        shape = (len(stack.cells), *stack.cells[0].thermal_system.shape)
         super().__init__(shape, stack)
 
         """Building up the base conductance matrix"""
@@ -224,7 +341,7 @@ class TemperatureSystem(StackLinearSystem):
         self.input_dict = input_dict
 
         self.rhs_const = np.hstack(
-            [cell.thermal_rhs_const for cell in self.cells])
+            [lin_sys.rhs_const for lin_sys in self.cell_systems])
 
         # Sub channel ratios
         self.n_cat_channels = stack.fuel_circuits[0].n_subchannels
@@ -296,33 +413,33 @@ class TemperatureSystem(StackLinearSystem):
 
         gas_transfer = kwargs.get('gas_transfer', True)
         source_vectors = []
-        for i, cell in enumerate(self.cells):
-            cell.thermal_mtx_dyn[:, :] = 0.0
-            source_vectors.append(np.zeros(cell.thermal_rhs_dyn.shape))
+        for i, cell_sys in enumerate(self.cell_systems):
+            cell_sys.mtx_dyn[:, :] = 0.0
+            source_vectors.append(np.zeros(cell_sys.rhs_dyn.shape))
 
             if gas_transfer:
                 # Add thermal conductance for heat transfer to cathode gas
-                layer_id = cell.layer_id['cathode_gde']
-                channel = cell.cathode.channel
+                layer_id = self.cells[i].layer_id['cathode_gde']
+                channel = self.cells[i].cathode.channel
                 source = - channel.k_coeff  # * self.n_cat_channels
 
                 # k_test = np.copy(channel.k_coeff)
                 # k_test[:] = 0.5  # channel.k_coeff[0]
                 # source = - k_test
 
-                if cell.channel_land_discretization:
+                if self.cells[i].channel_land_discretization:
                     source = np.asarray(
                         [np.zeros(source.shape), source]).transpose()
                 # source /= cell.thermal_conductance[0].shape[-1]
 
                 matrix, source_vec_1 = mtx_func.add_implicit_layer_source(
-                    cell.thermal_mtx_dyn, source, cell.index_array,
+                    cell_sys.mtx_dyn, source, cell_sys.index_array,
                     layer_id=layer_id)
                 source_vectors[i][:] += source_vec_1
 
                 # Add thermal conductance for heat transfer to anode gas
-                layer_id = cell.layer_id['anode_gde'] + 1
-                channel = cell.anode.channel
+                layer_id = self.cells[i].layer_id['anode_gde'] + 1
+                channel = self.cells[i].anode.channel
                 source = - channel.k_coeff  # * self.n_ano_channels
 
                 # k_test = np.copy(channel.k_coeff)
@@ -330,27 +447,27 @@ class TemperatureSystem(StackLinearSystem):
                 # # k_test[:] += np.linspace(0, 0.1, k_test.shape[0])
                 # source = - k_test
 
-                if cell.channel_land_discretization:
+                if self.cells[i].channel_land_discretization:
                     source = np.asarray(
                         [np.zeros(source.shape), source]).transpose()
                 # source /= cell.thermal_conductance[0].shape[-1]
 
                 matrix, source_vec_2 = mtx_func.add_implicit_layer_source(
-                    cell.thermal_mtx_dyn, source, cell.index_array,
+                    cell_sys.mtx_dyn, source, cell_sys.index_array,
                     layer_id=layer_id)
                 source_vectors[i][:] += source_vec_2
 
             # Add thermal conductance for heat transfer to coolant
             if self.cool_flow:
-                source_vec_3 = np.zeros(cell.thermal_rhs_dyn.shape)
+                source_vec_3 = np.zeros(cell_sys.rhs_dyn.shape)
                 if self.cool_ch_bc:
                     cell_cool_channels = [self.cool_channels[i],
                                           self.cool_channels[i + 1]]
                     n_gas_channels = [self.n_cat_channels, self.n_ano_channels]
                     factors = [0.5, 0.5]
-                    if cell.first_cell:
+                    if self.cells[i].first_cell:
                         factors[0] += 0.5
-                    if cell.last_cell:
+                    if self.cells[i].last_cell:
                         factors[1] += 0.5
                     layer_ids = [0, -1]
                 else:
@@ -359,12 +476,12 @@ class TemperatureSystem(StackLinearSystem):
                     n_gas_channels = [self.n_ano_channels, self.n_cat_channels]
                     factors = [0.5, 0.5]
                     layer_ids = [0, -1]
-                    if cell.first_cell:
+                    if self.cells[i].first_cell:
                         cell_cool_channels.pop(0)
                         factors.pop(0)
                         layer_ids.pop(0)
                         n_gas_channels.pop(0)
-                    if cell.last_cell:
+                    if self.cells[i].last_cell:
                         cell_cool_channels.pop(1)
                         factors.pop(1)
                         layer_ids.pop(1)
@@ -377,11 +494,11 @@ class TemperatureSystem(StackLinearSystem):
                     # if cell.channel_land_discretization:
                     #     source = np.asarray(
                     #         [np.zeros(source.shape), source]).transpose()
-                    source /= cell.thermal_conductance[0].shape[-1]
+                    source /= cell_sys.conductance[0].shape[-1]
 
                     matrix, source_vec = mtx_func.add_implicit_layer_source(
-                        cell.thermal_mtx_dyn, source.flatten(order='F'),
-                        cell.index_array, layer_id=layer_ids[j])
+                        cell_sys.mtx_dyn, source.flatten(order='F'),
+                        cell_sys.index_array, layer_id=layer_ids[j])
                     source_vec_3[:] += source_vec
                 source_vectors[i][:] += source_vec_3
 
@@ -398,13 +515,13 @@ class TemperatureSystem(StackLinearSystem):
         gas_transfer = kwargs.get('gas_transfer', True)
         electrochemical_heat = kwargs.get('electrochemical_heat', True)
 
-        for i, cell in enumerate(self.cells):
-            cell.thermal_rhs_dyn[:] = 0.0
+        for i, cell_sys in enumerate(self.cell_systems):
+            cell_sys.rhs_dyn[:] = 0.0
             if gas_transfer:
                 # Cathode bpp-gde source
-                layer_id = cell.layer_id['cathode_gde']
+                layer_id = self.cells[i].layer_id['cathode_gde']
                 # h_vap = w_prop.water.calc_h_vap(cell.cathode.channel.temp[:-1])
-                channel = cell.cathode.channel
+                channel = self.cells[i].cathode.channel
                 source = channel.k_coeff * channel.temp_ele  # * self.n_cat_channels
 
                 # temp_test = np.copy(channel.temp_ele)
@@ -417,19 +534,20 @@ class TemperatureSystem(StackLinearSystem):
 
                 # Heat transport to reactant gas only in the part of layer at
                 # channel (index 1 of z-direction)
-                if cell.channel_land_discretization:
+                if self.cells[i].channel_land_discretization:
                     source = np.asarray(
                         [np.zeros(source.shape), source]).transpose()
                 # source /= cell.thermal_conductance[0].shape[-1]
 
-                cell.thermal_rhs_dyn[:], _ = mtx_func.add_explicit_layer_source(
-                    cell.thermal_rhs_dyn, source.flatten(order='F'),
-                    cell.index_array, layer_id=layer_id)
+                cell_sys.rhs_dyn[:], _ = (
+                    mtx_func.add_explicit_layer_source(
+                        cell_sys.rhs_dyn, source.flatten(order='F'),
+                        cell_sys.index_array, layer_id=layer_id))
 
                 # Anode bpp-gde
-                layer_id = cell.layer_id['anode_gde'] + 1
+                layer_id = self.cells[i].layer_id['anode_gde'] + 1
                 # h_vap = w_prop.water.calc_h_vap(cell.anode.temp_fluid[:-1])
-                channel = cell.anode.channel
+                channel = self.cells[i].anode.channel
                 source = channel.k_coeff * channel.temp_ele  # * self.n_ano_channels
 
                 # temp_test = np.copy(channel.temp_ele)
@@ -441,22 +559,24 @@ class TemperatureSystem(StackLinearSystem):
 
                 source += getattr(channel, 'condensation_heat', 0.0)  # * 0.0
 
-                if cell.channel_land_discretization:
+                if self.cells[i].channel_land_discretization:
                     source = np.asarray(
                         [np.zeros(source.shape), source]).transpose()
                 # source /= cell.thermal_conductance[0].shape[-1]
 
-                cell.thermal_rhs_dyn[:], _ = mtx_func.add_explicit_layer_source(
-                    cell.thermal_rhs_dyn, source.flatten(order='F'),
-                    cell.index_array, layer_id=layer_id)
+                cell_sys.rhs_dyn[:], _ = (
+                    mtx_func.add_explicit_layer_source(
+                        cell_sys.rhs_dyn, source.flatten(order='F'),
+                        cell_sys.index_array, layer_id=layer_id))
 
             if electrochemical_heat:
                 # Cathode gde-mem source
-                layer_id = cell.layer_id['cathode_gde'] + 1
-                current = (cell.current_density[layer_id] * cell.d_area)
+                layer_id = self.cells[i].layer_id['cathode_gde'] + 1
+                current = (self.cells[i].current_density[layer_id]
+                           * self.cells[i].d_area)
 
                 cathode_ohmic_heat_membrane = (
-                        0.5 * cell.membrane.omega * np.square(current))
+                        0.5 * self.cells[i].membrane.omega * np.square(current))
                 source = np.copy(cathode_ohmic_heat_membrane)
 
                 # test_current_density = np.zeros(current.shape)
@@ -467,7 +587,8 @@ class TemperatureSystem(StackLinearSystem):
                 # test_ohmic_heat = 0.5 * test_omega * np.square(test_current)
                 # source = np.copy(test_ohmic_heat)
 
-                v_loss = np.minimum(self.e_0, cell.cathode.voltage_loss)
+                v_loss = np.minimum(
+                    self.e_0, self.cells[i].cathode.voltage_loss)
                 v_loss[v_loss < 0.0] = 0.0
                 reaction_heat = (self.e_tn - self.e_0 + v_loss) * current
                 # reaction_heat_sum = np.sum(reaction_heat)
@@ -480,24 +601,26 @@ class TemperatureSystem(StackLinearSystem):
 
                 source += reaction_heat
                 # source *= 1.0
-                cell.thermal_rhs_dyn[:], _ = mtx_func.add_explicit_layer_source(
-                    cell.thermal_rhs_dyn, source.flatten(order='F'),
-                    cell.index_array, layer_id=layer_id)
+                cell_sys.rhs_dyn[:], _ = (
+                    mtx_func.add_explicit_layer_source(
+                        cell_sys.rhs_dyn, source.flatten(order='F'),
+                        cell_sys.index_array, layer_id=layer_id))
 
                 # Anode gde-mem source
-                layer_id = cell.layer_id['anode_gde']
-                current = (cell.current_density[layer_id] * cell.d_area)
+                layer_id = self.cells[i].layer_id['anode_gde']
+                current = (self.cells[i].current_density[layer_id]
+                           * self.cells[i].d_area)
                 anode_ohmic_heat_membrane = (
-                        0.5 * cell.membrane.omega * np.square(current))
+                        0.5 * self.cells[i].membrane.omega * np.square(current))
                 source = anode_ohmic_heat_membrane
-                v_loss = np.minimum(self.e_0, cell.anode.voltage_loss)
+                v_loss = np.minimum(self.e_0, self.cells[i].anode.voltage_loss)
                 v_loss[v_loss < 0.0] = 0.0
                 reaction_heat = v_loss * current
                 source += reaction_heat
                 source *= 1.0
-                cell.thermal_rhs_dyn[:], _ = mtx_func.add_explicit_layer_source(
-                    cell.thermal_rhs_dyn, source.flatten(order='F'),
-                    cell.index_array, layer_id=layer_id)
+                cell_sys.rhs_dyn[:], _ = mtx_func.add_explicit_layer_source(
+                    cell_sys.rhs_dyn, source.flatten(order='F'),
+                    cell_sys.index_array, layer_id=layer_id)
 
             # Coolant source coefficients
             if self.cool_flow:
@@ -506,9 +629,9 @@ class TemperatureSystem(StackLinearSystem):
                                           self.cool_channels[i + 1]]
                     n_gas_channels = [self.n_cat_channels, self.n_ano_channels]
                     factors = [0.5, 0.5]
-                    if cell.first_cell:
+                    if self.cells[i].first_cell:
                         factors[0] += 0.5
-                    if cell.last_cell:
+                    if self.cells[i].last_cell:
                         factors[1] += 0.5
                     layer_ids = [0, -1]
                 else:
@@ -517,12 +640,12 @@ class TemperatureSystem(StackLinearSystem):
                     n_gas_channels = [self.n_ano_channels, self.n_cat_channels]
                     factors = [0.5, 0.5]
                     layer_ids = [0, -1]
-                    if cell.first_cell:
+                    if self.cells[i].first_cell:
                         cell_cool_channels.pop(0)
                         factors.pop(0)
                         layer_ids.pop(0)
                         n_gas_channels.pop(0)
-                    if cell.last_cell:
+                    if self.cells[i].last_cell:
                         cell_cool_channels.pop(1)
                         factors.pop(1)
                         layer_ids.pop(1)
@@ -533,14 +656,15 @@ class TemperatureSystem(StackLinearSystem):
                     # if cell.channel_land_discretization:
                     #     source = np.asarray(
                     #         [np.zeros(source.shape), source]).transpose()
-                    source /= cell.thermal_conductance[0].shape[-1]
+                    source /= cell_sys.conductance[0].shape[-1]
                     source *= factors[j]
-                    cell.thermal_rhs_dyn[:], _ = (
+                    cell_sys.rhs_dyn[:], _ = (
                         mtx_func.add_explicit_layer_source(
-                            cell.thermal_rhs_dyn, source.flatten(order='F'),
-                            cell.index_array, layer_id=layer_ids[j]))
+                            cell_sys.rhs_dyn, source.flatten(order='F'),
+                            cell_sys.index_array, layer_id=layer_ids[j]))
 
-        rhs_dyn = np.hstack([cell.thermal_rhs_dyn for cell in self.cells])
+        rhs_dyn = np.hstack([cell_sys.rhs_dyn for cell_sys in
+                             self.cell_systems])
         self.rhs[:] = self.rhs_const + rhs_dyn
 
     def update_gas_channel(self):
@@ -572,24 +696,12 @@ class TemperatureSystem(StackLinearSystem):
             wall_temp = g_func.reduce_dimension(wall_temp)
             cool_chl.update_heat(wall_temp=wall_temp, update_fluid=False)
 
-    def update_cell_solution(self):
-        temp_solution_name = 'temp_layer'
-        if not hasattr(self.cells[0], temp_solution_name):
-            raise ValueError('attribute {} is not found in {}'.format(
-                temp_solution_name, self.cells[0].__name__))
-        temp_shape_name = 'temp_shape'
-        if not hasattr(self.cells[0], temp_shape_name):
-            raise ValueError('attribute {} is not found in {}'.format(
-                temp_shape_name, self.cells[0].__name__))
-        return self.update_cell_solution_general(temp_solution_name,
-                                                 temp_shape_name)
-
 
 class ElectricalSystem(StackLinearSystem):
 
     def __init__(self, stack: stack_module.Stack, input_dict: dict):
 
-        shape = (len(stack.cells), *stack.cells[0].voltage_shape)
+        shape = (len(stack.cells), *stack.cells[0].electrical_system.shape)
         super().__init__(shape, stack)
 
         """Building up the base conductance matrix"""
@@ -609,7 +721,7 @@ class ElectricalSystem(StackLinearSystem):
 
         # Current density of the elements in trough-plane- / x-direction
         diff_shape = (len(self.cells),
-                      *self.cells[0].electrical_conductance[0].shape)
+                      *self.cell_systems[0].conductance[0].shape)
         self.current_density = np.zeros(diff_shape)
 
     def update_rhs(self, *args, **kwargs):
@@ -622,16 +734,18 @@ class ElectricalSystem(StackLinearSystem):
 
         # Current boundary conditions are applied at outer plate
         # (layer id 0) of cell 0
-        cell_0 = self.cells[0]
-        cell_rhs = np.zeros(cell_0.voltage_layer.flatten().shape)
+        index = 0
+        cell = self.cells[index]
+        cell_sys = self.cell_systems[index]
+        cell_rhs = np.zeros(cell.voltage_layer.flatten().shape)
         if self.current_control:
-            bc_current = self.current_density_target * cell_0.d_area
-            if np.sum(cell_0.voltage_layer[0]) == 0.0:
-                rhs_bc_values = self.current_density_target * cell_0.d_area
+            bc_current = self.current_density_target * cell.d_area
+            if np.sum(cell_sys.solution_array[0]) == 0.0:
+                rhs_bc_values = self.current_density_target * cell.d_area
             else:
                 inlet_current = (
-                    np.abs(cell_0.voltage_layer[0] - cell_0.voltage_layer[1])
-                    * cell_0.electrical_conductance[0][0])
+                    np.abs(cell_sys.solution_array[0] - cell_sys.solution_array[1])
+                    * self.cell_systems[index].conductance[0][0])
                 correction_factors = bc_current / inlet_current
                 rhs_bc_values = inlet_current * correction_factors
 
@@ -639,11 +753,11 @@ class ElectricalSystem(StackLinearSystem):
             rhs_bc_values = self.v_loss_tar
         mtx_func.add_explicit_layer_source(
             cell_rhs, rhs_bc_values.flatten(order='F'),
-            cell_0.index_array, layer_id=0)
+            cell_sys.index_array, layer_id=0)
         cell_rhs_list.append(cell_rhs)
         for i in range(1, len(self.cells)):
             cell_rhs_list.append(
-                np.zeros(self.cells[i].voltage_layer.flatten().shape))
+                np.zeros(cell_sys.solution_array.flatten().shape))
         self.rhs[:] = np.hstack(cell_rhs_list)
 
     def update_matrix(self, electrochemical_conductance, *args, **kwargs):
@@ -661,17 +775,6 @@ class ElectricalSystem(StackLinearSystem):
         if not self.current_control:
             self.set_matrix_dirichlet_bc([0], [0])
 
-    def update_cell_solution(self):
-        solution_name = 'voltage_layer'
-        if not hasattr(self.cells[0], solution_name):
-            raise ValueError('attribute {} is not found in {}'.format(
-                solution_name, self.cells[0].__name__))
-        shape_name = 'voltage_shape'
-        if not hasattr(self.cells[0], shape_name):
-            raise ValueError('attribute {} is not found in {}'.format(
-                shape_name, self.cells[0].__name__))
-        return self.update_cell_solution_general(solution_name, shape_name)
-
     def update(self, current_density=None, voltage=None):
         """
         Wrapper function to solve underlying linear system with updated input
@@ -686,22 +789,20 @@ class ElectricalSystem(StackLinearSystem):
         dynamic_conductances = self.create_dynamic_conductance_list()
         self.update_and_solve_linear_system(dynamic_conductances)
         voltage_array = self.update_cell_voltage()
-        constant_conductances = np.asarray([cell.electrical_conductance[0]
-                                            for cell in self.cells])
+        constant_conductances = np.asarray([cell_sys.conductance[0]
+                                            for cell_sys in self.cell_systems])
         conductance_array = (constant_conductances
                              + np.asarray(dynamic_conductances))
         self.update_current_density(voltage_array, conductance_array)
 
     def create_dynamic_conductance_list(self):
         dynamic_cell_conductance_list = []
-        for cell in self.cells:
-            shape = self.cells[0].electrical_conductance[0].shape
-
+        for i, cell_sys in enumerate(self.cell_systems):
+            shape = cell_sys.conductance[0].shape
             dynamic_cell_conductance = np.zeros(shape)
-            layer_id = (
-                self.cells[0].electrical_conductance[0].shape[0] // 2)
+            layer_id = (cell_sys.conductance[0].shape[0] // 2)
             dynamic_cell_conductance[layer_id] = (
-                cell.electrochemical_conductance)
+                self.cells[i].electrochemical_conductance)
             dynamic_cell_conductance_list.append(dynamic_cell_conductance)
         return dynamic_cell_conductance_list
 
@@ -718,7 +819,8 @@ class ElectricalSystem(StackLinearSystem):
         voltage_array = self.update_cell_solution()
         for i, cell in enumerate(self.cells):
             # cell.voltage_layer[:] = cell.e_0 - cell.voltage_layer
-            cell.voltage_loss[:] = np.abs(voltage_array[i][0] - voltage_array[i][-1])
+            cell.voltage_loss[:] = np.abs(
+                voltage_array[i][0] - voltage_array[i][-1])
             # cell.update_voltage_loss(v_diff[i])
         return voltage_array
 

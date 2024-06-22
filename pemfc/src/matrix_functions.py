@@ -278,46 +278,6 @@ def connect_cells(matrix, cell_ids, layer_ids, values, mtx_ids,
             matrix[mtx_id_1, mtx_id_0] += values[i].flatten('F')
 
 
-def create_stack_index_list(cells: list[cell.Cell]):
-    n_cells = len(cells)
-    index_list = []
-    layer_ids = [[] for _ in range(cells[-1].nx)]
-    for i in range(n_cells):
-        index_array = \
-            (np.prod(cells[i-1].membrane.dsct.shape, dtype=np.int32)
-             * cells[i-1].nx) * i \
-            + cells[i].index_array
-        index_list.append(index_array.tolist())
-
-    for i in range(n_cells):
-        for j in range(cells[i].nx):
-            layer_ids[j].append(index_list[i][j])
-    layer_index_list = []
-    for sub_list in layer_ids:
-        layer_index_list.append(np.hstack(sub_list))
-    return index_list, layer_index_list
-
-
-def create_cell_index_list(shape: tuple[int, ...]):
-    """
-    Create list of lists with each list containing flattened order of indices
-    for a continuous functional layer (either for thermal or conductance matrix).
-    Functional layers a discretized in x-direction (z-direction in old version),
-    the remaining flattened order is equal to the order in the overall matrix
-    and the corresponding right-hand side vector
-    (typically first y-, then z-direction within a layer a.k.a x-plane)
-
-    Args:
-        shape: tuple of size 3 containing the number of layers (index 0),
-        the number of y-elements (index 1) and the number z-elements (index 2)
-    """
-    index_list = []
-    for i in range(shape[0]):
-        index_list.append(
-            [(j * shape[0]) + i for j in range(shape[1] * shape[2])])
-    return index_list
-
-
 def add_explicit_layer_source(rhs_vector, source_term, index_array,
                               layer_id=None, replace=False):
     if isinstance(source_term, np.ndarray):
