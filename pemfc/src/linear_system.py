@@ -14,6 +14,8 @@ from . import (
 
 if TYPE_CHECKING:
     from pemfc.src.stack import Stack
+    from pemfc.src.transport_layer import TransportLayer
+    from pemfc.src.cell import Cell
 
 # import pandas as pd
 # from numba import jit
@@ -90,6 +92,15 @@ class LinearSystem(ABC):
         else:
             self.solution_vector[:] = np.linalg.tensorsolve(self.mtx, self.rhs)
 
+
+class CellLinearSystem(LinearSystem):
+
+    def __init__(self, cell: Cell, transport_type: str):
+        self.cell = cell
+        self.conductance = self.cell.calculate_conductance(
+            self.cell.layers, transport_type)
+        shape = self.conductance[1].shape
+        super().__init__(shape)
 
 class StackLinearSystem(LinearSystem, ABC):
 
@@ -554,7 +565,7 @@ class ElectricalSystem(StackLinearSystem):
 
     def __init__(self, stack: stack_module.Stack, input_dict: dict):
 
-        shape = (len(stack.cells), *stack.cells[0].temp_shape)
+        shape = (len(stack.cells), *stack.cells[0].voltage_shape)
         super().__init__(shape, stack)
 
         """Building up the base conductance matrix"""
@@ -562,8 +573,6 @@ class ElectricalSystem(StackLinearSystem):
         # Add constant source and sink coefficients to heat conductance matrix
         # Heat transfer to ambient
         self.input_dict = input_dict
-
-        # self.rhs_const = np.hstack([cell.heat_rhs_const for cell in self.cells])
 
         # Variables
         self.current_control = stack.current_control

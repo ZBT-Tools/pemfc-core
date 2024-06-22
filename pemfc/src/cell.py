@@ -86,15 +86,19 @@ class Cell(OutputObject2D):
         # will be initialized correctly through stack class
         self.coords = [0.0, 0.0]
 
+        # Layer stack
+        self.layers = [
+            self.cathode.bpp,
+            self.cathode.gde,
+            self.membrane,
+            self.anode.gde,
+            self.anode.bpp
+        ]
         # Layer thickness stack
-        self.th_layer = [
-            self.cathode.bpp.thickness,
-            self.cathode.gde.thickness,
-            self.membrane.thickness,
-            self.anode.gde.thickness,
-            self.anode.bpp.thickness]
+        self.th_layer = [layer.thickness for layer in self.layers]
 
-        self.thermal_conductance = self.calculate_conductance('thermal')
+        self.thermal_conductance = self.calculate_conductance(
+            self.layers, 'thermal')
 
         # Shape for cell-based temperature solution
         self.temp_shape = self.thermal_conductance[1].shape
@@ -137,7 +141,8 @@ class Cell(OutputObject2D):
         # Constant x-conductance will be zero for initial constant setup,
         # due to dynamic addition of lumped x-conductance during solution
         # procedure
-        self.electrical_conductance = self.calculate_conductance('electrical')
+        self.electrical_conductance = self.calculate_conductance(
+            self.layers, 'electrical')
         # Shape for cell-based voltage solution
         self.voltage_shape = self.electrical_conductance[1].shape
 
@@ -164,19 +169,14 @@ class Cell(OutputObject2D):
         # True if the program aborts because of some critical impact
 
         # Cell thickness
-        self.thickness = (self.membrane.thickness
-                          + self.cathode.bpp.thickness
-                          + self.cathode.gde.thickness
-                          + self.anode.bpp.thickness
-                          + self.anode.gde.thickness)
+        self.thickness = np.sum([layer.thickness for layer in self.layers])
 
         # Initializing temperatures with average channel fluid temperature
         temp_init = np.average([hc.channel.fluid.temperature
                                 for hc in self.half_cells])
         # membrane temperature
-        self.temp_mem = np.zeros(self.membrane.temp.shape)
         self.temp_layer = \
-            g_func.full((self.nx,) + self.temp_mem.shape, temp_init)
+            g_func.full((self.nx,) + self.membrane.temp.shape, temp_init)
         # interface names according to temperature array
         self.nx_names = [
             'Cathode BC-BPP',
@@ -227,33 +227,18 @@ class Cell(OutputObject2D):
                 layer_id_dict['anode_bpp'].append(membrane_id + 2 + i)
         return layer_id_dict
 
-    def calculate_conductance(self, transport_type: str):
+    def calculate_conductance(self, layers: list[sl.TransportLayer],
+                              transport_type: str):
         if transport_type not in ('electrical', 'thermal'):
             raise ValueError("transport_type argument must be either "
                              "'electrical' or 'thermal'")
 
         # Stack thermal conductances along through-plane direction,
         # i.e. x-coordinate
-        conductance_x = \
-            [self.cathode.bpp.conductance[transport_type][0],
-             self.cathode.gde.conductance[transport_type][0],
-             self.membrane.conductance[transport_type][0],
-             self.anode.gde.conductance[transport_type][0],
-             self.anode.bpp.conductance[transport_type][0]]
-        conductance_y = \
-            [self.cathode.bpp.conductance[transport_type][1],
-             self.cathode.gde.conductance[transport_type][1],
-             self.membrane.conductance[transport_type][1],
-             self.anode.gde.conductance[transport_type][1],
-             self.anode.bpp.conductance[transport_type][1]]
-        conductance_z = \
-            [self.cathode.bpp.conductance[transport_type][2],
-             self.cathode.gde.conductance[transport_type][2],
-             self.membrane.conductance[transport_type][2],
-             self.anode.gde.conductance[transport_type][2],
-             self.anode.bpp.conductance[transport_type][2]]
-
-        conductance = [conductance_x, conductance_y, conductance_z]
+        dims = len(layers[0].conductance[transport_type])
+        conductance = [
+            [layer.conductance[transport_type][i] for layer in layers]
+            for i in range(dims)]
         return self.stack_cell_property(conductance, exp=(-1.0, 1.0, 1.0),
                                         stacking_axis=0, modify_values=True)
 
@@ -324,22 +309,12 @@ class Cell(OutputObject2D):
         :return: discretized conductance for each layer of cell based on
         external surface
         """
-        # geometry model
-        # ext_surface_factor = (self.width + self.length) \
-        #     / (self.cathode.channel.length * self.width_straight_channels)
-        # k_amb = np.full((self.n_layer, self.n_ele), 0.)
-        # convection conductance to the environment
-        # th_layer_amb = (self.th_layer + np.roll(self.th_layer, 1, axis=0)) * 0.5
-
-        # if self.last_cell:
-        # th_layer_amb = np.hstack((th_layer_amb, th_layer_amb[0]))
         th_layer_amb = self.stack_cell_property(
             [self.th_layer], exp=(1.0,), stacking_axis=-1,
             modify_values=False, shift_along_axis=(True,))
         dy = self.cathode.discretization.dx[0].flatten(order='F')
         k_amb = np.outer(th_layer_amb, dy) \
             * alpha_amb * self.cathode.flow_field.external_surface_factor
-        # if self.first_cell:
         return k_amb
 
     def update(self, current_density, update_channel=False,
@@ -351,19 +326,13 @@ class Cell(OutputObject2D):
             urf = self.urf
         current_density = (
                 (1.0 - urf) * current_density + urf * self.current_density)
-        # if g_par.iteration > 50:
-        #     self.urf *= 0.99
-        # self.urf = max(self.urf, 0.8)
-        # self.temp_mem[:] = .5 * (self.temp_layer[2] + self.temp_layer[3])
+
         self.membrane.temp[:] = (
                 0.5 * (self.temp_layer[self.layer_id['cathode_gde']] +
                        self.temp_layer[self.layer_id['anode_gde']]))
         if isinstance(self.membrane, membrane.WaterTransportMembrane):
             self.cathode.w_cross_flow[:] = self.membrane.water_flux * -1.0
             self.anode.w_cross_flow[:] = self.membrane.water_flux
-        # self.cathode.set_layer_temperature([self.temp[2], self.temp[3],
-        #                                     self.temp[4]])
-        # self.anode.set_layer_temperature([self.temp[0], self.temp[1]])
 
         self.cathode.update(current_density[self.layer_id['cathode_gde']],
                             update_channel=update_channel,
@@ -387,10 +356,7 @@ class Cell(OutputObject2D):
             # self.calc_voltage_loss()
             self.calc_electrochemical_conductance(
                 corrected_current_density[self.layer_id['membrane']])
-            # if np.any(self.v_alarm) and current_control:
-            #     self.correct_voltage_loss()
-                # raise ValueError('voltage losses greater than '
-                #                  'open circuit voltage')
+
             self.current_density[:] = current_density
             self.voltage[:] = self.e_0 - self.voltage_loss
 
