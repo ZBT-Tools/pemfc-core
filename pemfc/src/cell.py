@@ -133,8 +133,10 @@ class Cell(OutputObject2D):
 
         # Cell thickness
         self.thickness = np.sum([layer.thickness for layer in self.layers])
-
+        # Cell temperatures
         self.temp_layer = self.thermal_system.solution_array
+        # Cell voltage
+        self.voltage_layer = self.electrical_system.solution_array
         # Interface names according to temperature array
         self.nx_names = [
             'Cathode BC-BPP',
@@ -150,14 +152,12 @@ class Cell(OutputObject2D):
         # Current density
         self.current_density = np.zeros(
             self.electrical_system.conductance[0].shape)
-        # Cell voltage
-        self.voltage_layer = self.electrical_system.solution_array
+
         # Through-plane electrochemical (MEA) cell conductance
         self.electrochemical_conductance = np.zeros(
             self.electrical_system.conductance[0][0].shape)
         # Voltage loss over the single cell stack (bpp-to-bpp)
         self.voltage_loss = np.zeros(self.electrochemical_conductance.shape)
-
         self.voltage = np.zeros(self.electrochemical_conductance.shape)
 
         # Assign results to output data
