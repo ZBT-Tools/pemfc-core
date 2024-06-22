@@ -99,73 +99,32 @@ class Cell(OutputObject2D):
         # Layer thickness stack
         self.th_layer = [layer.thickness for layer in self.layers]
 
-        self.thermal_conductance = self.calculate_conductance(
-            self.layers, 'thermal')
-
-        # Shape for cell-based temperature solution
-        self.temp_shape = self.thermal_conductance[1].shape
+        # Setup linear systems for different transport physics within cell
+        self.transport_types = ['thermal', 'electrical']
+        # Initializing temperatures with average channel fluid temperature
+        temp_init = np.average([hc.channel.fluid.temperature
+                                for hc in self.half_cells])
+        init_values = [temp_init, 0.0]
+        self.linear_systems = {
+            name: ls.CellLinearSystem(self, name, init_values[i])
+            for i, name in enumerate(self.transport_types)}
+        self.thermal_system = self.linear_systems['thermal']
+        self.electrical_system = self.linear_systems['electrical']
 
         # Array to link all aggregate elements indexes of 1D-solution vector
         # in groups of the corresponding layers
-        self.index_array = mtx.create_cell_index_list(self.temp_shape)
-        self.nx = self.temp_shape[0]
+        self.nx = self.thermal_system.shape[0]
         self.n_layer = self.nx - 1
 
         # Assign layer id corresponding to material name
         self.layer_id = self.create_layer_index_dict(self.n_layer)
 
-        self.thermal_mtx_const = mtx.build_cell_conductance_matrix(
-                [self.thermal_conductance[0],
-                 sl.TransportLayer.calc_inter_node_conductance(
-                    self.thermal_conductance[1], axis=1) * 1.0,
-                 sl.TransportLayer.calc_inter_node_conductance(
-                    self.thermal_conductance[2], axis=2) * 1.0])
-
-        # self.heat_mtx_const = np.zeros(self.heat_cond_mtx.shape)
-        self.thermal_mtx_dyn = np.zeros(self.thermal_mtx_const.shape)
-        self.thermal_mtx = np.zeros(self.thermal_mtx_dyn.shape)
-
-        self.thermal_rhs_const = np.zeros(self.thermal_mtx_const.shape[0])
-        self.thermal_rhs_dyn = np.zeros(self.thermal_rhs_const.shape)
-        self.thermal_rhs = np.zeros(self.thermal_rhs_dyn.shape)
-
         # Set thermal boundary conditions at end plates
         if self.first_cell:
-            self.set_layer_boundary_conditions(layer_id=0)
+            self.thermal_system.set_layer_boundary_conditions(layer_id=0)
         if self.last_cell:
-            self.set_layer_boundary_conditions(layer_id=-1)
+            self.thermal_system.set_layer_boundary_conditions(layer_id=-1)
 
-        # Create electric conductance matrix.
-        # For new update, matrix setup will be analogous to thermal matrix by
-        # ordering along x- (through-plane), y- (along-the-channel),
-        # and z-direction (channel-rib-discretization), where the
-        # x-discretization represents the smallest block matrix entity
-        # Constant x-conductance will be zero for initial constant setup,
-        # due to dynamic addition of lumped x-conductance during solution
-        # procedure
-        self.electrical_conductance = self.calculate_conductance(
-            self.layers, 'electrical')
-        # Shape for cell-based voltage solution
-        self.voltage_shape = self.electrical_conductance[1].shape
-
-        self.elec_mtx_const = \
-            mtx.build_cell_conductance_matrix(
-                [self.electrical_conductance[0],
-                 sl.TransportLayer.calc_inter_node_conductance(
-                    self.electrical_conductance[1], axis=1) * 1.0,
-                 sl.TransportLayer.calc_inter_node_conductance(
-                    self.electrical_conductance[2], axis=2) * 1.0])
-
-        # Combine both (heat and electrical) conductance matrices in a unified
-        # dictionary
-        self.mtx_const = {'thermal': self.thermal_mtx_const,
-                          'electrical': self.elec_mtx_const}
-
-        self.conductance = {'thermal': self.thermal_conductance,
-                            'electrical': self.electrical_conductance}
-
-        self.thermal_system = ls.CellLinearSystem(self, 'thermal')
-        self.electrical_system = ls.CellLinearSystem(self, 'electrical')
         # Boolean alarm values
         self.voltage_alarm = False
         # True if :voltage loss > cell voltage
@@ -175,13 +134,8 @@ class Cell(OutputObject2D):
         # Cell thickness
         self.thickness = np.sum([layer.thickness for layer in self.layers])
 
-        # Initializing temperatures with average channel fluid temperature
-        temp_init = np.average([hc.channel.fluid.temperature
-                                for hc in self.half_cells])
-        # membrane temperature
-        self.temp_layer = \
-            g_func.full((self.nx,) + self.membrane.temp.shape, temp_init)
-        # interface names according to temperature array
+        self.temp_layer = self.thermal_system.solution_array
+        # Interface names according to temperature array
         self.nx_names = [
             'Cathode BC-BPP',
             'Cathode BPP-GDE',
@@ -194,12 +148,13 @@ class Cell(OutputObject2D):
             self.nx_names.insert(-2, 'Anode BPP-BPP')
 
         # Current density
-        self.current_density = np.zeros(self.electrical_conductance[0].shape)
+        self.current_density = np.zeros(
+            self.electrical_system.conductance[0].shape)
         # Cell voltage
-        self.voltage_layer = np.zeros(self.voltage_shape)
+        self.voltage_layer = self.electrical_system.solution_array
         # Through-plane electrochemical (MEA) cell conductance
         self.electrochemical_conductance = np.zeros(
-            self.electrical_conductance[0][0].shape)
+            self.electrical_system.conductance[0][0].shape)
         # Voltage loss over the single cell stack (bpp-to-bpp)
         self.voltage_loss = np.zeros(self.electrochemical_conductance.shape)
 
@@ -231,81 +186,6 @@ class Cell(OutputObject2D):
                 layer_id_dict['anode_bpp'].append(membrane_id + 2 + i)
         return layer_id_dict
 
-    def calculate_conductance(self, layers: list[sl.TransportLayer],
-                              transport_type: str):
-        if transport_type not in ('electrical', 'thermal'):
-            raise ValueError("transport_type argument must be either "
-                             "'electrical' or 'thermal'")
-
-        # Stack thermal conductances along through-plane direction,
-        # i.e. x-coordinate
-        dims = len(layers[0].conductance[transport_type])
-        conductance = [
-            [layer.conductance[transport_type][i] for layer in layers]
-            for i in range(dims)]
-        return self.stack_cell_property(conductance, exp=(-1.0, 1.0, 1.0),
-                                        stacking_axis=0, modify_values=True)
-
-    def set_layer_boundary_conditions(self, layer_id):
-        if 'flux_endplate' in self.cell_dict:
-            flux_endplate = self.cell_dict['flux_endplate']
-            source = flux_endplate * self.cathode.discretization.d_area
-            mtx.add_explicit_layer_source(
-                self.thermal_rhs_const, source.flatten(order='F'),
-                self.index_array, layer_id)
-
-        elif 'temp_endplate' in self.cell_dict:
-            mtx.set_implicit_layer_fixed(self.thermal_mtx_const,
-                                         self.index_array, layer_id)
-            source = self.cell_dict['temp_endplate']
-            self.thermal_rhs_const[:], _ = mtx.add_explicit_layer_source(
-                self.thermal_rhs_const, -source, self.index_array, layer_id,
-                replace=True)
-        else:
-            raise KeyError('either values for "flux_endplate" or '
-                           '"temp_endplate" must be provided')
-
-    def stack_cell_property(self, cell_property: list, stacking_axis, exp: tuple,
-                            modify_values=False, shift_along_axis=(False, True, True)):
-
-        # Split bipolar plate in two elements among x-direction if
-        # channel-land-discretization is applied
-        if self.additional_layer:
-            cat_bpp_split_ratio = (
-                    self.cathode.channel.height / self.cathode.bpp.thickness)
-            ano_bpp_split_ratio = (
-                    self.anode.channel.height / self.anode.bpp.thickness)
-            for i in range(len(cell_property)):
-                value = np.copy(cell_property[i][0])
-                cell_property[i].insert(0, value * math.pow(
-                    1.0 - cat_bpp_split_ratio, exp[i]))
-                cell_property[i][1] = value * math.pow(
-                    cat_bpp_split_ratio, exp[i])
-                value = np.copy(cell_property[i][-1])
-                cell_property[i].append(value * math.pow(
-                    1.0 - ano_bpp_split_ratio, exp[i]))
-                cell_property[i][-2] = (
-                        value * math.pow(ano_bpp_split_ratio, exp[i]))
-        cell_property = [np.asarray(item) for item in cell_property]
-
-        # Set solid transport property to zero at channel domain
-        # Channel: index 1, Land: index 0
-        if self.channel_land_discretization and modify_values:
-            for i in range(len(cell_property)):
-                cell_property[i][[1, -2], :,  1] = 0.0
-
-        for i in range(len(cell_property)):
-            if shift_along_axis[i]:
-                cell_property[i] = (
-                        (cell_property[i]
-                         + np.roll(cell_property[i], 1, axis=0)) * 0.5)
-                cell_property[i] = np.concatenate(
-                    (cell_property[i], [cell_property[i][0]]),
-                    axis=stacking_axis)
-                cell_property[i][0] *= 0.5
-                cell_property[i][-1] *= 0.5
-        return cell_property
-
     def calc_ambient_conductance(self, alpha_amb):
         """
         :param alpha_amb: heat transfer coefficient for free or forced
@@ -313,7 +193,7 @@ class Cell(OutputObject2D):
         :return: discretized conductance for each layer of cell based on
         external surface
         """
-        th_layer_amb = self.stack_cell_property(
+        th_layer_amb = self.thermal_system.stack_cell_property(
             [self.th_layer], exp=(1.0,), stacking_axis=-1,
             modify_values=False, shift_along_axis=(True,))
         dy = self.cathode.discretization.dx[0].flatten(order='F')
