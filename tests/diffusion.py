@@ -1,6 +1,6 @@
 import numpy as np
 import pemfc.src.fluid.fluid as fluid
-import pemfc.src.fluid.diffusion_model as diffusion_model
+import pemfc.src.fluid.diffusion_coefficient as diffusion_model
 import time
 
 fluid_dict = \
@@ -30,7 +30,7 @@ humid_air = fluid.create(fluid_dict, backend='pemfc')
 humid_air.update()
 surface_tension = humid_air.phase_change_species.calc_surface_tension(
     humid_air.temperature)
-diff_model = diffusion_model.MixtureAveragedDiffusionModel(humid_air.gas)
+diff_model = diffusion_model.MixtureAveragedDiffusionCoefficient(humid_air.gas)
 diff_model.updated = False
 # diff_model.update(humid_air.temperature, humid_air.pressure,
 #                   humid_air.mole_fraction)

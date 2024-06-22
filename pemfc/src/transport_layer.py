@@ -9,9 +9,9 @@ from . import discretization as dsct
 from typing import Self
 
 
-class SolidLayer(oo.OutputObject2D):
+class TransportLayer(oo.OutputObject2D):
     """
-    Class for describing a basic solid layer as a cuboid (width,
+    Class for describing a basic solid or porous layer as a cuboid (width,
     length, thickness) with physical properties (electrical and thermal
     conductivity). Porous materials are considered with effective properties if
     the 'porosity' (default: 0.0) and optionally a Bruggeman exponent
@@ -105,7 +105,8 @@ class SolidLayer(oo.OutputObject2D):
         elif mode == 'parallel':
             return conductance_a + conductance_b
         else:
-            raise ValueError("argument 'mode' must either be 'serial' or 'parallel'")
+            raise ValueError("argument 'mode' must either be "
+                             "'serial' or 'parallel'")
 
     @classmethod
     def calc_inter_node_conductance(cls, conductance: Iterable[Self],

@@ -2,6 +2,7 @@
 # import sys
 import numpy as np
 from abc import ABC, abstractmethod
+import copy
 
 # Local module imports
 from ..output_object import OutputObject1D
@@ -63,6 +64,15 @@ class DiscreteFluid(OutputObject1D, ABC):
         self.property = dict()
         for name in self.PROPERTY_NAMES:
             self.property[name] = np.zeros(self.array_shape)
+
+    def copy(self, new_shape=None, deepcopy=True):
+        """
+        Copy constructor for fluid object
+        """
+        copy_object = super().copy()
+        if new_shape is not None:
+            copy_object.modify(new_shape, method='resize')
+        return copy_object
 
     @staticmethod
     def _write_input_to_array(value, array):
@@ -168,11 +178,15 @@ class DiscreteFluid(OutputObject1D, ABC):
     # def specific_heat(self, value):
     #     self.property['specific_heat'] = value
 
-    def rescale(self, new_array_shape):
+    def modify(self, new_array_shape, method='rescale'):
         """
-        linearly rescales all numpy arrays with the 1D discretization as first
-        dimension
+        Modify all numpy array attributes either by linearly rescaling the
+        first axis or by resizing and initializing with the average value
+        depending on the method keyword.
+
         :param new_array_shape: new discretization along first dimension
+        :param method: Either 'rescale' along the first axis or 'resize'
+        to new_shape.
         :return: only modification of attributes
         """
         if new_array_shape != self.array_shape:
@@ -181,23 +195,32 @@ class DiscreteFluid(OutputObject1D, ABC):
                 attr = getattr(self, name)
                 if name == 'property':
                     for key in attr.keys():
-                        rescaled = self._rescale_attribute(attr[key],
-                                                           new_array_shape)
+                        rescaled = self._modify_attribute(
+                            attr[key], new_array_shape, method)
                         if rescaled is not None:
                             attr[key] = rescaled
                 else:
                     type_attr = getattr(type(self), name, None)
                     if not isinstance(type_attr, property):
-                        rescaled = self._rescale_attribute(attr, new_array_shape)
+                        rescaled = self._modify_attribute(
+                            attr, new_array_shape, method)
 
                         if rescaled is not None:
                             setattr(self, name, rescaled)
             self.array_shape = new_array_shape
         self.add_print_variables(self.print_variables)
 
-    def _rescale_attribute(self, attribute, new_nx):
+    def _modify_attribute(self, attribute, new_shape, method='rescale'):
         if isinstance(attribute, np.ndarray):
-            return self._rescale_array(attribute, new_nx)
+            if method == 'rescale':
+                return self._rescale_array(attribute, new_shape)
+            elif method == 'resize':
+                new_array = np.resize(attribute, new_shape)
+                new_array[:] = np.average(attribute)
+                return new_array
+            else:
+                raise NotImplementedError("only 'rescale' and 'resize' "
+                                          "methods are currently implemented")
         else:
             return None
 
@@ -595,8 +618,8 @@ class CanteraGasMixture(DiscreteFluid):
         else:
             return move_axis(self.solution_array.Y, -1, 0)[self.species_ids]
 
-    def rescale(self, new_array_shape):
-        super().rescale(new_array_shape)
+    def modify(self, new_array_shape, method='rescale'):
+        super().modify(new_array_shape, method=method)
         self.solution_array(self.solution, new_array_shape)
         self.update(self._temperature, self._pressure, self._mole_fraction)
 
@@ -773,10 +796,10 @@ class TwoPhaseMixture(DiscreteFluid):
         self._calc_properties(temperature, pressure, method)
         self._calc_humidity()
 
-    def rescale(self, new_array_shape):
-        self.gas.rescale(new_array_shape)
-        self.liquid.rescale(new_array_shape)
-        super().rescale(new_array_shape)
+    def modify(self, new_array_shape, method='rescale'):
+        self.gas.modify(new_array_shape, method=method)
+        self.liquid.modify(new_array_shape, method=method)
+        super().modify(new_array_shape, method=method)
     # @property
     # def mole_fraction_gas(self):
     #     return self._mole_fraction_gas.transpose()

@@ -42,7 +42,7 @@ class ElectrochemistryModel(ABC):
                        self.diff_coeff_gdl[:, 0])
             )
             # self.diff_coeff_gdl_by_length[:, 0] = (
-            #     1.0 / (2.0 * self.th_gdl /
+            #     1.0 / (10.0 * self.th_gdl /
             #            self.diff_coeff_gdl[:, 0])
             # )
         # Tafel slope of the electrode
@@ -159,7 +159,10 @@ class ElectrochemistryModel(ABC):
         Calculates the diffusion voltage loss in the gas diffusion layer
         according to (Kulikovsky, 2013).
         """
-        v_loss_gdl_diff = - self.tafel_slope * np.log10(var)
+        if np.all(var > 0.0):
+            v_loss_gdl_diff = - self.tafel_slope * np.log10(var)
+        else:
+            raise ValueError('value must not become equal or smaller zero')
         # nan_list = np.isnan(self.v_loss_gdl_diff)
         # if nan_list.any():
         #     v_loss_gdl_diff[np.argwhere(nan_list)[0, 0]:] = 1.e50
@@ -173,7 +176,7 @@ class ElectrochemistryModel(ABC):
         else:
             conc = channel.fluid.concentration[self.id_fuel]
 
-        conc_ref = conc[channel.id_in]
+        conc_ref = np.max(conc[channel.id_in])
         conc_ele = ip.interpolate_1d(conc)
         conc_ele = np.asarray([
             conc_ele for i in range(current_density.shape[-1])]).transpose()
@@ -187,27 +190,27 @@ class ElectrochemistryModel(ABC):
 
         id_lin = np.nonzero(current_density >= self.i_crit)
         id_reg = np.nonzero(current_density < self.i_crit)
-        if np.any(id_lin):
+        if id_lin[0].size:
             i_crit = self.i_crit[id_lin]
             conc_crit = conc_ele[id_lin]
-            conc_crit_stack = np.stack((conc_crit, conc_crit, conc_crit),
+            conc_crit_stack = np.stack((conc_crit, conc_crit),
                                         axis=conc_crit.ndim)
             i_crit_stack = np.stack(
-                (i_crit - self.delta_i, i_crit, i_crit + self.delta_i),
+                (i_crit - self.delta_i, i_crit + self.delta_i),
                 axis=i_crit.ndim)
             # conc_crit = conc_crit.transpose()
             # i_crit = i_crit.transpose()
             # if np.any(i_crit < 0.0):
             #     raise ValueError
             i_lim_star = self.i_lim_star[id_lin]
-            i_lim_star_stack = np.stack((i_lim_star, i_lim_star, i_lim_star),
+            i_lim_star_stack = np.stack((i_lim_star, i_lim_star),
                                         axis=i_lim_star.ndim)
             eta_crit_stack = self.calc_electrode_loss_kulikovsky(
                 i_crit_stack, conc_crit_stack, conc_ref, i_lim_star_stack)
 
             grad_eta = np.moveaxis(
-                np.gradient(eta_crit_stack, self.delta_i, axis=-1), -1, 0)[1]
-            eta_crit = np.moveaxis(eta_crit_stack, -1, 0)[1]
+                np.gradient(eta_crit_stack, self.delta_i, axis=-1), -1, 0)[0]
+            eta_crit = np.average(eta_crit_stack, axis=-1)
             b = eta_crit - grad_eta * i_crit
             eta_lin = grad_eta * current_density[id_lin] + b
 

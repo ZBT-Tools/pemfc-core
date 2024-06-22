@@ -9,7 +9,7 @@ from pemfc.data import material_properties as mat_prop
 from pemfc.src import constants as constants
 
 
-class DiffusionModel(ABC):
+class DiffusionCoefficient(ABC):
     def __init__(self, fluid, knudsen=False, **kwargs):
         if not isinstance(fluid, (fl.GasMixture, fl.CanteraGasMixture)):
             raise TypeError('Argument fluid of type GasMixture or '
@@ -109,7 +109,7 @@ class DiffusionModel(ABC):
         self.updated = True
 
 
-class MixtureAveragedDiffusionModel(DiffusionModel):
+class MixtureAveragedDiffusionCoefficient(DiffusionCoefficient):
     def __init__(self, fluid):
         super().__init__(fluid)
         self.d_eff = np.zeros((self.n_species, *fluid.array_shape))
@@ -190,3 +190,4 @@ class MixtureAveragedDiffusionModel(DiffusionModel):
                                               mole_fractions,
                                               flux_ratio=flux_ratio)
         self.updated = True
+

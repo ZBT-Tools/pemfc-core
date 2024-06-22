@@ -9,7 +9,7 @@
         "maximum_iteration": 500,
         "minimum_iteration": 3,
         "convergence_criteria": 1e-09,
-        "underrelaxation_factor": 0.5,
+        "underrelaxation_factor": 0.95,
         "current_control": true,
         "operation_control": "Current",
         "elements": 10,
@@ -209,8 +209,8 @@
             "calc_act_loss": true,
             "calc_cl_diff_loss": true,
             "calc_gdl_diff_loss": true,
-            "c_eps": 0.1,
-            "delta_i": 5.0
+            "c_eps": 0.5,
+            "delta_i": 50.0
         },
         "channel": {
             "name": "Anode Channel",

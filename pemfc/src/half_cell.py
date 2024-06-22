@@ -3,11 +3,12 @@ import warnings
 import numpy as np
 
 # Local module imports
-from . import solid_layer as sl, constants, flow_field as ff, channel as chl
+from . import transport_layer as sl, constants, flow_field as ff, channel as chl
 from .fluid import fluid as fluids
 from . import electrochemistry as electrochem
 from . import interpolation as ip
 from . import discretization as dsct
+from . import diffusion as diff
 
 warnings.filterwarnings("ignore")
 
@@ -82,7 +83,7 @@ class HalfCell:
         bpp_dict['name'] = self.name + ' BPP'
         # 'porosity': self.channel.cross_area * self.n_channel / (
         #             self.th_bpp * self.width)}
-        self.bpp = sl.SolidLayer(bpp_dict, self.discretization)
+        self.bpp = sl.TransportLayer(bpp_dict, self.discretization)
 
         # Initialize gas diffusion electrode (gde: gdl + cl)
         gde_dict = halfcell_dict['gde']
@@ -94,7 +95,17 @@ class HalfCell:
         #    (self.th_gdl * halfcell_dict['porosity gdl']
         #     + self.th_cl * halfcell_dict['porosity cl'])
         #    / (self.th_gde + self.th_cl)}
-        self.gde = sl.SolidLayer(gde_dict, self.discretization)
+        self.gde = sl.TransportLayer(gde_dict, self.discretization)
+
+        # Initialize diffusion transport model
+        gdl_dict = gde_dict.copy()
+        gdl_dict.update(
+            {'name': self.name + ' GDL',
+             'thickness': electrochemistry_dict['thickness_gdl']})
+        gdl = sl.TransportLayer(gde_dict, self.discretization)
+        self.gdl_diff = diff.DiffusionTransport(
+            {}, self.channel.fluid, gdl)
+
         self.thickness = self.bpp.thickness + self.gde.thickness
 
         self.n_charge = self.electrochemistry.n_charge
@@ -180,11 +191,12 @@ class HalfCell:
 
     def surface_flux_to_channel_source(self, flux: np.ndarray):
         if np.isscalar(flux) or flux.ndim in (0, 1):
-            return np.sum(self.discretization.d_area, axis=-1) * flux
+            return np.sum(self.discretization.d_area, axis=0) * flux
         elif flux.ndim == 2:
-            return np.sum(self.discretization.d_area * flux, axis=-1)
+            return np.sum(self.discretization.d_area * flux, axis=1)
         else:
-            raise ValueError('flux variable must be one- or two-dimensional numpy array')
+            raise ValueError('flux variable must be one- or'
+                             'two-dimensional numpy array')
 
     def update_voltage_loss(self, current_density: np.ndarray):
         """
@@ -245,4 +257,4 @@ class HalfCell:
         """
         humidity = ip.interpolate_1d(self.channel.fluid.humidity)
         return np.asarray([humidity for i in
-                           range(self.discretization.shape[-1])]).transpose()
+                           range(self.discretization.shape[1])]).transpose()

@@ -5,7 +5,7 @@ import math
 
 # Local modul imports
 from . import matrix_functions as mtx, half_cell as h_c, \
-    global_functions as g_func, membrane as membrane, solid_layer as sl
+    global_functions as g_func, membrane as membrane, transport_layer as sl
 from .output_object import OutputObject2D
 
 
@@ -110,9 +110,9 @@ class Cell(OutputObject2D):
 
         self.thermal_mtx_const = mtx.build_cell_conductance_matrix(
                 [self.thermal_conductance[0],
-                 sl.SolidLayer.calc_inter_node_conductance(
+                 sl.TransportLayer.calc_inter_node_conductance(
                     self.thermal_conductance[1], axis=1) * 1.0,
-                 sl.SolidLayer.calc_inter_node_conductance(
+                 sl.TransportLayer.calc_inter_node_conductance(
                     self.thermal_conductance[2], axis=2) * 1.0])
 
         # self.heat_mtx_const = np.zeros(self.heat_cond_mtx.shape)
@@ -144,9 +144,9 @@ class Cell(OutputObject2D):
         self.elec_mtx_const = \
             mtx.build_cell_conductance_matrix(
                 [self.electrical_conductance[0],
-                 sl.SolidLayer.calc_inter_node_conductance(
+                 sl.TransportLayer.calc_inter_node_conductance(
                     self.electrical_conductance[1], axis=1) * 1.0,
-                 sl.SolidLayer.calc_inter_node_conductance(
+                 sl.TransportLayer.calc_inter_node_conductance(
                     self.electrical_conductance[2], axis=2) * 1.0])
 
         # Combine both (heat and electrical) conductance matrices in a unified

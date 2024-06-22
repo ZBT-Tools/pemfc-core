@@ -1,6 +1,6 @@
 import string
 import weakref
-from copy import deepcopy
+import copy as cp
 from abc import ABC, abstractmethod
 
 
@@ -75,8 +75,11 @@ class OutputObject(ABC):
                 dead.add(ref)
         cls._instances -= dead
 
-    def copy(self):
-        copy = deepcopy(self)
+    def copy(self, *args, **kwargs):
+        if kwargs.get('deepcopy', True):
+            copy = cp.deepcopy(self)
+        else:
+            copy = cp.copy(self)
         self._instances.add(weakref.ref(copy))
         return copy
 
