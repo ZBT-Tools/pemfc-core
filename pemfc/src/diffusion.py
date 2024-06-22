@@ -19,6 +19,6 @@ class DiffusionTransport:
         self.diff_coeff = dc.MixtureAveragedDiffusionCoefficient(self.fluid.gas)
         # TODO: effective calculation of diff coefficient
         print('Initialized DiffusionTransport')
-        # self.diff_coeff_eff =
+        self.diff_coeff_eff = self.diff_coeff
 
 

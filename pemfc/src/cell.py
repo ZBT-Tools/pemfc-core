@@ -286,7 +286,6 @@ class Cell(OutputObject2D):
                     self.cathode.channel.height / self.cathode.bpp.thickness)
             ano_bpp_split_ratio = (
                     self.anode.channel.height / self.anode.bpp.thickness)
-            # factors = (1.0 / bpp_split_ratio, bpp_split_ratio, bpp_split_ratio)
             for i in range(len(cell_property)):
                 value = np.copy(cell_property[i][0])
                 cell_property[i].insert(0, value * math.pow(
@@ -300,6 +299,7 @@ class Cell(OutputObject2D):
                         value * math.pow(ano_bpp_split_ratio, exp[i]))
         cell_property = [np.asarray(item) for item in cell_property]
 
+        # Set solid transport property to zero at channel domain
         # Channel: index 1, Land: index 0
         if self.channel_land_discretization and modify_values:
             for i in range(len(cell_property)):
