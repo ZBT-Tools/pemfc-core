@@ -212,17 +212,26 @@ class DiscreteFluid(OutputObject1D, ABC):
 
     def _modify_attribute(self, attribute, new_shape, method='rescale'):
         if isinstance(attribute, np.ndarray):
-            if method == 'rescale':
-                return self._rescale_array(attribute, new_shape)
-            elif method == 'resize':
-                new_array = np.resize(attribute, new_shape)
-                new_array[:] = np.average(attribute)
-                return new_array
-            else:
-                raise NotImplementedError("only 'rescale' and 'resize' "
-                                          "methods are currently implemented")
+            return self._reshape_array(attribute, new_shape, method)
+        elif isinstance(attribute, (list, tuple)):
+            return [self._reshape_array(item, new_shape, method)
+                    for item in attribute]
+        elif isinstance(attribute, dict):
+            return {k: self._reshape_array(v, new_shape, method)
+                    for k, v in attribute.items()}
         else:
             return None
+
+    def _reshape_array(self, array, new_shape, method='rescale'):
+        if method == 'rescale':
+            return self._rescale_array(array, new_shape)
+        elif method == 'resize':
+            new_array = np.resize(array, new_shape)
+            new_array[:] = np.average(array)
+            return new_array
+        else:
+            raise NotImplementedError("only 'rescale' and 'resize' "
+                                      "methods are currently implemented")
 
     def _rescale_array(self, array, new_array_shape):
         if new_array_shape != self.array_shape:
