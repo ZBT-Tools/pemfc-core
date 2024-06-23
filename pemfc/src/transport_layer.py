@@ -18,27 +18,20 @@ class TransportLayer(oo.OutputObject2D):
     (default: 1.5) is provided.
     """
 
-    def __init__(self, layer_dict: dict, discretization: dsct.Discretization2D):
+    def __init__(self, input_dict: dict, transport_properties: dict,
+                 discretization: dsct.Discretization2D):
         # Initialize super class
-        name = layer_dict.get('name', 'unnamed')
+        name = input_dict.get('name', 'unnamed')
 
         super().__init__(name=name)
         self.dsct = discretization
-        self.dict = layer_dict
-        self.thickness = layer_dict['thickness']
+        self.dict = input_dict
+        self.thickness = input_dict['thickness']
 
-        self.porosity = layer_dict.get('porosity', 0.0)
-        self.bruggeman_exponent = layer_dict.get('bruggeman_exponent', 1.5)
-        self.thermal_conductivity = \
-            layer_dict.get('thermal_conductivity', 0.0)
-        self.electrical_conductivity = \
-            layer_dict.get('electrical_conductivity', 0.0)
-        self.thermal_conductance = \
-            self.calc_conductance(self.thermal_conductivity)
-        self.electrical_conductance = \
-            self.calc_conductance(self.electrical_conductivity)
-        self.conductance = {'electrical': self.electrical_conductance,
-                            'thermal': self.thermal_conductance}
+        self.porosity = input_dict.get('porosity', 0.0)
+        self.bruggeman_exponent = input_dict.get('bruggeman_exponent', 1.5)
+        self.conductance = {key: self.calc_conductance(value) for key, value
+                            in transport_properties.items()}
 
     def calc_conductance(self, conductivity, effective=False):
         if np.ndim(conductivity) == 0:
@@ -101,7 +94,10 @@ class TransportLayer(oo.OutputObject2D):
         conductance_a = np.asarray(conductance_a)
         conductance_b = np.asarray(conductance_b)
         if mode == 'serial':
-            return 1.0 / (1.0 / (conductance_a + conductance_b))
+            try:
+                return 1.0 / (1.0 / (conductance_a + conductance_b))
+            except FloatingPointError:
+                raise
         elif mode == 'parallel':
             return conductance_a + conductance_b
         else:

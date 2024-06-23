@@ -186,16 +186,14 @@ class Cell(OutputObject2D):
                 layer_id_dict['anode_bpp'].append(membrane_id + 2 + i)
         return layer_id_dict
 
-    def calc_ambient_conductance(self, alpha_amb):
+    def calc_ambient_conductance(self, alpha_amb: float,
+                                 th_layer_amb: list[np.ndarray]):
         """
         :param alpha_amb: heat transfer coefficient for free or forced
         convection to the ambient
         :return: discretized conductance for each layer of cell based on
         external surface
         """
-        th_layer_amb = self.thermal_system.stack_cell_property(
-            [self.th_layer], exp=(1.0,), stacking_axis=-1,
-            modify_values=False, shift_along_axis=(True,))
         dy = self.cathode.discretization.dx[0].flatten(order='F')
         k_amb = np.outer(th_layer_amb, dy) \
             * alpha_amb * self.cathode.flow_field.external_surface_factor

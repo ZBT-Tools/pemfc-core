@@ -83,7 +83,11 @@ class HalfCell:
         bpp_dict['name'] = self.name + ' BPP'
         # 'porosity': self.channel.cross_area * self.n_channel / (
         #             self.th_bpp * self.width)}
-        self.bpp = sl.TransportLayer(bpp_dict, self.discretization)
+        bpp_transport_properties = {
+            'thermal': bpp_dict['thermal_conductivity'],
+            'electrical': bpp_dict['electrical_conductivity']}
+        self.bpp = sl.TransportLayer(bpp_dict, bpp_transport_properties,
+                                     self.discretization)
 
         # Initialize gas diffusion electrode (gde: gdl + cl)
         gde_dict = halfcell_dict['gde']
@@ -91,20 +95,27 @@ class HalfCell:
             {'name': self.name + ' GDE',
              'thickness': electrochemistry_dict['thickness_gdl']
                 + electrochemistry_dict['thickness_cl']})
+        gde_transport_properties = {
+            'thermal': gde_dict['thermal_conductivity'],
+            'electrical': gde_dict['electrical_conductivity']}
         # 'porosity':
         #    (self.th_gdl * halfcell_dict['porosity gdl']
         #     + self.th_cl * halfcell_dict['porosity cl'])
         #    / (self.th_gde + self.th_cl)}
-        self.gde = sl.TransportLayer(gde_dict, self.discretization)
+        self.gde = sl.TransportLayer(gde_dict, gde_transport_properties,
+                                     self.discretization)
 
         # Initialize diffusion transport model
         gdl_dict = gde_dict.copy()
         gdl_dict.update(
             {'name': self.name + ' GDL',
              'thickness': electrochemistry_dict['thickness_gdl']})
-        gdl = sl.TransportLayer(gde_dict, self.discretization)
+        gdl_diffusion_transport = {
+            'diffusion': gde_dict.get('diffusion_coefficient', 0.0)}
+        gdl_diff_layer = sl.TransportLayer(gde_dict, gdl_diffusion_transport,
+                                self.discretization)
         self.gdl_diff = diff.DiffusionTransport(
-            {}, self.channel.fluid, gdl)
+            gdl_dict, self.channel.fluid, gdl_diff_layer)
 
         self.thickness = self.bpp.thickness + self.gde.thickness
 

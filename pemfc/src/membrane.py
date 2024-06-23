@@ -26,11 +26,16 @@ class Membrane(sl.TransportLayer, ABC):
                                       'Constant, Linear, Springer, '
                                       'and YeWang2007.')
 
-    def __init__(self, membrane_dict: dict, discretization: dsct.Discretization2D,
+    def __init__(self, membrane_dict: dict,
+                 discretization: dsct.Discretization2D,
                  **kwargs):
         self.name = 'Membrane'
         membrane_dict['name'] = self.name
-        super().__init__(membrane_dict, discretization)
+        solid_transport_properties = {
+            'thermal': membrane_dict.get('thermal_conductivity', 0.0),
+            'electrical': membrane_dict.get('electrical_conductivity', 0.0)}
+        super().__init__(membrane_dict, solid_transport_properties,
+                         discretization)
 
         # membrane temperature
         self.temp = np.zeros(self.dsct.shape)

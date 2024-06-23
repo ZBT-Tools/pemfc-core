@@ -96,15 +96,15 @@ class LinearSystem(ABC):
             self.solution_vector[:] = np.linalg.tensorsolve(self.mtx, self.rhs)
 
 
-class CellLinearSystem(LinearSystem):
+class BasicLinearSystem(LinearSystem):
 
-    def __init__(self, cell: Cell, transport_type: str, init_value=0.0):
-        self.cell = cell
-        self.conductance = self.calculate_conductance(
-            self.cell.layers, transport_type)
+    def __init__(self, layers: list[tl.TransportLayer], transport_type: str,
+                 init_value=0.0):
+        self.conductance = self.calculate_conductance(layers, transport_type)
         shape = self.conductance[1].shape
         super().__init__(shape)
         self.type = transport_type
+        self.layers = layers
 
         self.mtx_const = mtx_func.build_cell_conductance_matrix(
                 [self.conductance[0],
@@ -124,9 +124,9 @@ class CellLinearSystem(LinearSystem):
 
     def calculate_conductance(self, layers: list[tl.TransportLayer],
                               transport_type: str):
-        if transport_type not in ('electrical', 'thermal'):
+        if transport_type not in ('electrical', 'thermal', 'diffusion'):
             raise ValueError("transport_type argument must be either "
-                             "'electrical' or 'thermal'")
+                             "'electrical', 'thermal' or 'diffusion'")
 
         # Stack thermal conductances along through-plane direction,
         # i.e. x-coordinate
@@ -134,36 +134,102 @@ class CellLinearSystem(LinearSystem):
         conductance = [
             [layer.conductance[transport_type][i] for layer in layers]
             for i in range(dims)]
-        return self.stack_cell_property(conductance, exp=(-1.0, 1.0, 1.0),
-                                        stacking_axis=0, modify_values=True)
+        return self.stack_cell_property(conductance, stacking_axis=0)
+
+    def set_neumann_boundary_conditions(self, flux_value, layer_id):
+        source = flux_value * self.layers[layer_id].dsct.d_area
+        mtx_func.add_explicit_layer_source(
+            self.rhs_const, source.flatten(order='F'),
+            self.index_array, layer_id)
+
+    def set_dirichlet_boundary_conditions(self, fixed_value, layer_id):
+        mtx_func.set_implicit_layer_fixed(
+            self.mtx_const, self.index_array, layer_id)
+        self.rhs_const[:], _ = mtx_func.add_explicit_layer_source(
+            self.rhs_const, -fixed_value, self.index_array, layer_id,
+            replace=True)
+
+    def stack_cell_property(self, cell_property: list, stacking_axis,
+                            shift_along_axis=(False, True, True), **kwargs):
+
+        cell_property = [np.asarray(item) for item in cell_property]
+        for i in range(len(cell_property)):
+            if shift_along_axis[i]:
+                cell_property[i] = (
+                        (cell_property[i]
+                         + np.roll(cell_property[i], 1, axis=0)) * 0.5)
+                cell_property[i] = np.concatenate(
+                    (cell_property[i], [cell_property[i][0]]),
+                    axis=stacking_axis)
+                cell_property[i][0] *= 0.5
+                cell_property[i][-1] *= 0.5
+        return cell_property
+
+    @staticmethod
+    def create_cell_index_list(shape: tuple[int, ...]):
+        """
+        Create list of lists with each list containing flattened order of indices
+        for a continuous functional layer (for the conductance matrix).
+        Functional layers a discretized in x-direction (z-direction in old version),
+        the remaining flattened order is equal to the order in the overall matrix
+        and the corresponding right-hand side vector
+        (typically first y-, then z-direction within a layer a.k.a x-plane)
+
+        Args:
+            shape: tuple of size 3 containing the number of layers (index 0),
+            the number of y-elements (index 1) and the number z-elements (index 2)
+        """
+        index_list = []
+        for i in range(shape[0]):
+            index_list.append(
+                [(j * shape[0]) + i for j in range(shape[1] * shape[2])])
+        return index_list
+
+    def update_rhs(self, *args, **kwargs):
+        """
+        Create vector with the right hand side entries,
+        Sources from outside the src to the src must be defined negative.
+        """
+        pass
+
+    def update_matrix(self, *args, **kwargs):
+        """
+        Updates matrix coefficients
+        """
+        pass
+
+
+class CellLinearSystem(BasicLinearSystem):
+
+    def __init__(self, cell: Cell, transport_type: str, init_value=0.0):
+        self.cell = cell
+
+        super().__init__(cell.layers, transport_type, init_value)
+
+        if transport_type == 'thermal':
+            self.add_ambient_convection()
 
     def set_layer_boundary_conditions(self, layer_id):
         if 'flux_endplate' in self.cell.cell_dict:
-            flux_endplate = self.cell.cell_dict['flux_endplate']
-            source = flux_endplate * self.cell.cathode.discretization.d_area
-            mtx_func.add_explicit_layer_source(
-                self.rhs_const, source.flatten(order='F'),
-                self.index_array, layer_id)
+            flux_value = self.cell.cell_dict['flux_endplate']
+            self.set_neumann_boundary_conditions(flux_value, layer_id)
 
-        elif 'temp_endplate' in self.cell.cell_dict:
-            mtx_func.set_implicit_layer_fixed(self.mtx_const,
-                                         self.index_array, layer_id)
-            source = self.cell.cell_dict['temp_endplate']
-            self.rhs_const[:], _ = mtx_func.add_explicit_layer_source(
-                self.rhs_const, -source, self.index_array, layer_id,
-                replace=True)
+        elif 'value_endplate' in self.cell.cell_dict:
+            fixed_value = self.cell.cell_dict['value_endplate']
+            self.set_dirichlet_boundary_conditions(fixed_value, layer_id)
         else:
             raise KeyError('either values for "flux_endplate" or '
-                           '"temp_endplate" must be provided')
+                           '"value_endplate" must be provided')
 
     def stack_cell_property(self, cell_property: list, stacking_axis,
-                            exp: tuple,
-                            modify_values=False,
-                            shift_along_axis=(False, True, True)):
+                            shift_along_axis=(False, True, True),
+                            modify_values=True, **kwargs):
 
         # Split bipolar plate in two elements among x-direction if
         # channel-land-discretization is applied
         if self.cell.additional_layer:
+            exp = kwargs.get('exponents', (-1.0, 1.0, 1.0))
+            # exp = (-1.0, 1.0, 1.0)
             cat_bpp_split_ratio = (self.cell.cathode.channel.height
                                    / self.cell.cathode.bpp.thickness)
             ano_bpp_split_ratio = (self.cell.anode.channel.height
@@ -183,21 +249,36 @@ class CellLinearSystem(LinearSystem):
 
         # Set solid transport property to zero at channel domain
         # Channel: index 1, Land: index 0
-        if self.cell.channel_land_discretization and modify_values:
+        if (self.cell.channel_land_discretization
+                and modify_values):
             for i in range(len(cell_property)):
                 cell_property[i][[1, -2], :, 1] = 0.0
-
-        for i in range(len(cell_property)):
-            if shift_along_axis[i]:
-                cell_property[i] = (
-                        (cell_property[i]
-                         + np.roll(cell_property[i], 1, axis=0)) * 0.5)
-                cell_property[i] = np.concatenate(
-                    (cell_property[i], [cell_property[i][0]]),
-                    axis=stacking_axis)
-                cell_property[i][0] *= 0.5
-                cell_property[i][-1] *= 0.5
+        cell_property = super().stack_cell_property(
+            cell_property, stacking_axis, shift_along_axis=shift_along_axis)
         return cell_property
+
+    def add_ambient_convection(self):
+        """
+        Add coefficients to matrix and rhs for each cell
+        due to convection to ambient
+        """
+        if 'alpha_amb' in self.cell.cell_dict:
+            alpha_amb = self.cell.cell_dict['alpha_amb']
+            temp_amb = self.cell.cell_dict['temp_amb']
+
+            th_layer_amb = self.stack_cell_property(
+                [self.cell.th_layer], stacking_axis=-1,
+                modify_values=False, shift_along_axis=(True,),
+                exponents=(1.0, ))
+            k_amb = self.cell.calc_ambient_conductance(alpha_amb, th_layer_amb)
+            k_amb_vector = k_amb.flatten(order='F')
+
+            mtx_func.add_implicit_layer_source(
+                self.mtx_const, -k_amb_vector,
+                self.index_array)
+            mtx_func.add_explicit_layer_source(
+                self.rhs_const, k_amb_vector * temp_amb,
+                self.index_array)
 
     @staticmethod
     def create_cell_index_list(shape: tuple[int, ...]):
@@ -254,6 +335,8 @@ class StackLinearSystem(LinearSystem, ABC):
             self.create_stack_index_list(self.cells, self.transport_type))
 
         self.mtx_const = self.connect_cells(self.transport_type)
+        self.rhs_const = np.hstack(
+            [lin_sys.rhs_const for lin_sys in self.cell_systems])
         # if self.sparse_solve:
         #     self.mtx_const = sparse.csr_matrix(self.mtx_const)
 
@@ -332,16 +415,10 @@ class TemperatureSystem(StackLinearSystem):
     def __init__(self, stack: stack_module.Stack, input_dict: dict):
 
         shape = (len(stack.cells), *stack.cells[0].thermal_system.shape)
+
         super().__init__(shape, stack)
 
-        """Building up the base conductance matrix"""
-        # Vector for dynamically changing heat conductance values
-        # Add constant source and sink coefficients to heat conductance matrix
-        # Heat transfer to ambient
         self.input_dict = input_dict
-
-        self.rhs_const = np.hstack(
-            [lin_sys.rhs_const for lin_sys in self.cell_systems])
 
         # Sub channel ratios
         self.n_cat_channels = stack.fuel_circuits[0].n_subchannels
@@ -365,26 +442,6 @@ class TemperatureSystem(StackLinearSystem):
         self.e_tn = self.cells[0].e_tn
         # Open circuit potential
         self.e_0 = self.cells[0].e_0
-
-    def add_ambient_convection(self):
-        """
-        Add coefficients to matrix and rhs for each cell
-        due to convection to ambient
-        """
-        alpha_amb = self.input_dict['alpha_amb']
-        temp_amb = self.input_dict['temp_amb']
-        for cell in self.cells:
-            cell.k_amb = cell.calc_ambient_conductance(alpha_amb)
-            # if cell.last_cell:
-            k_amb_vector = cell.k_amb.flatten(order='F')
-            # else:
-            #     k_amb_vector = cell.k_amb[:-1].flatten(order='F')
-
-            mtx_func.add_implicit_layer_source(
-                cell.thermal_mtx_const, -k_amb_vector, cell.index_array)
-            mtx_func.add_explicit_layer_source(
-                cell.thermal_rhs_const, k_amb_vector * temp_amb,
-                cell.index_array)
 
     def update(self, *args, **kwargs):
         """
