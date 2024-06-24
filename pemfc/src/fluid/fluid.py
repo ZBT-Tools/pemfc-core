@@ -3,6 +3,7 @@
 import numpy as np
 from abc import ABC, abstractmethod
 import copy
+import types
 
 # Local module imports
 from ..output_object import OutputObject1D
@@ -202,10 +203,10 @@ class DiscreteFluid(OutputObject1D, ABC):
                             attr[key] = rescaled
                 else:
                     type_attr = getattr(type(self), name, None)
-                    if not isinstance(type_attr, property):
+                    if not isinstance(type_attr, (property, types.MethodType,
+                                                  types.FunctionType)):
                         rescaled = self._reshape_attribute(
                             attr, new_array_shape, method)
-
                         if rescaled is not None:
                             setattr(self, name, rescaled)
             self.array_shape = new_array_shape
@@ -236,7 +237,6 @@ class DiscreteFluid(OutputObject1D, ABC):
             return None
 
     def _reshape_array(self, array, new_shape, method='rescale'):
-        # TODO: The equality checks seem wrong for DiscreteFluid
         if array.shape == self.array_shape:
             if method == 'rescale':
                 return self._rescale_array(array, new_shape)
@@ -447,8 +447,7 @@ class GasMixture(DiscreteFluid):
             self.shapes = [self.array_shape, self.array_shape_2d]
 
     def _reshape_array(self, array, new_shape, method='rescale'):
-        # TODO: The equality checks seem wrong for GasMixture
-        if array.shape != self.array_shape_2d:
+        if array.shape == self.array_shape_2d:
             return np.asarray(
                 [DiscreteFluid._reshape_array(self, array[i], new_shape, method)
                  for i in range(array.shape[0])])
@@ -745,6 +744,7 @@ class TwoPhaseMixture(DiscreteFluid):
             species_dict=gas_species_dict, mole_fractions=mole_fractions,
             temperature=self._temperature, pressure=self._pressure,
             print_data=False)
+        self.array_shape_2d = self.gas.array_shape_2d
         ids_pc = [self.species.names.index(name) for name in
                   phase_change_species_names]
         if len(ids_pc) > 1:
@@ -861,6 +861,14 @@ class TwoPhaseMixture(DiscreteFluid):
     # @property
     # def mass_fraction_gas(self):
     #     return self._mass_fraction_gas.transpose()
+
+    def _reshape_array(self, array, new_shape, method='rescale'):
+        if array.shape == self.array_shape_2d:
+            return np.asarray(
+                [DiscreteFluid._reshape_array(self, array[i], new_shape, method)
+                 for i in range(array.shape[0])])
+        else:
+            return super()._reshape_array(array, new_shape, method)
 
     @property
     def temperature(self):
