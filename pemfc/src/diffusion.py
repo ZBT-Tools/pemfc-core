@@ -14,7 +14,7 @@ class DiffusionTransport:
                  transport_layer: TransportLayer):
         self.dict = input_dict
         self.shape = (2, *transport_layer.dsct.shape)
-        self.fluid = fluid.copy(self.shape)
+        self.fluid = fluid.copy(self.shape, plot_axis=-2)
         self.transport_layer = transport_layer
 
         # for conc in self.fluid.gas.

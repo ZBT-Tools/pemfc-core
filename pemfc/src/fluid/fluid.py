@@ -45,6 +45,7 @@ class DiscreteFluid(OutputObject1D, ABC):
             array_shape = (array_shape,)
 
         self.array_shape = array_shape
+        self.shapes = [array_shape]
         self.print_variables = \
             {
                 'names': ['temperature', 'pressure'],
@@ -65,13 +66,13 @@ class DiscreteFluid(OutputObject1D, ABC):
         for name in self.PROPERTY_NAMES:
             self.property[name] = np.zeros(self.array_shape)
 
-    def copy(self, new_shape=None, deepcopy=True):
+    def copy(self, new_shape=None, deepcopy=True, **kwargs):
         """
         Copy constructor for fluid object
         """
         copy_object = super().copy()
         if new_shape is not None:
-            copy_object.modify(new_shape, method='resize')
+            copy_object.reshape(new_shape, method='resize', **kwargs)
         return copy_object
 
     @staticmethod
@@ -178,7 +179,7 @@ class DiscreteFluid(OutputObject1D, ABC):
     # def specific_heat(self, value):
     #     self.property['specific_heat'] = value
 
-    def modify(self, new_array_shape, method='rescale'):
+    def reshape(self, new_array_shape, method='rescale', **kwargs):
         """
         Modify all numpy array attributes either by linearly rescaling the
         first axis or by resizing and initializing with the average value
@@ -195,43 +196,58 @@ class DiscreteFluid(OutputObject1D, ABC):
                 attr = getattr(self, name)
                 if name == 'property':
                     for key in attr.keys():
-                        rescaled = self._modify_attribute(
+                        rescaled = self._reshape_attribute(
                             attr[key], new_array_shape, method)
                         if rescaled is not None:
                             attr[key] = rescaled
                 else:
                     type_attr = getattr(type(self), name, None)
                     if not isinstance(type_attr, property):
-                        rescaled = self._modify_attribute(
+                        rescaled = self._reshape_attribute(
                             attr, new_array_shape, method)
 
                         if rescaled is not None:
                             setattr(self, name, rescaled)
             self.array_shape = new_array_shape
         self.add_print_variables(self.print_variables)
+        if 'plot_axis' in kwargs:
+            self.set_plot_axis(
+                kwargs['plot_axis'], relative=kwargs.get('relative', False))
 
-    def _modify_attribute(self, attribute, new_shape, method='rescale'):
+    def _reshape_attribute(self, attribute, new_shape, method='rescale'):
         if isinstance(attribute, np.ndarray):
             return self._reshape_array(attribute, new_shape, method)
         elif isinstance(attribute, (list, tuple)):
-            return [self._reshape_array(item, new_shape, method)
-                    for item in attribute]
+            if (attribute and isinstance(attribute[0], np.ndarray) and
+                    attribute[0].shape in self.shapes):
+                return [self._reshape_array(item, new_shape, method)
+                        for item in attribute]
+            else:
+                return None
         elif isinstance(attribute, dict):
-            return {k: self._reshape_array(v, new_shape, method)
-                    for k, v in attribute.items()}
+            values = attribute.values()
+            if (values and isinstance(list(values)[0], np.ndarray) and
+                    list(values)[0].shape in self.shapes):
+                return {k: self._reshape_array(v, new_shape, method)
+                        for k, v in attribute.items()}
+            else:
+                return None
         else:
             return None
 
     def _reshape_array(self, array, new_shape, method='rescale'):
-        if method == 'rescale':
-            return self._rescale_array(array, new_shape)
-        elif method == 'resize':
-            new_array = np.resize(array, new_shape)
-            new_array[:] = np.average(array)
-            return new_array
+        if array.shape == self.array_shape:
+            if method == 'rescale':
+                return self._rescale_array(array, new_shape)
+            elif method == 'resize':
+                new_array = np.resize(array, new_shape)
+                new_array[:] = np.average(array)
+                return new_array
+            else:
+                raise NotImplementedError("only 'rescale' and 'resize' "
+                                          "methods are currently implemented")
         else:
-            raise NotImplementedError("only 'rescale' and 'resize' "
-                                      "methods are currently implemented")
+            return None
 
     def _rescale_array(self, array, new_array_shape):
         if new_array_shape != self.array_shape:
@@ -239,13 +255,13 @@ class DiscreteFluid(OutputObject1D, ABC):
                 if len(array.shape) == 1:
                     first = array[0]
                     last = array[-1]
-                    return np.linspace(first, last, new_array_shape)
+                    return np.linspace(first, last, new_array_shape[0])
                 elif len(array.shape) == 2:
                     first = array[:, 0]
                     last = array[:, -1]
                     linear_rescaled = \
                         np.array([np.linspace(first[i], last[i],
-                                              new_array_shape)
+                                              new_array_shape[-1])
                                   for i in range(len(first))])
                     return linear_rescaled
                 else:
@@ -363,6 +379,7 @@ class GasMixture(DiscreteFluid):
                 mole_fractions[-1] = 1.0 - np.sum(mole_fractions[:-1])
 
         self.array_shape_2d = (self.n_species, *self.array_shape)
+        self.shapes.append(self.array_shape_2d)
         self._mole_fraction = \
             gf.array_vector_multiply(np.ones(self.array_shape_2d),
                                      mole_fractions)
@@ -409,6 +426,32 @@ class GasMixture(DiscreteFluid):
     @property
     def species_names(self):
         return self.species.names
+
+    def reshape(self, new_array_shape: tuple[int], method='rescale', **kwargs):
+        """
+        Modify all numpy array attributes either by linearly rescaling the
+        first axis or by resizing and initializing with the average value
+        depending on the method keyword.
+
+        :param new_array_shape: new discretization along first dimension
+        :param method: Either 'rescale' along the first axis or 'resize'
+        to new_shape.
+        :return: only modification of attributes
+        """
+        if isinstance(new_array_shape, int):
+            new_array_shape = (new_array_shape, )
+        if new_array_shape != self.array_shape:
+            super().reshape(new_array_shape, method, **kwargs)
+            self.array_shape_2d = (self.array_shape_2d[0],) + new_array_shape
+            self.shapes = [self.array_shape, self.array_shape_2d]
+
+    def _reshape_array(self, array, new_shape, method='rescale'):
+        if array.shape == self.array_shape_2d:
+            return np.asarray(
+                [DiscreteFluid._reshape_array(self, array[i], new_shape, method)
+                 for i in range(array.shape[0])])
+        else:
+            super()._reshape_array(array, new_shape, method)
 
     def update(self, temperature=None, pressure=None, mole_composition=None,
                method='ideal', *args, **kwargs):
@@ -627,8 +670,8 @@ class CanteraGasMixture(DiscreteFluid):
         else:
             return move_axis(self.solution_array.Y, -1, 0)[self.species_ids]
 
-    def modify(self, new_array_shape, method='rescale'):
-        super().modify(new_array_shape, method=method)
+    def reshape(self, new_array_shape, method='rescale', **kwargs):
+        super().reshape(new_array_shape, method=method, **kwargs)
         self.solution_array(self.solution, new_array_shape)
         self.update(self._temperature, self._pressure, self._mole_fraction)
 
@@ -719,15 +762,15 @@ class TwoPhaseMixture(DiscreteFluid):
                     humidity, temperature, pressure, mole_fractions, self.id_pc)
 
         # Total properties (both phases)
-        self.array_shape_2d = self.gas.array_shape_2d
+        array_shape_2d = self.gas.array_shape_2d
         self._mole_fraction = \
-            gf.array_vector_multiply(np.ones(self.array_shape_2d),
+            gf.array_vector_multiply(np.ones(array_shape_2d),
                                      mole_fractions)
         mass_fraction_init = \
             mole_fractions * self.gas.species.mw / \
             np.sum(mole_fractions * self.gas.species.mw)
         self._mass_fraction = \
-            gf.array_vector_multiply(np.ones(self.array_shape_2d),
+            gf.array_vector_multiply(np.ones(array_shape_2d),
                                      mass_fraction_init)
         self.mw = np.zeros(self.array_shape)
 
@@ -805,10 +848,10 @@ class TwoPhaseMixture(DiscreteFluid):
         self._calc_properties(temperature, pressure, method)
         self._calc_humidity()
 
-    def modify(self, new_array_shape, method='rescale'):
-        self.gas.modify(new_array_shape, method=method)
-        self.liquid.modify(new_array_shape, method=method)
-        super().modify(new_array_shape, method=method)
+    def reshape(self, new_array_shape, method='rescale', **kwargs):
+        self.gas.reshape(new_array_shape, method=method, **kwargs)
+        self.liquid.reshape(new_array_shape, method=method, **kwargs)
+        super().reshape(new_array_shape, method=method, **kwargs)
     # @property
     # def mole_fraction_gas(self):
     #     return self._mole_fraction_gas.transpose()

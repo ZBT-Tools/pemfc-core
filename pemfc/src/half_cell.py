@@ -112,8 +112,8 @@ class HalfCell:
              'thickness': electrochemistry_dict['thickness_gdl']})
         gdl_diffusion_transport = {
             'diffusion': gde_dict.get('diffusion_coefficient', 0.0)}
-        gdl_diff_layer = sl.TransportLayer(gde_dict, gdl_diffusion_transport,
-                                self.discretization)
+        gdl_diff_layer = sl.TransportLayer(
+            gde_dict, gdl_diffusion_transport, self.discretization)
         self.gdl_diff = diff.DiffusionTransport(
             gdl_dict, self.channel.fluid, gdl_diff_layer)
 

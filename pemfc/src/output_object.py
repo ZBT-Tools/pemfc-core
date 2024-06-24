@@ -126,6 +126,20 @@ class OutputObject(ABC):
             name_list.append(obj.name_list)
         return name_list
 
+    def set_plot_axis(self, plot_axis, relative=False):
+        for key in self.single_print_data:
+            if relative:
+                plot_axis = (
+                    self.single_print_data[key]['plot_axis'] + plot_axis)
+            self.single_print_data[key]['plot_axis'] = plot_axis
+        for key in self.multi_print_data:
+            for sub_key in self.multi_print_data[key]:
+                if relative:
+                    plot_axis = (
+                        self.multi_print_data[key][sub_key]['plot_axis']
+                        + plot_axis)
+                self.multi_print_data[key][sub_key]['plot_axis'] = plot_axis
+
     # @classmethod
     # def cluster_objects(cls):
     #     cluster = []

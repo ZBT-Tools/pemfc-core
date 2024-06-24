@@ -869,7 +869,7 @@ def create(dict_circuit, dict_in_manifold, dict_out_manifold,
         out_manifold_fluid = fluids.create(fluid_dict)
     else:
         in_manifold_fluid = channels[0].fluid.copy()
-        in_manifold_fluid.modify(n_channels + 1)
+        in_manifold_fluid.reshape((n_channels + 1, ))
         out_manifold_fluid = in_manifold_fluid.copy()
 
     manifolds = [chl.Channel(dict_in_manifold, in_manifold_fluid),
