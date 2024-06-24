@@ -236,6 +236,7 @@ class DiscreteFluid(OutputObject1D, ABC):
             return None
 
     def _reshape_array(self, array, new_shape, method='rescale'):
+        # TODO: The equality checks seem wrong for DiscreteFluid
         if array.shape == self.array_shape:
             if method == 'rescale':
                 return self._rescale_array(array, new_shape)
@@ -439,19 +440,20 @@ class GasMixture(DiscreteFluid):
         :return: only modification of attributes
         """
         if isinstance(new_array_shape, int):
-            new_array_shape = (new_array_shape, )
+            new_array_shape = (new_array_shape,)
         if new_array_shape != self.array_shape:
             super().reshape(new_array_shape, method, **kwargs)
             self.array_shape_2d = (self.array_shape_2d[0],) + new_array_shape
             self.shapes = [self.array_shape, self.array_shape_2d]
 
     def _reshape_array(self, array, new_shape, method='rescale'):
-        if array.shape == self.array_shape_2d:
+        # TODO: The equality checks seem wrong for GasMixture
+        if array.shape != self.array_shape_2d:
             return np.asarray(
                 [DiscreteFluid._reshape_array(self, array[i], new_shape, method)
                  for i in range(array.shape[0])])
         else:
-            super()._reshape_array(array, new_shape, method)
+            return super()._reshape_array(array, new_shape, method)
 
     def update(self, temperature=None, pressure=None, mole_composition=None,
                method='ideal', *args, **kwargs):

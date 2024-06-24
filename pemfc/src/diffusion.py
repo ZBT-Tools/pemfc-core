@@ -1,6 +1,7 @@
 from .fluid import fluid as fl
 from .transport_layer import TransportLayer
 from .fluid import diffusion_coefficient as dc
+from . import discretization as dsct
 from .linear_system import BasicLinearSystem
 
 
@@ -11,19 +12,15 @@ class DiffusionTransport:
     """
     def __init__(self, input_dict: dict,
                  fluid: (fl.TwoPhaseMixture, fl.CanteraTwoPhaseMixture),
-                 transport_layer: TransportLayer):
+                 discretization: dsct.Discretization2D):
+
         self.dict = input_dict
-        self.shape = (2, *transport_layer.dsct.shape)
+        self.shape = (2, *discretization.shape)
         self.fluid = fluid.copy(self.shape, plot_axis=-2)
-        self.transport_layer = transport_layer
-
-        # for conc in self.fluid.gas.
-        # self.lin_sys = Basi
-        # Object of diffusion coefficient class to calculate diffusion
-        # coefficients
         self.diff_coeff = dc.MixtureAveragedDiffusionCoefficient(self.fluid.gas)
-        # TODO: effective calculation of diff coefficient
-        print('Initialized DiffusionTransport')
-        self.diff_coeff_eff = self.diff_coeff
-
-
+        self.transport_layer = TransportLayer(
+            input_dict, {'diffusion': [self.diff_coeff.d_eff,
+                                       self.diff_coeff.d_eff * 1000,
+                                       self.diff_coeff.d_eff * 1000]},
+            discretization)
+        print('test')

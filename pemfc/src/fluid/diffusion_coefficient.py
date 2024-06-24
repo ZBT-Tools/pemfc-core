@@ -112,7 +112,8 @@ class DiffusionCoefficient(ABC):
 class MixtureAveragedDiffusionCoefficient(DiffusionCoefficient):
     def __init__(self, fluid):
         super().__init__(fluid)
-        self.d_eff = np.zeros((self.n_species, *fluid.array_shape))
+        self.d_eff = np.asarray(
+            [self.calc_diffusion_coeff(name) for name in self.species_names])
 
     def calc_diffusion_coeff(self, species_i, temperature=None, pressure=None,
                              mole_fractions=None, flux_ratio='stoich'):
@@ -132,7 +133,7 @@ class MixtureAveragedDiffusionCoefficient(DiffusionCoefficient):
         Stefan-Maxwell and Dusty-Gas Models.” Journal of Power Sources 310
         (April 2016): 32–40. https://doi.org/10.1016/j.jpowsour.2016.01.099.'
         """
-        assert len(mole_fractions) == self.n_species
+        # assert len(mole_fractions) == self.n_species
         if temperature is None:
             temperature = self.fluid.temperature
         if pressure is None:
