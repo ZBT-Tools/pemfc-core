@@ -17,12 +17,12 @@ class DiffusionTransport:
         self.dict = input_dict
         self.shape = (2, *discretization.shape)
         self.fluid = fluid.copy(self.shape, plot_axis=-2)
-
-
         self.diff_coeff = dc.MixtureAveragedDiffusionCoefficient(self.fluid.gas)
-        self.transport_layer = TransportLayer(
-            input_dict, {'diffusion': [self.diff_coeff.d_eff,
-                                       self.diff_coeff.d_eff * 1000,
-                                       self.diff_coeff.d_eff * 1000]},
-            discretization)
+        self.transport_layers = [
+            TransportLayer(
+                input_dict,
+                {'diffusion': [self.diff_coeff.d_eff[i],
+                               self.diff_coeff.d_eff[i] * 1000,
+                               self.diff_coeff.d_eff[i] * 1000]},
+                discretization) for i in range(len(self.fluid.species_names))]
         print('test')

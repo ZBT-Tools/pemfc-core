@@ -335,3 +335,18 @@ def reduce_dimension(array, axis=0):
     else:
         return array
 
+
+def cartesian_product(*arrays):
+    """
+    From: https://stackoverflow.com/a/11146645
+    Args:
+        *arrays: list of np.ndarrays
+    Returns: numpy array with cartesian product
+    """
+    la = len(arrays)
+    dtype = np.result_type(*arrays)
+    arr = np.empty([len(a) for a in arrays] + [la], dtype=dtype)
+    for i, a in enumerate(np.ix_(*arrays)):
+        arr[..., i] = a
+    return arr.reshape(-1, la)
+

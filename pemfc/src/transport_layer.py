@@ -54,7 +54,7 @@ class TransportLayer(oo.OutputObject2D, ABC):
             #                  * self.thickness * conductivity)
             conductance = self.geometric_factors * conductivity
 
-        elif np.ndim(conductivity) == 1 and np.shape(conductivity)[0] == 2:
+        elif np.shape(conductivity)[0] == 2:
             # conductance_x = self.dsct.d_area * conductivity[0] / self.thickness
             # conductance_y = (self.dsct.dx[1] / self.dsct.dx[0]
             #                  * self.thickness * conductivity[1])
@@ -65,13 +65,13 @@ class TransportLayer(oo.OutputObject2D, ABC):
             conductance = (
                 conductivity * self.geometric_factors.transpose()).transpose()
 
-        elif np.ndim(conductivity) == 1 and np.shape(conductivity)[0] == 3:
+        elif np.shape(conductivity)[0] == 3:
             # conductance_x = self.dsct.d_area * conductivity[0] / self.thickness
             # conductance_y = (self.dsct.dx[1] / self.dsct.dx[0]
             #                  * self.thickness * conductivity[1])
             # conductance_z = (self.dsct.dx[0] / self.dsct.dx[1]
             #                  * self.thickness * conductivity[2])
-            conductivity = np.asarray(conductivity)
+            # conductivity = np.asarray(conductivity)
             conductance = (
                 conductivity * self.geometric_factors.transpose()).transpose()
         else:
