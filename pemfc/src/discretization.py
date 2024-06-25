@@ -180,16 +180,15 @@ class Discretization3D(Discretization):
                                   self.dx[0] * self.dx[2],
                                   self.dx[0] * self.dx[1]])
         self.d_volume = self.dx[0] * self.dx[1] * self.dx[2]
-        print('test')
 
 
-disc_dict = {
-    'length': 0.5,
-    'width': 0.1,
-    'depth': 0.2,
-    'shape': (2, 10, 3),
-    'ratio': (1, 0.9, 0.6),
-    'direction': (1, 1, 1),
-}
-
-discretization_object = Discretization(disc_dict)
+# disc_dict = {
+#     'length': 0.5,
+#     'width': 0.1,
+#     'depth': 0.2,
+#     'shape': (2, 10, 3),
+#     'ratio': (1, 0.9, 0.6),
+#     'direction': (1, 1, 1),
+# }
+#
+# discretization_object = Discretization(disc_dict)
