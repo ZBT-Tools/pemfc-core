@@ -179,7 +179,8 @@ class Discretization3D(Discretization):
         self.d_area = np.asarray([self.dx[1] * self.dx[2],
                                   self.dx[0] * self.dx[2],
                                   self.dx[0] * self.dx[1]])
-        self.d_volume = np.asarray([])
+        self.d_volume = self.dx[0] * self.dx[1] * self.dx[2]
+        print('test')
 
 
 disc_dict = {
@@ -187,7 +188,7 @@ disc_dict = {
     'width': 0.1,
     'depth': 0.2,
     'shape': (2, 10, 3),
-    'ratio': (0.5, 0.9, 0.6),
+    'ratio': (1, 0.9, 0.6),
     'direction': (1, 1, 1),
 }
 
