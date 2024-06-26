@@ -86,8 +86,8 @@ class HalfCell:
         bpp_transport_properties = {
             'thermal': bpp_dict['thermal_conductivity'],
             'electrical': bpp_dict['electrical_conductivity']}
-        self.bpp = sl.TransportLayer(bpp_dict, bpp_transport_properties,
-                                     self.discretization)
+        self.bpp = sl.TransportLayer2D(bpp_dict, bpp_transport_properties,
+                                       self.discretization)
 
         # Initialize gas diffusion electrode (gde: gdl + cl)
         gde_dict = halfcell_dict['gde']
@@ -102,8 +102,8 @@ class HalfCell:
         #    (self.th_gdl * halfcell_dict['porosity gdl']
         #     + self.th_cl * halfcell_dict['porosity cl'])
         #    / (self.th_gde + self.th_cl)}
-        self.gde = sl.TransportLayer(gde_dict, gde_transport_properties,
-                                     self.discretization)
+        self.gde = sl.TransportLayer2D(gde_dict, gde_transport_properties,
+                                       self.discretization)
 
         # Initialize diffusion transport model
         gdl_dict = gde_dict.copy()

@@ -98,7 +98,7 @@ class LinearSystem(ABC):
 
 class BasicLinearSystem(LinearSystem):
 
-    def __init__(self, layers: list[tl.TransportLayer], transport_type: str,
+    def __init__(self, layers: list[tl.TransportLayer2D], transport_type: str,
                  init_value=0.0):
         self.conductance = self.calculate_conductance(layers, transport_type)
         shape = self.conductance[1].shape
@@ -108,9 +108,9 @@ class BasicLinearSystem(LinearSystem):
 
         self.mtx_const = mtx_func.build_cell_conductance_matrix(
                 [self.conductance[0],
-                 tl.TransportLayer.calc_inter_node_conductance(
+                 tl.TransportLayer2D.calc_inter_node_conductance(
                     self.conductance[1], axis=1) * 1.0,
-                 tl.TransportLayer.calc_inter_node_conductance(
+                 tl.TransportLayer2D.calc_inter_node_conductance(
                     self.conductance[2], axis=2) * 1.0])
 
         self.mtx_dyn = np.zeros(self.mtx_const.shape)
@@ -122,7 +122,7 @@ class BasicLinearSystem(LinearSystem):
         self.solution_vector[:] = init_value
         self.solution_array[:] = init_value
 
-    def calculate_conductance(self, layers: list[tl.TransportLayer],
+    def calculate_conductance(self, layers: list[tl.TransportLayer2D],
                               transport_type: str):
         if transport_type not in ('electrical', 'thermal', 'diffusion'):
             raise ValueError("transport_type argument must be either "

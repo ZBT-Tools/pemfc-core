@@ -8,7 +8,7 @@ from . import transport_layer as sl, constants
 from . import discretization as dsct
 
 
-class Membrane(sl.TransportLayer, ABC):
+class Membrane(sl.TransportLayer2D, ABC):
     def __new__(cls, membrane_dict: dict, discretization: dsct.Discretization2D,
                 **kwargs):
         model_type = membrane_dict.get('type', 'Constant')

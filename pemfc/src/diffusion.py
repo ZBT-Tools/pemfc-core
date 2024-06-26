@@ -1,5 +1,5 @@
 from .fluid import fluid as fl
-from .transport_layer import TransportLayer
+from .transport_layer import TransportLayer2D
 from .fluid import diffusion_coefficient as dc
 from . import discretization as dsct
 from .linear_system import BasicLinearSystem
@@ -19,7 +19,7 @@ class DiffusionTransport:
         self.fluid = fluid.copy(self.shape, plot_axis=-2)
         self.diff_coeff = dc.MixtureAveragedDiffusionCoefficient(self.fluid.gas)
         self.transport_layers = [
-            TransportLayer(
+            TransportLayer2D(
                 input_dict,
                 {'diffusion': [self.diff_coeff.d_eff[i],
                                self.diff_coeff.d_eff[i] * 1000,

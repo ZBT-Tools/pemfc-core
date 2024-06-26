@@ -117,6 +117,9 @@ class Discretization2D(Discretization):
         # self.dy = np.asarray([dy for i in range(self.shape[0])])
         self.d_area = self.dx[0] * self.dx[1]
 
+    @classmethod
+    def stack(cls, n):
+
 
 class Discretization3D(Discretization):
     """
