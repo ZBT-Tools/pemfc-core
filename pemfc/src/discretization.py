@@ -56,6 +56,23 @@ class Discretization(ABC):
         self.ratio: tuple
         # Direction of each axis (limited to (-1, 1))
         self.direction: tuple
+        self.area = self._calc_area()
+        self.x, self.dx = self._calc_discretization()
+        self.d_area = self._calc_area()
+
+    @abstractmethod
+    def _calc_area(self) -> np.ndarray:
+        pass
+
+    def _calc_x(self) -> list:
+        return [self.length[i] * self.calculate_spacing(
+                self.shape[i], self.ratio[i], self.direction[i])
+                for i in range(len(self.length))]
+
+    @abstractmethod
+    def _calc_discretization(self) -> (np.ndarray, np.ndarray):
+        pass
+
 
     @staticmethod
     def calculate_spacing(elements, ratio, direction=1):
@@ -115,10 +132,24 @@ class Discretization2D(Discretization):
 
         # self.dx = np.asarray([dx for i in range(self.shape[1])]).transpose()
         # self.dy = np.asarray([dy for i in range(self.shape[0])])
-        self.d_area = self.dx[0] * self.dx[1]
 
-    @classmethod
-    def stack(cls, n):
+    def _calc_area(self) -> np.ndarray:
+        return self.dx[0] * self.dx[1]
+
+    def _calc_discretization(self) -> (np.ndarray,
+                                                         np.ndarray):
+        x = self._calc_x()
+        x_res = np.asarray(
+            [np.asarray([x[0] for j in range(x[1].shape[0])]).transpose(),
+             np.asarray([x[1] for j in range(x[0].shape[0])])])
+        # for i in range(len(x)):
+        #     self.x.append(np.asarray([x[i] for j in range(x[1 - i].shape[0])])
+        #                   .reshape(x_shape, order='C'))
+        dx = [np.abs(np.diff(self.x[0], axis=0)),
+              np.abs(np.diff(self.x[1], axis=1))]
+        dx_res = np.asarray([dx[0][:, :self.shape[1]],
+                             dx[1][:self.shape[0], :]])
+        return x_res, dx_res
 
 
 class Discretization3D(Discretization):
@@ -126,29 +157,31 @@ class Discretization3D(Discretization):
     Class to precalculate discretization of 3D domains
     """
     def __init__(self, discretization_dict, **kwargs):
-        super().__init__(discretization_dict, **kwargs)
 
         # Length of each axis (x, y, z)
-        self.length = np.asarray([discretization_dict['depth'],
-                                  discretization_dict['length'],
-                                  discretization_dict['width'],
-                                  ])
-
-        self.area = np.asarray([self.length[1] * self.length[2],
-                                self.length[0] * self.length[2],
-                                self.length[0] * self.length[1]])
-        self.volume = np.prod(self.length)
+        self.length = np.asarray(
+            [discretization_dict['depth'],
+             discretization_dict['length'],
+             discretization_dict['width']])
 
         self.ratio = discretization_dict.get('ratio', (1.0, 1.0, 1.0))
-        self.direction = \
-            discretization_dict.get('direction', (1, 1, 1))
+        self.direction = discretization_dict.get('direction', (1, 1, 1))
 
-        x = [self.length[i] * self.calculate_spacing(
-            self.shape[i], self.ratio[i], self.direction[i]) for i in range(
-            len(self.length))]
-        # x = [np.linspace(0, self.length, self.shape[0] + 1),
-        #      np.linspace(0, self.width, self.shape[1] + 1)]
-        self.x = np.asarray([
+        super().__init__(discretization_dict, **kwargs)
+        self.volume = np.prod(self.length)
+        self.d_volume = self._calc_volume()
+
+    def _calc_area(self) -> np.ndarray:
+        return np.asarray([self.dx[1] * self.dx[2],
+                           self.dx[0] * self.dx[2],
+                           self.dx[0] * self.dx[1]])
+
+    def _calc_volume(self) -> np.ndarray:
+        return self.dx[0] * self.dx[1] * self.dx[2]
+
+    def _calc_discretization(self) -> (np.ndarray, np.ndarray):
+        x = self._calc_x()
+        x_res = np.asarray([
             np.moveaxis(np.asarray([[x[0] for i in range(x[1].shape[0])]
                                     for j in range(x[2].shape[0])]),
                         (0, 1, 2), (2, 1, 0)),
@@ -160,29 +193,25 @@ class Discretization3D(Discretization):
             np.moveaxis(np.asarray([[x[2] for i in range(x[0].shape[0])]
                                     for j in range(x[1].shape[0])]),
                         (0, 1, 2), (1, 0, 2))])
-
-        # for i in range(len(x)):
-        #     self.x.append(np.asarray([x[i] for j in range(x[1 - i].shape[0])])
-        #                   .reshape(x_shape, order='C'))
-
         dx = [np.abs(np.diff(self.x[0], axis=0)),
               np.abs(np.diff(self.x[1], axis=1)),
               np.abs(np.diff(self.x[2], axis=2))]
-        self.dx = np.asarray([dx[0][:, :self.shape[1], :self.shape[2]],
+        dx_res = np.asarray([dx[0][:, :self.shape[1], :self.shape[2]],
                               dx[1][:self.shape[0], :, :self.shape[2]],
                               dx[2][:self.shape[0], :self.shape[1], :]])
-        # Temporary reduce discretization to single dx
-        # self.dx = self.dx.mean(axis=(1, 2))
+        return x_res, dx_res
 
-        # dx = np.diff(self.x)
-        # dy = np.diff(self.y)
-
-        # self.dx = np.asarray([dx for i in range(self.shape[1])]).transpose()
-        # self.dy = np.asarray([dy for i in range(self.shape[0])])
-        self.d_area = np.asarray([self.dx[1] * self.dx[2],
-                                  self.dx[0] * self.dx[2],
-                                  self.dx[0] * self.dx[1]])
-        self.d_volume = self.dx[0] * self.dx[1] * self.dx[2]
+    @classmethod
+    def create_from_2d(cls, discretization: Discretization2D, depth: float,
+                       division: int, ratio: float, direction: int):
+        discretization_dict = {
+            'ratio': (ratio,) + discretization.ratio,
+            'shape': discretization.shape,
+            'direction': (direction,) + discretization.direction,
+            'depth': depth,
+            'length': discretization.length[0],
+            'width': discretization.length[1]}
+        return cls(discretization_dict)
 
 
 # disc_dict = {
