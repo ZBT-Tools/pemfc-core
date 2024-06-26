@@ -9,6 +9,7 @@ class Discretization(ABC):
     Abstract class to define the general interface for the specific
     implementations of discretization classes in cartesian coordinates
     """
+
     def __new__(cls, discretization_dict, **kwargs):
 
         # Derive discretization shape
@@ -22,7 +23,7 @@ class Discretization(ABC):
             return super(Discretization, cls).__new__(Discretization2D)
         elif isinstance(shape, (tuple, list)):
             if len(shape) == 1:
-                shape = shape + (1, )
+                shape = shape + (1,)
                 discretization_dict['shape'] = shape
                 return super(Discretization, cls).__new__(Discretization2D)
             elif len(shape) == 2:
@@ -56,8 +57,8 @@ class Discretization(ABC):
         self.ratio: tuple
         # Direction of each axis (limited to (-1, 1))
         self.direction: tuple
-        self.area = self._calc_area()
         self.x, self.dx = self._calc_discretization()
+        self.area = self._calc_area()
         self.d_area = self._calc_area()
 
     @abstractmethod
@@ -66,13 +67,12 @@ class Discretization(ABC):
 
     def _calc_x(self) -> list:
         return [self.length[i] * self.calculate_spacing(
-                self.shape[i], self.ratio[i], self.direction[i])
+            self.shape[i], self.ratio[i], self.direction[i])
                 for i in range(len(self.length))]
 
     @abstractmethod
     def _calc_discretization(self) -> (np.ndarray, np.ndarray):
         pass
-
 
     @staticmethod
     def calculate_spacing(elements, ratio, direction=1):
@@ -83,7 +83,7 @@ class Discretization(ABC):
             # iterator = range(elements) if direction is -1 else reversed(range(elements))
             ratio = ratio if direction == 1 else 1.0 / ratio
             for i in range(elements):
-                array[i+1] = array[i] * ratio
+                array[i + 1] = array[i] * ratio
             array -= np.min(array)
             if ratio < 1.0:
                 array -= np.max(array)
@@ -98,8 +98,8 @@ class Discretization2D(Discretization):
     """
     Class to precalculate discretization of 2D domains
     """
+
     def __init__(self, discretization_dict, **kwargs):
-        super().__init__(discretization_dict, **kwargs)
 
         # Length of each axis (x, y)
         self.length = np.asarray([discretization_dict['length'],
@@ -110,34 +110,13 @@ class Discretization2D(Discretization):
         self.direction = \
             discretization_dict.get('direction', (1, 1))
 
-        x = [self.length[i] * self.calculate_spacing(
-            self.shape[i], self.ratio[i], self.direction[i]) for i in range(
-            len(self.length))]
-        # x = [np.linspace(0, self.length, self.shape[0] + 1),
-        #      np.linspace(0, self.width, self.shape[1] + 1)]
-        self.x = np.asarray(
-            [np.asarray([x[0] for j in range(x[1].shape[0])]).transpose(),
-             np.asarray([x[1] for j in range(x[0].shape[0])])])
-        # for i in range(len(x)):
-        #     self.x.append(np.asarray([x[i] for j in range(x[1 - i].shape[0])])
-        #                   .reshape(x_shape, order='C'))
-        dx = [np.abs(np.diff(self.x[0], axis=0)),
-              np.abs(np.diff(self.x[1], axis=1))]
-        self.dx = np.asarray([dx[0][:, :self.shape[1]], dx[1][:self.shape[0], :]])
-        # Temporary reduce discretization to single dx
-        # self.dx = self.dx.mean(axis=(1, 2))
-
-        # dx = np.diff(self.x)
-        # dy = np.diff(self.y)
-
-        # self.dx = np.asarray([dx for i in range(self.shape[1])]).transpose()
-        # self.dy = np.asarray([dy for i in range(self.shape[0])])
+        super().__init__(discretization_dict, **kwargs)
 
     def _calc_area(self) -> np.ndarray:
         return self.dx[0] * self.dx[1]
 
     def _calc_discretization(self) -> (np.ndarray,
-                                                         np.ndarray):
+                                       np.ndarray):
         x = self._calc_x()
         x_res = np.asarray(
             [np.asarray([x[0] for j in range(x[1].shape[0])]).transpose(),
@@ -145,8 +124,8 @@ class Discretization2D(Discretization):
         # for i in range(len(x)):
         #     self.x.append(np.asarray([x[i] for j in range(x[1 - i].shape[0])])
         #                   .reshape(x_shape, order='C'))
-        dx = [np.abs(np.diff(self.x[0], axis=0)),
-              np.abs(np.diff(self.x[1], axis=1))]
+        dx = [np.abs(np.diff(x_res[0], axis=0)),
+              np.abs(np.diff(x_res[1], axis=1))]
         dx_res = np.asarray([dx[0][:, :self.shape[1]],
                              dx[1][:self.shape[0], :]])
         return x_res, dx_res
@@ -156,6 +135,7 @@ class Discretization3D(Discretization):
     """
     Class to precalculate discretization of 3D domains
     """
+
     def __init__(self, discretization_dict, **kwargs):
 
         # Length of each axis (x, y, z)
@@ -193,34 +173,39 @@ class Discretization3D(Discretization):
             np.moveaxis(np.asarray([[x[2] for i in range(x[0].shape[0])]
                                     for j in range(x[1].shape[0])]),
                         (0, 1, 2), (1, 0, 2))])
-        dx = [np.abs(np.diff(self.x[0], axis=0)),
-              np.abs(np.diff(self.x[1], axis=1)),
-              np.abs(np.diff(self.x[2], axis=2))]
+        dx = [np.abs(np.diff(x_res[0], axis=0)),
+              np.abs(np.diff(x_res[1], axis=1)),
+              np.abs(np.diff(x_res[2], axis=2))]
         dx_res = np.asarray([dx[0][:, :self.shape[1], :self.shape[2]],
-                              dx[1][:self.shape[0], :, :self.shape[2]],
-                              dx[2][:self.shape[0], :self.shape[1], :]])
+                             dx[1][:self.shape[0], :, :self.shape[2]],
+                             dx[2][:self.shape[0], :self.shape[1], :]])
         return x_res, dx_res
 
     @classmethod
     def create_from_2d(cls, discretization: Discretization2D, depth: float,
-                       division: int, ratio: float, direction: int):
-        discretization_dict = {
-            'ratio': (ratio,) + discretization.ratio,
-            'shape': discretization.shape,
-            'direction': (direction,) + discretization.direction,
-            'depth': depth,
-            'length': discretization.length[0],
-            'width': discretization.length[1]}
-        return cls(discretization_dict)
+                       division: int, ratio: float = 1, direction: int = 1):
+        if isinstance(discretization, Discretization3D):
+            return discretization
+        else:
+            discretization_dict = {
+                'ratio': (ratio,) + discretization.ratio,
+                'shape': (division,) + discretization.shape,
+                'direction': (direction,) + discretization.direction,
+                'depth': depth,
+                'length': discretization.length[0],
+                'width': discretization.length[1]}
+            return cls(discretization_dict)
 
 
-# disc_dict = {
-#     'length': 0.5,
-#     'width': 0.1,
-#     'depth': 0.2,
-#     'shape': (2, 10, 3),
-#     'ratio': (1, 0.9, 0.6),
-#     'direction': (1, 1, 1),
-# }
-#
-# discretization_object = Discretization(disc_dict)
+disc_dict = {
+    'length': 0.5,
+    'width': 0.1,
+    'depth': 0.2,
+    'shape': (2, 10),
+    'ratio': (1, 0.9),
+    'direction': (1, 1),
+}
+
+discretization_2d = Discretization(disc_dict)
+discretization_3d = Discretization3D.create_from_2d(discretization_2d, 0.4,
+                                                    3, 1.0, 1)
