@@ -110,7 +110,7 @@ def build_z_cell_conductance_matrix(cond_vector, axis):
         + np.diag(off_diag, k=offset)
 
 
-def calculate_center_diagonal(array, axis, weights=(0.5, 1.0, 0.5)):
+def calculate_center_diagonal_old(array, axis, weights=(0.5, 1.0, 0.5)):
     if not array.ndim == 3:
         raise ValueError('only three-dimensional arrays supported at the moment')
     result = np.zeros(array.shape)
@@ -139,7 +139,7 @@ def calculate_center_diagonal(array, axis, weights=(0.5, 1.0, 0.5)):
     return result.flatten(order='F')
 
 
-def calculate_off_diagonal(array, axis, weights=(0.5, 0.5)):
+def calculate_off_diagonal_old(array, axis, weights=(0.5, 0.5)):
     off_coeff_matrix = sp.ndimage.convolve1d(
         array, weights, mode='constant', axis=axis, cval=0.0)
     if axis == 0:
@@ -154,17 +154,17 @@ def calculate_off_diagonal(array, axis, weights=(0.5, 0.5)):
     return off_coeff_matrix.flatten(order='F')
 
 
-def build_one_dimensional_conductance_matrix(conductance_array, axis,
-                                             center_weights=(0.5, 1.0, 0.5),
-                                             off_weights=(0.5, 0.5)):
+def build_one_dimensional_conductance_matrix_old(conductance_array, axis,
+                                                 center_weights=(0.5, 1.0, 0.5),
+                                                 off_weights=(0.5, 0.5)):
     if axis == -1:
         axis = len(conductance_array.shape) - 1
     offset = 1
     for i in range(axis):
         offset *= conductance_array.shape[i]
-    center_diag = calculate_center_diagonal(
+    center_diag = calculate_center_diagonal_old(
         conductance_array, axis=axis, weights=center_weights)
-    off_diag = calculate_off_diagonal(
+    off_diag = calculate_off_diagonal_old(
         conductance_array, axis, weights=off_weights)[:-offset]
     center_diag *= -1.0
     return np.diag(center_diag, k=0) \
@@ -172,7 +172,7 @@ def build_one_dimensional_conductance_matrix(conductance_array, axis,
         + np.diag(off_diag, k=offset)
 
 
-def calculate_center_diagonal_2(array, axis):
+def calculate_center_diagonal(array, axis):
     if not array.ndim == 3:
         raise ValueError('only three-dimensional arrays supported at the moment')
     if axis not in (0, 1, 2, -1):
@@ -197,7 +197,7 @@ def calculate_center_diagonal_2(array, axis):
     return result.flatten(order='F')
 
 
-def calculate_off_diagonal_2(array, axis):
+def calculate_off_diagonal(array, axis):
     if not array.ndim == 3:
         raise ValueError('only three-dimensional arrays supported at the moment')
     if axis not in (0, 1, 2, -1):
@@ -239,8 +239,8 @@ def create_one_dimensional_conductance_matrix(conductance_array, axis):
     offset = 1
     for i in range(axis):
         offset *= conductance_array.shape[i]
-    center_diag = calculate_center_diagonal_2(conductance_array, axis=axis)
-    off_diag = calculate_off_diagonal_2(conductance_array, axis)[:-offset]
+    center_diag = calculate_center_diagonal(conductance_array, axis=axis)
+    off_diag = calculate_off_diagonal(conductance_array, axis)[:-offset]
     center_diag *= -1.0
     return np.diag(center_diag, k=0) \
         + np.diag(off_diag, k=-offset) \

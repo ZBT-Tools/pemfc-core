@@ -97,6 +97,182 @@ class LinearSystem(ABC):
 
 
 class BasicLinearSystem(LinearSystem):
+    def __init__(self, transport_layer: tl.TransportLayer, transport_type: str,
+                 init_value=0.0):
+        self.transport_layer = transport_layer
+        self.type = transport_type
+        self.conductance = self.transport_layer.conductance
+        shape = self.conductance[1].shape
+        super().__init__(shape)
+        inter_node_conductance = (
+            [self.transport_layer.calc_inter_node_conductance(
+                self.conductance[i], axis=i)
+             for i in range(len(self.conductance))])
+        self.mtx_const = mtx_func.build_cell_conductance_matrix(
+            inter_node_conductance)
+
+        self.mtx_dyn = np.zeros(self.mtx_const.shape)
+        self.rhs_const = np.zeros(self.rhs.shape)
+        self.rhs_dyn = np.zeros(self.rhs.shape)
+        self.index_array = self.create_cell_index_list(self.shape)
+
+        # Initialize solution values
+        self.solution_vector[:] = init_value
+        self.solution_array[:] = init_value
+
+    @classmethod
+    def create(cls, transport_layer: tl.TransportLayer, transport_type: str,
+               init_value=0.0):
+        if isinstance(transport_layer, tl.TransportLayer2D):
+            return BasicLinearSystem2D(transport_layer, transport_type,
+                                       init_value)
+        elif isinstance(transport_layer, tl.TransportLayer3D):
+            return BasicLinearSystem3D(transport_layer, transport_type,
+                                       init_value)
+        else:
+            raise NotImplementedError(
+                'argument "transport_layer" must be of '
+                'types (TransportLayer2D, TransportLayer3D)')
+
+    def set_neumann_boundary_conditions(self, flux_value, layer_id):
+        source = flux_value * self.layers[layer_id].discretization.d_area
+        mtx_func.add_explicit_layer_source(
+            self.rhs_const, source.flatten(order='F'),
+            self.index_array, layer_id)
+
+    def set_dirichlet_boundary_conditions(self, fixed_value, layer_id):
+        mtx_func.set_implicit_layer_fixed(
+            self.mtx_const, self.index_array, layer_id)
+        self.rhs_const[:], _ = mtx_func.add_explicit_layer_source(
+            self.rhs_const, -fixed_value, self.index_array, layer_id,
+            replace=True)
+
+    @staticmethod
+    def create_cell_index_list(shape: tuple[int, ...]):
+        """
+        Create list of lists with each list containing flattened order of indices
+        for a continuous functional layer (for the conductance matrix).
+        Functional layers a discretized in x-direction (z-direction in old version),
+        the remaining flattened order is equal to the order in the overall matrix
+        and the corresponding right-hand side vector
+        (typically first y-, then z-direction within a layer a.k.a x-plane)
+
+        Args:
+            shape: tuple of size 3 containing the number of layers (index 0),
+            the number of y-elements (index 1) and the number z-elements (index 2)
+        """
+        index_list = []
+        for i in range(shape[0]):
+            index_list.append(
+                [(j * shape[0]) + i for j in range(shape[1] * shape[2])])
+        return index_list
+
+    def update_rhs(self, *args, **kwargs):
+        """
+        Create vector with the right hand side entries,
+        Sources from outside the src to the src must be defined negative.
+        """
+        pass
+
+    def update_matrix(self, *args, **kwargs):
+        """
+        Updates matrix coefficients
+        """
+        pass
+
+
+class BasicLinearSystem2D(BasicLinearSystem):
+    def __init__(self, transport_layer: tl.TransportLayer, transport_type: str,
+                 init_value=0.0):
+
+        super().__init__(transport_layer, transport_type, init_value)
+
+    def set_neumann_boundary_conditions(self, flux_value, layer_id):
+        pass
+
+    def set_dirichlet_boundary_conditions(self, fixed_value, layer_id):
+        pass
+
+    @staticmethod
+    def create_cell_index_list(shape: tuple[int, ...]):
+        """
+        Create list of lists with each list containing flattened order of indices
+        for a continuous functional layer (for the conductance matrix).
+        Functional layers a discretized in x-direction (z-direction in old version),
+        the remaining flattened order is equal to the order in the overall matrix
+        and the corresponding right-hand side vector
+        (typically first y-, then z-direction within a layer a.k.a x-plane)
+
+        Args:
+            shape: tuple of size 3 containing the number of layers (index 0),
+            the number of y-elements (index 1) and the number z-elements (index 2)
+        """
+        index_list = []
+        for i in range(shape[0]):
+            index_list.append(
+                [(j * shape[0]) + i for j in range(shape[1] * shape[2])])
+        return index_list
+
+    def update_rhs(self, *args, **kwargs):
+        """
+        Create vector with the right hand side entries,
+        Sources from outside the src to the src must be defined negative.
+        """
+        pass
+
+    def update_matrix(self, *args, **kwargs):
+        """
+        Updates matrix coefficients
+        """
+        pass
+
+
+class BasicLinearSystem3D(BasicLinearSystem):
+    def __init__(self, transport_layer: tl.TransportLayer, transport_type: str,
+                 init_value=0.0):
+        super().__init__(transport_layer, transport_type, init_value)
+
+    def set_neumann_boundary_conditions(self, flux_value, layer_id):
+        pass
+
+    def set_dirichlet_boundary_conditions(self, fixed_value, layer_id):
+        pass
+
+    @staticmethod
+    def create_cell_index_list(shape: tuple[int, ...]):
+        """
+        Create list of lists with each list containing flattened order of indices
+        for a continuous functional layer (for the conductance matrix).
+        Functional layers a discretized in x-direction (z-direction in old version),
+        the remaining flattened order is equal to the order in the overall matrix
+        and the corresponding right-hand side vector
+        (typically first y-, then z-direction within a layer a.k.a x-plane)
+
+        Args:
+            shape: tuple of size 3 containing the number of layers (index 0),
+            the number of y-elements (index 1) and the number z-elements (index 2)
+        """
+        index_list = []
+        for i in range(shape[0]):
+            index_list.append(
+                [(j * shape[0]) + i for j in range(shape[1] * shape[2])])
+        return index_list
+
+    def update_rhs(self, *args, **kwargs):
+        """
+        Create vector with the right hand side entries,
+        Sources from outside the src to the src must be defined negative.
+        """
+        pass
+
+    def update_matrix(self, *args, **kwargs):
+        """
+        Updates matrix coefficients
+        """
+        pass
+
+
+class LayerLinearSystem(LinearSystem):
 
     def __init__(self, layers: list[tl.TransportLayer2D], transport_type: str,
                  init_value=0.0):
@@ -199,7 +375,7 @@ class BasicLinearSystem(LinearSystem):
         pass
 
 
-class CellLinearSystem(BasicLinearSystem):
+class CellLinearSystem(LayerLinearSystem):
 
     def __init__(self, cell: Cell, transport_type: str, init_value=0.0):
         self.cell = cell

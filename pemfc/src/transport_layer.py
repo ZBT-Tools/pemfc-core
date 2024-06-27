@@ -38,13 +38,13 @@ class TransportLayer(oo.OutputObject2D, ABC):
         super().__init__(name=name)
         self.discretization = discretization
         self.dict = input_dict
-        self.thickness: float
+        self.thickness: float = 0.0
         self.transport_properties = transport_properties
         self.porosity = input_dict.get('porosity', 0.0)
         self.bruggeman_exponent = input_dict.get('bruggeman_exponent', 1.5)
         self.effective = input_dict.get('effective', False)
-        self.geometric_factors: np.ndarray
-        self.conductance: dict
+        self.geometric_factors: np.ndarray = np.asarray([0.0, 0.0, 0.0])
+        self.conductance: dict = {}
 
     @classmethod
     def create(cls, input_dict: dict, transport_properties: dict,
@@ -178,47 +178,6 @@ class TransportLayer2D(TransportLayer):
             result *= (
                     (1.0 - self.porosity) ** self.bruggeman_exponent)
         return result
-
-    # def calc_conductance(self, conductivity, effective=False):
-    #     conductivity = np.asarray(conductivity)
-    #     if np.ndim(conductivity) == 0:
-    #         # conductance_x = self.dsct.d_area * conductivity / self.thickness
-    #         # conductance_y = (self.dsct.dx[1] / self.dsct.dx[0]
-    #         #                  * self.thickness * conductivity)
-    #         # conductance_z = (self.dsct.dx[0] / self.dsct.dx[1]
-    #         #                  * self.thickness * conductivity)
-    #         conductance = self.geometric_factors * conductivity
-    #
-    #     elif np.shape(conductivity)[0] == 2:
-    #         # conductance_x = self.dsct.d_area * conductivity[0] / self.thickness
-    #         # conductance_y = (self.dsct.dx[1] / self.dsct.dx[0]
-    #         #                  * self.thickness * conductivity[1])
-    #         # conductance_z = (self.dsct.dx[0] / self.dsct.dx[1] *
-    #         #                  self.thickness * conductivity[1])
-    #         conductivity = np.asarray(
-    #             [conductivity[0], conductivity[1], conductivity[1]])
-    #         conductance = (
-    #             conductivity * self.geometric_factors.transpose()).transpose()
-    #
-    #     elif np.shape(conductivity)[0] == 3:
-    #         # conductance_x = self.dsct.d_area * conductivity[0] / self.thickness
-    #         # conductance_y = (self.dsct.dx[1] / self.dsct.dx[0]
-    #         #                  * self.thickness * conductivity[1])
-    #         # conductance_z = (self.dsct.dx[0] / self.dsct.dx[1]
-    #         #                  * self.thickness * conductivity[2])
-    #         # conductivity = np.asarray(conductivity)
-    #         conductance = (
-    #             conductivity * self.geometric_factors.transpose()).transpose()
-    #     else:
-    #         raise ValueError('conductivity must be either single scalar or '
-    #                          'an iterable with two (tp, ip) or three (x, y, z) '
-    #                          'entries')
-    #     # if self.effective or effective:
-    #     #     conductance_x *= (1.0 - self.porosity) ** self.bruggeman_exponent
-    #     #     conductance_y *= (1.0 - self.porosity) ** self.bruggeman_exponent
-    #     #     conductance_z *= (1.0 - self.porosity) ** self.bruggeman_exponent
-    #     # conductance = np.asarray([conductance_x, conductance_y, conductance_z])
-    #     return conductance
 
 
 class TransportLayer3D(TransportLayer):

@@ -2,7 +2,7 @@ from .fluid import fluid as fl
 from . import transport_layer as tl
 from .fluid import diffusion_coefficient as dc
 from . import discretization as dsct
-from .linear_system import BasicLinearSystem
+from .linear_system import LayerLinearSystem
 
 
 class DiffusionTransport:
