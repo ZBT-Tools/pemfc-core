@@ -75,11 +75,13 @@ class Cell(OutputObject2D):
         """heat conductivity along and through the cell layers"""
         # self.width_straight_channels = \
         #     self.cathode.flow_field.width_straight_channels
-        self.d_area = self.cathode.gde.dsct.d_area
+        self.d_area = self.cathode.gde.discretization.d_area
 
         # Setup membrane
-        self.membrane = membrane.Membrane(membrane_dict, self.cathode.gde.dsct)
-
+        self.membrane = membrane.Membrane.create(
+            membrane_dict, self.cathode.gde.discretization)
+        # memb = membrane.Constant(
+        #     membrane_dict, self.cathode.gde.discretization)
         # Overall cell thickness (cell pitch)
         self.thickness = self.cathode.thickness + self.membrane.thickness \
             + self.anode.thickness
@@ -282,7 +284,7 @@ class Cell(OutputObject2D):
         This conductance is assigned to the central layer (the membrane layer)
         of the conductance array layout assuming an uneven number of layers.
         """
-        current = current_density * self.membrane.dsct.d_area
+        current = current_density * self.membrane.discretization.d_area
         electrochemical_resistance = (
             (self.cathode.voltage_loss
              + self.membrane.voltage_loss

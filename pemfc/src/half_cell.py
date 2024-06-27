@@ -112,7 +112,9 @@ class HalfCell:
              'thickness': electrochemistry_dict['thickness_gdl']})
 
         self.gdl_diffusion = diff.DiffusionTransport(
-            gdl_dict, self.channel.fluid, self.discretization)
+            gdl_dict, self.channel.fluid,
+            dsct.Discretization3D.create_from(self.discretization,
+                                              gdl_dict['thickness'], 2))
 
         self.thickness = self.bpp.thickness + self.gde.thickness
 
@@ -128,9 +130,9 @@ class HalfCell:
         # stoichiometry of the reactant at the channel inlet
         self.inlet_stoi = 0.0
         # cross water flux through the membrane
-        self.w_cross_flow = np.zeros(self.gde.dsct.shape)
+        self.w_cross_flow = np.zeros(self.gde.discretization.shape)
         # voltage loss
-        self.voltage_loss = np.zeros(self.gde.dsct.shape)
+        self.voltage_loss = np.zeros(self.gde.discretization.shape)
 
     def update(self, current_density, update_channel=False,
                current_control=True):

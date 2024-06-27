@@ -3,32 +3,38 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 # Local module imports
-from . import transport_layer as sl, constants
+from . import transport_layer as tl, constants
 # from pemfc.src import global_functions as gf
 from . import discretization as dsct
 
 
-class Membrane(sl.TransportLayer2D, ABC):
-    def __new__(cls, membrane_dict: dict, discretization: dsct.Discretization2D,
-                **kwargs):
-        model_type = membrane_dict.get('type', 'Constant')
-        if model_type == 'Constant':
-            return super(Membrane, cls).__new__(Constant)
-        elif model_type == 'Linear':
-            return super(Membrane, cls).__new__(LinearMembrane)
-        elif model_type == 'Springer':
-            return super(Membrane, cls).__new__(SpringerMembrane)
-        elif model_type == 'YeWang2007':
-            return super(Membrane, cls).__new__(YeWang2007Membrane)
-        else:
-            raise NotImplementedError('Specified membrane model not '
-                                      'implemented. Available models are '
-                                      'Constant, Linear, Springer, '
-                                      'and YeWang2007.')
+class Membrane(tl.TransportLayer2D, ABC):
+    # def __new__(cls, membrane_dict: dict, discretization: dsct.Discretization2D,
+    #             *args, **kwargs):
+    #     # model_type = membrane_dict.get('type', 'Constant')
+    #     # transport_props = {
+    #     #     'thermal': membrane_dict.get('thermal_conductivity', 0.0),
+    #     #     'electrical': membrane_dict.get('electrical_conductivity', 0.0)}
+    #     # if model_type == 'Constant':
+    #     #     # return super(Membrane, cls).__new__(Constant, membrane_dict,
+    #     #     #                                     transport_props,
+    #     #     #                                     discretization)
+    #     #     return super(Membrane, cls).__new__(Constant)
+    #     #
+    #     # elif model_type == 'Linear':
+    #     #     return super(Membrane, cls).__new__(LinearMembrane)
+    #     # elif model_type == 'Springer':
+    #     #     return super(Membrane, cls).__new__(SpringerMembrane)
+    #     # elif model_type == 'YeWang2007':
+    #     #     return super(Membrane, cls).__new__(YeWang2007Membrane)
+    #     # else:
+    #     #     raise NotImplementedError('Specified membrane model not '
+    #     #                               'implemented. Available models are '
+    #     #                               'Constant, Linear, Springer, '
+    #     #                               'and YeWang2007.')
 
     def __init__(self, membrane_dict: dict,
-                 discretization: dsct.Discretization2D,
-                 **kwargs):
+                 discretization: dsct.Discretization2D, *args, **kwargs):
         self.name = 'Membrane'
         membrane_dict['name'] = self.name
         solid_transport_properties = {
@@ -37,30 +43,47 @@ class Membrane(sl.TransportLayer2D, ABC):
         super().__init__(membrane_dict, solid_transport_properties,
                          discretization)
 
-        # membrane temperature
-        self.temp = np.zeros(self.dsct.shape)
+        # Membrane temperature
+        self.temp = np.zeros(self.discretization.shape)
 
-        # constant ionic conductivity of membrane
+        # Constant ionic conductivity of membrane
         self.ionic_conductivity = \
             membrane_dict.get('ionic_conductivity', 1.0e-3)
 
         # area specific membrane resistance
-        self.omega_ca = np.zeros(self.dsct.shape)
+        self.omega_ca = np.zeros(self.discretization.shape)
 
         # membrane resistance
-        self.omega = np.zeros(self.dsct.shape)
+        self.omega = np.zeros(self.discretization.shape)
 
         self.calc_loss = membrane_dict.get('calc_loss', True)
 
         # voltage loss at the membrane
-        self.voltage_loss = np.zeros(self.dsct.shape)
+        self.voltage_loss = np.zeros(self.discretization.shape)
 
         self.ionic_conductance = self.calc_conductance(self.ionic_conductivity)
 
         self.add_print_data(self.omega_ca, 'Membrane Resistance', 'Ohm-m²')
 
+    @classmethod
+    def create(cls, membrane_dict: dict, discretization: dsct.Discretization2D,
+               *args, **kwargs):
+        model_type = membrane_dict.get('type', 'Constant')
+        if model_type == 'Constant':
+            return Constant(membrane_dict, discretization)
+        elif model_type == 'Linear':
+            return LinearMembrane(membrane_dict, discretization)
+        elif model_type == 'Springer':
+            return SpringerMembrane(membrane_dict, discretization)
+        elif model_type == 'YeWang2007':
+            return YeWang2007Membrane(membrane_dict, discretization)
+        else:
+            raise NotImplementedError(
+                'Specified membrane model is not implemented. Available models '
+                'are Constant, Linear, Springer, and YeWang2007.')
+
     @abstractmethod
-    def calc_ionic_resistance(self, *args):
+    def calc_ionic_resistance(self, *args, **kwargs):
         pass
 
     def calc_voltage_loss(self, current_density, **kwargs):
@@ -72,19 +95,28 @@ class Membrane(sl.TransportLayer2D, ABC):
         else:
             self.voltage_loss[:] = self.omega_ca * current_density
 
-    def update(self, current_density, humidity, *args):
-        self.calc_ionic_resistance(humidity, *args)
+    def update(self, current_density, humidity, *args, **kwargs):
+        self.calc_ionic_resistance(humidity, *args, **kwargs)
         self.calc_voltage_loss(current_density)
 
 
 class Constant(Membrane):
+
+    # def __new__(cls, membrane_dict: dict,
+    #             discretization: dsct.Discretization2D, *args, **kwargs):
+    #     instance = super().__new__(cls, membrane_dict, discretization,
+    #                                *args, **kwargs)
+    #     return instance
+
     def __init__(self, membrane_dict: dict,
-                 discretization: dsct.Discretization2D, **kwargs):
-        super().__init__(membrane_dict, discretization, **kwargs)
+                 discretization: dsct.Discretization2D, *args, **kwargs):
+        test = 1
+
+        super().__init__(membrane_dict, discretization, *args, **kwargs)
         # self.water_flux = np.zeros_like(self.dx)
         # water cross flux through the membrane
         self.omega[:] = 1.0 / self.ionic_conductance[0]
-        self.omega_ca[:] = self.omega * self.dsct.d_area
+        self.omega_ca[:] = self.omega * self.discretization.d_area
 
     def calc_ionic_resistance(self, *args):
         pass
@@ -92,17 +124,17 @@ class Constant(Membrane):
 
 class LinearMembrane(Membrane):
     def __init__(self, membrane_dict: dict,
-                 discretization: dsct.Discretization2D, **kwargs):
-        super().__init__(membrane_dict, discretization, **kwargs)
+                 discretization: dsct.Discretization2D, *args, **kwargs):
+        super().__init__(membrane_dict, discretization, *args, **kwargs)
         self.basic_resistance = membrane_dict['basic_resistance']
         # basic electrical resistance of the membrane
         self.temp_coeff = membrane_dict['temperature_coefficient']
         # thermal related electrical resistance gain of the membrane
 
-    def calc_ionic_resistance(self, *args):
+    def calc_ionic_resistance(self, *args, **kwargs):
         self.omega_ca[:] = \
             (self.basic_resistance - self.temp_coeff * self.temp)  # * 1e-2
-        self.omega[:] = self.omega_ca / self.dsct.d_area
+        self.omega[:] = self.omega_ca / self.discretization.d_area
         return self.omega, self.omega_ca
 
 
@@ -111,19 +143,19 @@ class WaterTransportMembrane(Membrane, ABC):
     FARADAY = constants.FARADAY
 
     def __init__(self, membrane_dict: dict,
-                 discretization: dsct.Discretization2D, **kwargs):
-        super().__init__(membrane_dict, discretization, **kwargs)
+                 discretization: dsct.Discretization2D, *args, **kwargs):
+        super().__init__(membrane_dict, discretization, *args, **kwargs)
 
         # self.vapour_coeff = membrane_dict['vapour_transport_coefficient']
         # self.acid_group_conc = membrane_dict['acid_group_concentration']
 
         # Water cross flux through the membrane
-        self.water_content = np.zeros((2, *self.dsct.shape))
-        self.avg_water_content = np.zeros(self.dsct.shape)
-        self.water_flux = np.zeros(self.dsct.shape)
-        self.diff_coeff = np.zeros(self.dsct.shape)
+        self.water_content = np.zeros((2, *self.discretization.shape))
+        self.avg_water_content = np.zeros(self.discretization.shape)
+        self.water_flux = np.zeros(self.discretization.shape)
+        self.diff_coeff = np.zeros(self.discretization.shape)
         # Electro-osmotic drag coefficient
-        self.eod = np.zeros(self.dsct.shape)
+        self.eod = np.zeros(self.discretization.shape)
         self.eod[:] = membrane_dict.get('electro-osmotic_drag_coeff', 1.07)
 
         self.add_print_data(self.water_flux,
@@ -146,9 +178,9 @@ class WaterTransportMembrane(Membrane, ABC):
         """
         pass
 
-    def update(self, current_density, humidity, *args):
+    def update(self, current_density, humidity, *args, **kwargs):
         self.calc_cross_water_flux(current_density, humidity)
-        super().update(current_density, humidity, *args)
+        super().update(current_density, humidity, *args, **kwargs)
 
 
 class SpringerMembrane(WaterTransportMembrane):
@@ -165,8 +197,8 @@ class SpringerMembrane(WaterTransportMembrane):
     resolution of the through-plane concentration gradients.
     """
     def __init__(self, membrane_dict: dict,
-                 discretization: dsct.Discretization2D, **kwargs):
-        super().__init__(membrane_dict, discretization, **kwargs)
+                 discretization: dsct.Discretization2D, *args, **kwargs):
+        super().__init__(membrane_dict, discretization, *args, **kwargs)
         # Under-relaxation factor for water flux update
         self.urf = membrane_dict.get('underrelaxation_factor', 0.95)
 
@@ -187,17 +219,17 @@ class SpringerMembrane(WaterTransportMembrane):
 
         wc_avg = self.avg_water_content
 
-        diff_coeff_star = \
+        diff_coeff_star = (
             np.where(wc_avg <= 2.0, 1.0,
                      np.where(wc_avg <= 3.0, 1.0 + 2.0 * (wc_avg - 2.0),
                               np.where(wc_avg <= 4.0,
                                        3.0 - 1.38 * (wc_avg - 3.0),
                                        2.563 - 0.33 * wc_avg
                                        + 0.0264 * wc_avg ** 2.0
-                                       - 0.000671 * wc_avg ** 3.0)))
+                                       - 0.000671 * wc_avg ** 3.0))))
 
-        diff_coeff = 1.0e-10 * np.exp(2416.0 * (1.0 / 303.0 * 1.0 / self.temp)) \
-            * diff_coeff_star
+        diff_coeff = (1.0e-10 * np.exp(2416.0 * (1.0 / 303.0 * 1.0 / self.temp))
+                      * diff_coeff_star)
 
         # # Based on Nguyen and White (1993);
         # # as formulated by Kamarajugadda et al. (2008)
@@ -217,7 +249,7 @@ class SpringerMembrane(WaterTransportMembrane):
         self.eod[:] = 2.5 * wc_min / 22.0
         return self.eod
 
-    def calc_ionic_resistance(self, *args):
+    def calc_ionic_resistance(self, *args, **kwargs):
         """
         Calculates the membrane resistivity for Nafion 117
         according to Springer et al. (1991).
@@ -229,7 +261,7 @@ class SpringerMembrane(WaterTransportMembrane):
         # Area-specific membrane resistance [Ohm-m²]
         self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
         # Absolute resistance [Ohm]
-        self.omega[:] = self.omega_ca / self.dsct.d_area
+        self.omega[:] = self.omega_ca / self.discretization.d_area
         return self.omega, self.omega_ca
 
     def calc_cross_water_flux(self, current_density, humidity, *args):
@@ -297,12 +329,12 @@ class YeWang2007Membrane(SpringerMembrane):
     resolution of the through-plane concentration gradients.
     """
     def __init__(self, membrane_dict: dict,
-                 discretization: dsct.Discretization2D, **kwargs):
-        super().__init__(membrane_dict, discretization, **kwargs)
+                 discretization: dsct.Discretization2D, *args, **kwargs):
+        super().__init__(membrane_dict, discretization, *args, **kwargs)
         # Under-relaxation factor for water flux update
         self.urf = membrane_dict.get('underrelaxation_factor', 0.8)
 
-    def calc_ionic_resistance(self, humidity, *args):
+    def calc_ionic_resistance(self, humidity, *args, **kwargs):
         """
         Equation 13 in:
         X. Ye, C.-Y. Wang. „Measurement of Water Transport Properties Through
@@ -317,7 +349,7 @@ class YeWang2007Membrane(SpringerMembrane):
         # Area-specific membrane resistance [Ohm-m²]
         self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
         # Absolute resistance [Ohm]
-        self.omega[:] = self.omega_ca / self.dsct.d_area
+        self.omega[:] = self.omega_ca / self.discretization.d_area
         return self.omega, self.omega_ca
 
     def calc_eod(self):

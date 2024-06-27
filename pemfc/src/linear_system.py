@@ -137,7 +137,7 @@ class BasicLinearSystem(LinearSystem):
         return self.stack_cell_property(conductance, stacking_axis=0)
 
     def set_neumann_boundary_conditions(self, flux_value, layer_id):
-        source = flux_value * self.layers[layer_id].dsct.d_area
+        source = flux_value * self.layers[layer_id].discretization.d_area
         mtx_func.add_explicit_layer_source(
             self.rhs_const, source.flatten(order='F'),
             self.index_array, layer_id)
@@ -379,7 +379,7 @@ class StackLinearSystem(LinearSystem, ABC):
         layer_ids = [[] for _ in range(cells[-1].nx)]
         for i in range(n_cells):
             index_array = \
-                (np.prod(cells[i - 1].membrane.dsct.shape, dtype=np.int32)
+                (np.prod(cells[i - 1].membrane.discretization.shape, dtype=np.int32)
                  * cells[i - 1].nx) * i \
                 + cells[i].linear_systems[transport_type].index_array
             index_list.append(index_array.tolist())

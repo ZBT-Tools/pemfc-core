@@ -1,4 +1,5 @@
 import numpy as np
+import copy as cp
 from functools import reduce
 from abc import ABC, abstractmethod
 import pemfc.src.global_functions as gf
@@ -60,6 +61,13 @@ class Discretization(ABC):
         self.x, self.dx = self._calc_discretization()
         self.area = self._calc_area()
         self.d_area = self._calc_area()
+
+    def copy(self, *args, **kwargs):
+        if kwargs.get('deepcopy', True):
+            copy = cp.deepcopy(self)
+        else:
+            copy = cp.copy(self)
+        return copy
 
     @abstractmethod
     def _calc_area(self) -> np.ndarray:
@@ -182,14 +190,14 @@ class Discretization3D(Discretization):
         return x_res, dx_res
 
     @classmethod
-    def create_from_2d(cls, discretization: Discretization2D, depth: float,
-                       division: int, ratio: float = 1, direction: int = 1):
+    def create_from(cls, discretization: Discretization, depth: float,
+                    nodes: int = 1, ratio: float = 1, direction: int = 1):
         if isinstance(discretization, Discretization3D):
-            return discretization
+            return discretization.copy()
         else:
             discretization_dict = {
                 'ratio': (ratio,) + discretization.ratio,
-                'shape': (division,) + discretization.shape,
+                'shape': (nodes,) + discretization.shape,
                 'direction': (direction,) + discretization.direction,
                 'depth': depth,
                 'length': discretization.length[0],
@@ -197,15 +205,15 @@ class Discretization3D(Discretization):
             return cls(discretization_dict)
 
 
-disc_dict = {
-    'length': 0.5,
-    'width': 0.1,
-    'depth': 0.2,
-    'shape': (2, 10),
-    'ratio': (1, 0.9),
-    'direction': (1, 1),
-}
-
-discretization_2d = Discretization(disc_dict)
-discretization_3d = Discretization3D.create_from_2d(discretization_2d, 0.4,
-                                                    3, 1.0, 1)
+# disc_dict = {
+#     'length': 0.5,
+#     'width': 0.1,
+#     'depth': 0.2,
+#     'shape': (2, 10),
+#     'ratio': (1, 0.9),
+#     'direction': (1, 1),
+# }
+#
+# discretization_2d = Discretization(disc_dict)
+# discretization_3d = Discretization3D.create_from_2d(discretization_2d, 0.4,
+#                                                     3, 1.0, 1)
