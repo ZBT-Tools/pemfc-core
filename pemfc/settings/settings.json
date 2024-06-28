@@ -24,7 +24,7 @@
         "thermoneutral_voltage": 1.25
     },
     "membrane": {
-        "type": "Springer",
+        "type": "Constant",
         "underrelaxation_factor": 0.5,
         "thickness": 1.5e-05,
         "ionic_conductivity": 15.0,

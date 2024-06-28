@@ -5,9 +5,7 @@ import math
 
 # Local modul imports
 from . import (
-    matrix_functions as mtx, half_cell as h_c,
-    global_functions as g_func, membrane as membrane, transport_layer as sl,
-    linear_system as ls)
+    half_cell as h_c, membrane as membrane, linear_system as ls)
 from .output_object import OutputObject2D
 
 

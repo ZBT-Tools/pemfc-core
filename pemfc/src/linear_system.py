@@ -4,18 +4,19 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 import math
 import numpy as np
-from numpy import linalg
+# from numpy import linalg
 from scipy import linalg as sp_la
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
+# import pemfc.src.matrix_functions as mtx_func
 # Local module imports
 from . import (
-    matrix_functions as mtx_func, stack as stack_module, channel as chl,
-    global_functions as g_func, transport_layer as tl)
+    stack as stack_module, channel as chl, matrix_functions as mtx_func,
+    global_functions as g_func, transport_layer as tl, discretization as dsct)
 
 if TYPE_CHECKING:
-    from pemfc.src.stack import Stack
-    from pemfc.src.cell import Cell
+    from .stack import Stack
+    from .cell import Cell
 
 # import pandas as pd
 # from numba import jit
@@ -95,13 +96,21 @@ class LinearSystem(ABC):
         else:
             self.solution_vector[:] = np.linalg.tensorsolve(self.mtx, self.rhs)
 
+    @abstractmethod
+    def add_explicit_source(self, *args, **kwargs):
+        pass
+
+    @abstractmethod
+    def add_implicit_source(self, *args, **kwargs):
+        pass
+
 
 class BasicLinearSystem(LinearSystem):
     def __init__(self, transport_layer: tl.TransportLayer, transport_type: str,
                  init_value=0.0):
         self.transport_layer = transport_layer
         self.type = transport_type
-        self.conductance = self.transport_layer.conductance
+        self.conductance = self.transport_layer.conductance[self.type]
         shape = self.conductance[1].shape
         super().__init__(shape)
         inter_node_conductance = (
@@ -110,12 +119,19 @@ class BasicLinearSystem(LinearSystem):
              for i in range(len(self.conductance))])
         self.mtx_const = mtx_func.build_cell_conductance_matrix(
             inter_node_conductance)
-
         self.mtx_dyn = np.zeros(self.mtx_const.shape)
         self.rhs_const = np.zeros(self.rhs.shape)
         self.rhs_dyn = np.zeros(self.rhs.shape)
-        self.index_array = self.create_cell_index_list(self.shape)
 
+        self.index_array = self.create_index_array()
+
+        self.boundary_planes = [self.get_boundary_planes(axis=i) for i in
+                                range(len(self.shape))]
+
+        # self.set_neumann_boundary_conditions(200.0, axis=(0, 2),
+        #                                      indices=(0, 1))
+        # self.set_dirichlet_boundary_conditions(15.0, axis=(0, 2),
+        #                                        indices=(0, 0))
         # Initialize solution values
         self.solution_vector[:] = init_value
         self.solution_array[:] = init_value
@@ -134,38 +150,83 @@ class BasicLinearSystem(LinearSystem):
                 'argument "transport_layer" must be of '
                 'types (TransportLayer2D, TransportLayer3D)')
 
-    def set_neumann_boundary_conditions(self, flux_value, layer_id):
-        source = flux_value * self.layers[layer_id].discretization.d_area
-        mtx_func.add_explicit_layer_source(
-            self.rhs_const, source.flatten(order='F'),
-            self.index_array, layer_id)
+    @staticmethod
+    def add_explicit_source(
+            rhs_vector, source_term, index_array=None, replace=False):
+        if isinstance(source_term, np.ndarray):
+            if rhs_vector.ndim != source_term.ndim:
+                raise ValueError('source_term must have same dimensions as '
+                                 'rhs_vector')
+        if index_array is None:
+            if np.isscalar(source_term):
+                source_vector = np.full_like(rhs_vector, -source_term)
+            else:
+                source_vector = np.asarray(-source_term)
+        else:
+            if replace is True:
+                source_vector = np.copy(rhs_vector)
+                np.put(source_vector, index_array, -source_term)
+            else:
+                source_vector = np.zeros(rhs_vector.shape)
+                np.put(source_vector, index_array, -source_term)
+        if replace is True:
+            rhs_vector[:] = source_vector
+        else:
+            rhs_vector += source_vector
+        return rhs_vector, source_vector
 
-    def set_dirichlet_boundary_conditions(self, fixed_value, layer_id):
-        mtx_func.set_implicit_layer_fixed(
-            self.mtx_const, self.index_array, layer_id)
-        self.rhs_const[:], _ = mtx_func.add_explicit_layer_source(
-            self.rhs_const, -fixed_value, self.index_array, layer_id,
-            replace=True)
+    def add_implicit_source(self, matrix, coefficients,
+                            index_array=None, replace=False):
+        # matrix_size = matrix.shape[0]
+        diag_vector = np.diagonal(matrix).copy()
+        new_diag_vector, source_vector = self.add_explicit_source(
+            diag_vector, -coefficients.flatten(order='F'), index_array,
+            replace=replace)
+        np.fill_diagonal(matrix, new_diag_vector)
+        return matrix, source_vector
 
     @staticmethod
-    def create_cell_index_list(shape: tuple[int, ...]):
-        """
-        Create list of lists with each list containing flattened order of indices
-        for a continuous functional layer (for the conductance matrix).
-        Functional layers a discretized in x-direction (z-direction in old version),
-        the remaining flattened order is equal to the order in the overall matrix
-        and the corresponding right-hand side vector
-        (typically first y-, then z-direction within a layer a.k.a x-plane)
+    def set_implicit_fixed(matrix, index_array):
+        index_array = index_array.flatten(order='F')
+        row_length = matrix.shape[0]
+        for row_id in index_array:
+            row = np.zeros(row_length)
+            row[row_id] = 1.0
+            matrix[row_id] = row
+        return matrix
 
-        Args:
-            shape: tuple of size 3 containing the number of layers (index 0),
-            the number of y-elements (index 1) and the number z-elements (index 2)
+    def set_neumann_boundary_conditions(
+            self, flux_value: float, axis: tuple, indices: tuple):
+
+        index_array = mtx_func.get_axis_values(self.index_array, axis, indices)
+        d_area = mtx_func.get_axis_values(
+            self.transport_layer.discretization.d_area[axis[0]], axis, indices)
+        source = flux_value * d_area
+        rhs_vector, _ = self.add_explicit_source(
+            self.rhs_const, source.flatten(order='F'),
+            index_array.flatten(order='F'), replace=True)
+
+    def set_dirichlet_boundary_conditions(
+            self, fixed_value: float, axis: tuple, indices: tuple):
+        index_array = (mtx_func.get_axis_values(self.index_array, axis, indices))
+        index_vector = index_array.flatten(order='F')
+        self.set_implicit_fixed(self.mtx_const, index_vector)
+        self.add_explicit_source(self.rhs_const, -fixed_value, index_vector,
+                                 replace=True)
+
+    def get_boundary_planes(self, axis):
+        first_plane = np.moveaxis(self.index_array, axis, 0)[0]
+        last_plane = np.moveaxis(self.index_array, axis, 0)[-1]
+        return first_plane, last_plane
+
+    def create_index_array(self):
         """
-        index_list = []
-        for i in range(shape[0]):
-            index_list.append(
-                [(j * shape[0]) + i for j in range(shape[1] * shape[2])])
-        return index_list
+        Create array with shape of linear systems shape containing the ids of
+        the corresponding entries in the flattened solution vector or the
+        symmetric coefficient matrix, respectively.
+        """
+        ids_flat = np.arange(self.solution_vector.shape[0])
+        return np.reshape(ids_flat, self.solution_array.shape, order='F')
 
     def update_rhs(self, *args, **kwargs):
         """
@@ -187,32 +248,6 @@ class BasicLinearSystem2D(BasicLinearSystem):
 
         super().__init__(transport_layer, transport_type, init_value)
 
-    def set_neumann_boundary_conditions(self, flux_value, layer_id):
-        pass
-
-    def set_dirichlet_boundary_conditions(self, fixed_value, layer_id):
-        pass
-
-    @staticmethod
-    def create_cell_index_list(shape: tuple[int, ...]):
-        """
-        Create list of lists with each list containing flattened order of indices
-        for a continuous functional layer (for the conductance matrix).
-        Functional layers a discretized in x-direction (z-direction in old version),
-        the remaining flattened order is equal to the order in the overall matrix
-        and the corresponding right-hand side vector
-        (typically first y-, then z-direction within a layer a.k.a x-plane)
-
-        Args:
-            shape: tuple of size 3 containing the number of layers (index 0),
-            the number of y-elements (index 1) and the number z-elements (index 2)
-        """
-        index_list = []
-        for i in range(shape[0]):
-            index_list.append(
-                [(j * shape[0]) + i for j in range(shape[1] * shape[2])])
-        return index_list
-
     def update_rhs(self, *args, **kwargs):
         """
         Create vector with the right hand side entries,
@@ -232,32 +267,6 @@ class BasicLinearSystem3D(BasicLinearSystem):
                  init_value=0.0):
         super().__init__(transport_layer, transport_type, init_value)
 
-    def set_neumann_boundary_conditions(self, flux_value, layer_id):
-        pass
-
-    def set_dirichlet_boundary_conditions(self, fixed_value, layer_id):
-        pass
-
-    @staticmethod
-    def create_cell_index_list(shape: tuple[int, ...]):
-        """
-        Create list of lists with each list containing flattened order of indices
-        for a continuous functional layer (for the conductance matrix).
-        Functional layers a discretized in x-direction (z-direction in old version),
-        the remaining flattened order is equal to the order in the overall matrix
-        and the corresponding right-hand side vector
-        (typically first y-, then z-direction within a layer a.k.a x-plane)
-
-        Args:
-            shape: tuple of size 3 containing the number of layers (index 0),
-            the number of y-elements (index 1) and the number z-elements (index 2)
-        """
-        index_list = []
-        for i in range(shape[0]):
-            index_list.append(
-                [(j * shape[0]) + i for j in range(shape[1] * shape[2])])
-        return index_list
-
     def update_rhs(self, *args, **kwargs):
         """
         Create vector with the right hand side entries,
@@ -272,7 +281,7 @@ class BasicLinearSystem3D(BasicLinearSystem):
         pass
 
 
-class LayerLinearSystem(LinearSystem):
+class StackedLayerLinearSystem(LinearSystem):
 
     def __init__(self, layers: list[tl.TransportLayer2D], transport_type: str,
                  init_value=0.0):
@@ -312,16 +321,60 @@ class LayerLinearSystem(LinearSystem):
             for i in range(dims)]
         return self.stack_cell_property(conductance, stacking_axis=0)
 
+    @staticmethod
+    def add_explicit_source(rhs_vector, source_term, index_array,
+                            layer_id=None, replace=False):
+        if isinstance(source_term, np.ndarray):
+            if rhs_vector.ndim != source_term.ndim:
+                raise ValueError('source_term must have same dimensions as '
+                                 'rhs_vector')
+        if layer_id is None:
+            if np.isscalar(source_term):
+                source_vector = np.full_like(rhs_vector, -source_term)
+            else:
+                source_vector = np.asarray(-source_term)
+        else:
+            if replace is True:
+                source_vector = np.copy(rhs_vector)
+                np.put(source_vector, index_array[layer_id], -source_term)
+            else:
+                source_vector = np.zeros(rhs_vector.shape)
+                np.put(source_vector, index_array[layer_id], -source_term)
+        if replace is True:
+            rhs_vector[:] = source_vector
+        else:
+            rhs_vector += source_vector
+        return rhs_vector, source_vector
+
+    def add_implicit_source(self, matrix, coefficients, index_array,
+                            layer_id=None, replace=False):
+        # matrix_size = matrix.shape[0]
+        diag_vector = np.diagonal(matrix).copy()
+        new_diag_vector, source_vector = self.add_explicit_source(
+            diag_vector, -coefficients.flatten(order='F'), index_array,
+            layer_id=layer_id, replace=replace)
+        np.fill_diagonal(matrix, new_diag_vector)
+        return matrix, source_vector
+
+    @staticmethod
+    def set_implicit_layer_fixed(matrix, index_array, layer_id):
+        row_length = matrix.shape[0]
+        for row_id in index_array[layer_id]:
+            row = np.zeros(row_length)
+            row[row_id] = 1.0
+            matrix[row_id] = row
+        return matrix
+
     def set_neumann_boundary_conditions(self, flux_value, layer_id):
         source = flux_value * self.layers[layer_id].discretization.d_area
-        mtx_func.add_explicit_layer_source(
+        self.add_explicit_source(
             self.rhs_const, source.flatten(order='F'),
             self.index_array, layer_id)
 
     def set_dirichlet_boundary_conditions(self, fixed_value, layer_id):
-        mtx_func.set_implicit_layer_fixed(
+        self.set_implicit_layer_fixed(
             self.mtx_const, self.index_array, layer_id)
-        self.rhs_const[:], _ = mtx_func.add_explicit_layer_source(
+        self.rhs_const[:], _ = self.add_explicit_source(
             self.rhs_const, -fixed_value, self.index_array, layer_id,
             replace=True)
 
@@ -375,7 +428,7 @@ class LayerLinearSystem(LinearSystem):
         pass
 
 
-class CellLinearSystem(LayerLinearSystem):
+class CellLinearSystem(StackedLayerLinearSystem):
 
     def __init__(self, cell: Cell, transport_type: str, init_value=0.0):
         self.cell = cell
@@ -449,12 +502,10 @@ class CellLinearSystem(LayerLinearSystem):
             k_amb = self.cell.calc_ambient_conductance(alpha_amb, th_layer_amb)
             k_amb_vector = k_amb.flatten(order='F')
 
-            mtx_func.add_implicit_layer_source(
-                self.mtx_const, -k_amb_vector,
-                self.index_array)
-            mtx_func.add_explicit_layer_source(
-                self.rhs_const, k_amb_vector * temp_amb,
-                self.index_array)
+            self.add_implicit_source(
+                self.mtx_const, -k_amb_vector, self.index_array)
+            self.add_explicit_source(
+                self.rhs_const, k_amb_vector * temp_amb, self.index_array)
 
     @staticmethod
     def create_cell_index_list(shape: tuple[int, ...]):
@@ -512,13 +563,26 @@ class StackLinearSystem(LinearSystem, ABC):
 
         self.mtx_const = self.connect_cells(self.transport_type)
         self.rhs_const = np.hstack(
-            [lin_sys.rhs_const for lin_sys in self.cell_systems])
+            [cell_sys.rhs_const for cell_sys in self.cell_systems])
         # if self.sparse_solve:
         #     self.mtx_const = sparse.csr_matrix(self.mtx_const)
 
+    def add_explicit_source(self, rhs_vector, source_term, index_array,
+                            layer_id=None, replace=False):
+        return self.cell_systems[0].add_explicit_source(
+            rhs_vector, source_term, index_array, layer_id=layer_id,
+            replace=replace)
+
+    def add_implicit_source(self, matrix, coefficients, index_array,
+                            layer_id=None, replace=False):
+        # matrix_size = matrix.shape[0]
+        return self.cell_systems[0].add_implicit_source(
+            matrix, coefficients, index_array,
+            layer_id=layer_id, replace=replace)
+
     def connect_cells(self, transport_type: str):
         matrix = sp_la.block_diag(
-            *[lin_sys.mtx_const for lin_sys in self.cell_systems])
+            *[cell_sys.mtx_const for cell_sys in self.cell_systems])
         n_cells = len(self.cell_systems)
         cell_ids = np.asarray([list(range(n_cells-1)),
                                list(range(1, n_cells))]).transpose()
@@ -665,7 +729,7 @@ class TemperatureSystem(StackLinearSystem):
                         [np.zeros(source.shape), source]).transpose()
                 # source /= cell.thermal_conductance[0].shape[-1]
 
-                matrix, source_vec_1 = mtx_func.add_implicit_layer_source(
+                matrix, source_vec_1 = self.add_implicit_source(
                     cell_sys.mtx_dyn, source, cell_sys.index_array,
                     layer_id=layer_id)
                 source_vectors[i][:] += source_vec_1
@@ -685,7 +749,7 @@ class TemperatureSystem(StackLinearSystem):
                         [np.zeros(source.shape), source]).transpose()
                 # source /= cell.thermal_conductance[0].shape[-1]
 
-                matrix, source_vec_2 = mtx_func.add_implicit_layer_source(
+                matrix, source_vec_2 = self.add_implicit_source(
                     cell_sys.mtx_dyn, source, cell_sys.index_array,
                     layer_id=layer_id)
                 source_vectors[i][:] += source_vec_2
@@ -729,7 +793,7 @@ class TemperatureSystem(StackLinearSystem):
                     #         [np.zeros(source.shape), source]).transpose()
                     source /= cell_sys.conductance[0].shape[-1]
 
-                    matrix, source_vec = mtx_func.add_implicit_layer_source(
+                    matrix, source_vec = self.add_implicit_source(
                         cell_sys.mtx_dyn, source.flatten(order='F'),
                         cell_sys.index_array, layer_id=layer_ids[j])
                     source_vec_3[:] += source_vec
@@ -773,7 +837,7 @@ class TemperatureSystem(StackLinearSystem):
                 # source /= cell.thermal_conductance[0].shape[-1]
 
                 cell_sys.rhs_dyn[:], _ = (
-                    mtx_func.add_explicit_layer_source(
+                    self.add_explicit_source(
                         cell_sys.rhs_dyn, source.flatten(order='F'),
                         cell_sys.index_array, layer_id=layer_id))
 
@@ -798,7 +862,7 @@ class TemperatureSystem(StackLinearSystem):
                 # source /= cell.thermal_conductance[0].shape[-1]
 
                 cell_sys.rhs_dyn[:], _ = (
-                    mtx_func.add_explicit_layer_source(
+                    self.add_explicit_source(
                         cell_sys.rhs_dyn, source.flatten(order='F'),
                         cell_sys.index_array, layer_id=layer_id))
 
@@ -835,7 +899,7 @@ class TemperatureSystem(StackLinearSystem):
                 source += reaction_heat
                 # source *= 1.0
                 cell_sys.rhs_dyn[:], _ = (
-                    mtx_func.add_explicit_layer_source(
+                    self.add_explicit_source(
                         cell_sys.rhs_dyn, source.flatten(order='F'),
                         cell_sys.index_array, layer_id=layer_id))
 
@@ -851,7 +915,7 @@ class TemperatureSystem(StackLinearSystem):
                 reaction_heat = v_loss * current
                 source += reaction_heat
                 source *= 1.0
-                cell_sys.rhs_dyn[:], _ = mtx_func.add_explicit_layer_source(
+                cell_sys.rhs_dyn[:], _ = self.add_explicit_source(
                     cell_sys.rhs_dyn, source.flatten(order='F'),
                     cell_sys.index_array, layer_id=layer_id)
 
@@ -892,7 +956,7 @@ class TemperatureSystem(StackLinearSystem):
                     source /= cell_sys.conductance[0].shape[-1]
                     source *= factors[j]
                     cell_sys.rhs_dyn[:], _ = (
-                        mtx_func.add_explicit_layer_source(
+                        self.add_explicit_source(
                             cell_sys.rhs_dyn, source.flatten(order='F'),
                             cell_sys.index_array, layer_id=layer_ids[j]))
 
@@ -980,14 +1044,15 @@ class ElectricalSystem(StackLinearSystem):
                 rhs_bc_values = self.current_density_target * cell.d_area
             else:
                 inlet_current = (
-                    np.abs(cell_sys.solution_array[0] - cell_sys.solution_array[1])
+                    np.abs(cell_sys.solution_array[0]
+                           - cell_sys.solution_array[1])
                     * self.cell_systems[index].conductance[0][0])
                 correction_factors = bc_current / inlet_current
                 rhs_bc_values = inlet_current * correction_factors
 
         else:
             rhs_bc_values = self.v_loss_tar
-        mtx_func.add_explicit_layer_source(
+        self.add_explicit_source(
             cell_rhs, rhs_bc_values.flatten(order='F'),
             cell_sys.index_array, layer_id=0)
         cell_rhs_list.append(cell_rhs)
@@ -1075,3 +1140,21 @@ class ElectricalSystem(StackLinearSystem):
         for i, cell in enumerate(self.cells):
             cell.current_density[:] = current_density[i]
         return current_density
+
+
+disc_dict = {
+    'length': 1.0,
+    'width': 1.0,
+    'depth': 1.0,
+    'shape': (10, 2),
+    'ratio': (1, 1),
+    'direction': (1, 1),
+}
+
+discretization_2d = dsct.Discretization(disc_dict)
+discretization_3d = dsct.Discretization3D.create_from(
+    discretization_2d, 0.4, 3)
+
+trans_layer = tl.TransportLayer.create({}, {'diffusion': [1.0, 2.0, 3.0]},
+                                       discretization_3d)
+lin_sys = BasicLinearSystem.create(trans_layer, trans_layer.types[0])

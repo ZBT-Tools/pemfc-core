@@ -2,9 +2,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import numpy as np
 from scipy import linalg as sp_la
-import scipy as sp
-from . import cell
-from . import global_functions as g_func
+# import scipy as sp
+# from . import cell
+# from . import global_functions as g_func
 
 if TYPE_CHECKING:
     from pemfc.src.cell import Cell
@@ -105,68 +105,6 @@ def build_z_cell_conductance_matrix(cond_vector, axis):
     center_diag[offset:-offset] *= 2.0
     center_diag *= -1.0
     # off_diag = np.concatenate([cond_vector[:, i] for i in range(n_ele-1)])
-    return np.diag(center_diag, k=0) \
-        + np.diag(off_diag, k=-offset) \
-        + np.diag(off_diag, k=offset)
-
-
-def calculate_center_diagonal_old(array, axis, weights=(0.5, 1.0, 0.5)):
-    if not array.ndim == 3:
-        raise ValueError('only three-dimensional arrays supported at the moment')
-    result = np.zeros(array.shape)
-    if axis == 0:
-        result[1:-1, :, :] = \
-            sp.ndimage.convolve1d(array, weights, mode='constant',
-                                  axis=axis, cval=0.0)[1:-1, :, :]
-        result[0, :, :] = (array[0, :, :] + array[1, :, :]) * 0.5
-        result[-1, :, :] = (array[-2, :, :] + array[-1, :, :]) * 0.5
-
-    elif axis == 1:
-        result[:, 1:-1, :] = \
-            sp.ndimage.convolve1d(array, weights, mode='constant',
-                                  axis=axis, cval=0.0)[:, 1:-1, :]
-        result[:, 0, :] = (array[:, 0, :] + array[:, 1, :]) * 0.5
-        result[:, -1, :] = (array[:, -2, :] + array[:, -1, :]) * 0.5
-
-    elif axis == 2 or axis == -1:
-        result[:, :, 1:-1] = \
-            sp.ndimage.convolve1d(array, weights, mode='constant',
-                                  axis=axis, cval=0.0)[:, :, 1:-1]
-        result[:, :, 0] = (array[:, :, 0] + array[:, :, 1]) * 0.5
-        result[:, :, -1] = (array[:, :, -2] + array[:, :, -1]) * 0.5
-    else:
-        raise ValueError('only three-dimensional arrays supported')
-    return result.flatten(order='F')
-
-
-def calculate_off_diagonal_old(array, axis, weights=(0.5, 0.5)):
-    off_coeff_matrix = sp.ndimage.convolve1d(
-        array, weights, mode='constant', axis=axis, cval=0.0)
-    if axis == 0:
-        off_coeff_matrix[-1, :, :] = 0.0
-    elif axis == 1:
-        off_coeff_matrix[:, -1, :] = 0.0
-    elif axis == 2:
-        off_coeff_matrix[:, :, -1] = 0.0
-    else:
-        raise ValueError('only three-dimensional arrays supported at the moment')
-
-    return off_coeff_matrix.flatten(order='F')
-
-
-def build_one_dimensional_conductance_matrix_old(conductance_array, axis,
-                                                 center_weights=(0.5, 1.0, 0.5),
-                                                 off_weights=(0.5, 0.5)):
-    if axis == -1:
-        axis = len(conductance_array.shape) - 1
-    offset = 1
-    for i in range(axis):
-        offset *= conductance_array.shape[i]
-    center_diag = calculate_center_diagonal_old(
-        conductance_array, axis=axis, weights=center_weights)
-    off_diag = calculate_off_diagonal_old(
-        conductance_array, axis, weights=off_weights)[:-offset]
-    center_diag *= -1.0
     return np.diag(center_diag, k=0) \
         + np.diag(off_diag, k=-offset) \
         + np.diag(off_diag, k=offset)
@@ -278,69 +216,25 @@ def connect_cells(matrix, cell_ids, layer_ids, values, mtx_ids,
             matrix[mtx_id_1, mtx_id_0] += values[i].flatten('F')
 
 
-def add_explicit_layer_source(rhs_vector, source_term, index_array,
-                              layer_id=None, replace=False):
-    if isinstance(source_term, np.ndarray):
-        if rhs_vector.ndim != source_term.ndim:
-            raise ValueError('source_term must have same dimensions as '
-                             'rhs_vector')
-    if layer_id is None:
-        if np.isscalar(source_term):
-            source_vector = np.full_like(rhs_vector, -source_term)
-        else:
-            source_vector = np.asarray(-source_term)
-    else:
-        if replace is True:
-            source_vector = np.copy(rhs_vector)
-            np.put(source_vector, index_array[layer_id], -source_term)
-        else:
-            source_vector = np.zeros(rhs_vector.shape)
-            np.put(source_vector, index_array[layer_id], -source_term)
-    if replace is True:
-        rhs_vector[:] = source_vector
-    else:
-        rhs_vector += source_vector
-    return rhs_vector, source_vector
-
-
-def add_implicit_layer_source(matrix, coefficients, index_array,
-                              layer_id=None, replace=False):
-    # matrix_size = matrix.shape[0]
-    diag_vector = np.diagonal(matrix).copy()
-    # if layer_id is None:
-    #     if np.isscalar(coefficients):
-    #         source_vector = np.full_like(diag_vector, coefficients)
-    #     else:
-    #         source_vector = np.asarray(coefficients)
-    # else:
-    #     if replace is True:
-    #         source_vector = np.copy(diag_vector)
-    #         np.put(source_vector, index_array[layer_id], coefficients)
-    #     else:
-    #         source_vector = np.zeros(matrix_size)
-    #         np.put(source_vector, index_array[layer_id], coefficients)
-    # if replace is True:
-    #     diag_vector = source_vector
-    # else:
-    #     diag_vector += source_vector
-    new_diag_vector, source_vector = add_explicit_layer_source(
-        diag_vector, -coefficients.flatten(order='F'), index_array,
-        layer_id=layer_id, replace=replace)
-    np.fill_diagonal(matrix, new_diag_vector)
-    return matrix, source_vector
-
-
-def set_implicit_layer_fixed(matrix, index_array, layer_id):
-    row_length = matrix.shape[0]
-    for row_id in index_array[layer_id]:
-        row = np.zeros(row_length)
-        row[row_id] = 1.0
-        matrix[row_id] = row
-    return matrix
-
-
 def set_single_unit_entry(matrix, index):
     row = np.zeros(matrix.shape[0])
     row[index] = 1.0
     matrix[index, :] = row
     return matrix
+
+
+def get_single_axis_values(array, axis: int,
+                           indices: (int, tuple, np.ndarray) = None):
+    if indices is None:
+        indices = np.arange(array.shape[axis])
+    return np.take(array, indices, axis=axis)
+
+
+def get_axis_values(array, axis: tuple, indices: tuple):
+    if isinstance(axis, int):
+        axis = (axis,)
+    if isinstance(indices, int):
+        indices = (indices,)
+    for i in reversed(range(len(axis))):
+        array = get_single_axis_values(array, axis[i], indices[i])
+    return array

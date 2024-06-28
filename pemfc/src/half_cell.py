@@ -3,7 +3,7 @@ import warnings
 import numpy as np
 
 # Local module imports
-from . import transport_layer as sl, constants, flow_field as ff, channel as chl
+from . import transport_layer as tl, constants, flow_field as ff, channel as chl
 from .fluid import fluid as fluids
 from . import electrochemistry as electrochem
 from . import interpolation as ip
@@ -86,7 +86,7 @@ class HalfCell:
         bpp_transport_properties = {
             'thermal': bpp_dict['thermal_conductivity'],
             'electrical': bpp_dict['electrical_conductivity']}
-        self.bpp = sl.TransportLayer2D(bpp_dict, bpp_transport_properties,
+        self.bpp = tl.TransportLayer2D(bpp_dict, bpp_transport_properties,
                                        self.discretization)
 
         # Initialize gas diffusion electrode (gde: gdl + cl)
@@ -102,7 +102,7 @@ class HalfCell:
         #    (self.th_gdl * halfcell_dict['porosity gdl']
         #     + self.th_cl * halfcell_dict['porosity cl'])
         #    / (self.th_gde + self.th_cl)}
-        self.gde = sl.TransportLayer2D(gde_dict, gde_transport_properties,
+        self.gde = tl.TransportLayer2D(gde_dict, gde_transport_properties,
                                        self.discretization)
 
         # Initialize diffusion transport model

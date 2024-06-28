@@ -36,6 +36,7 @@ class TransportLayer(oo.OutputObject2D, ABC):
         name = input_dict.get('name', 'unnamed')
 
         super().__init__(name=name)
+        self.types = [key for key in transport_properties]
         self.discretization = discretization
         self.dict = input_dict
         self.thickness: float = 0.0
@@ -161,9 +162,8 @@ class TransportLayer2D(TransportLayer):
     def __init__(self, input_dict: dict, transport_properties: dict,
                  discretization: dsct.Discretization2D, *args, **kwargs):
         # Initialize super class
-        name = input_dict.get('name', 'unnamed')
-        self.thickness = input_dict['thickness']
         super().__init__(input_dict, transport_properties, discretization)
+        self.thickness = input_dict['thickness']
         self.geometric_factors = self.calc_geometric_factors()
         self.conductance = {key: self.calc_conductance(value) for key, value
                             in transport_properties.items()}
@@ -194,8 +194,6 @@ class TransportLayer3D(TransportLayer):
     def __init__(self, input_dict: dict, transport_properties: dict,
                  discretization: dsct.Discretization3D, *args, **kwargs):
         # Initialize super class
-        name = input_dict.get('name', 'unnamed')
-
         super().__init__(input_dict, transport_properties, discretization)
         self.geometric_factors = self.calc_geometric_factors()
         self.conductance = {key: self.calc_conductance(value) for key, value
