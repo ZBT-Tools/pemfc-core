@@ -208,7 +208,7 @@ class BasicLinearSystem(LinearSystem):
 
     def set_dirichlet_boundary_conditions(
             self, fixed_value: float, axis: tuple, indices: tuple):
-        index_array = (mtx_func.get_axis_values(self.index_array, axis, indices))
+        index_array = mtx_func.get_axis_values(self.index_array, axis, indices)
         index_vector = index_array.flatten(order='F')
         self.set_implicit_fixed(self.mtx_const, index_vector)
         self.add_explicit_source(self.rhs_const, -fixed_value, index_vector,

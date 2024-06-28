@@ -30,6 +30,16 @@ class DiffusionTransport:
         self.linear_systems = [
             ls.BasicLinearSystem.create(item, self.transport_type) for item in
             self.transport_layers]
+        test_lin_sys = self.linear_systems[0]
+        test_lin_sys.set_dirichlet_boundary_conditions(200.0, axis=(0, 1, 2),
+                                                       indices=(0, [5, 6, 7],
+                                                                1))
+        # test_lin_sys.set_neumann_boundary_conditions(15.0, axis=(0, 2),
+        #                                              indices=(0, 1))
+        # self.set_neumann_boundary_conditions(200.0, axis=(0, 2),
+        #                                      indices=(0, 1))
+        # self.set_dirichlet_boundary_conditions(15.0, axis=(0, 2),
+        #                                        indices=(0, 0))
         print('test')
 
     # def update(self):
