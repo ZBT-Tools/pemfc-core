@@ -196,19 +196,19 @@ class BasicLinearSystem(LinearSystem):
         return matrix
 
     def set_neumann_boundary_conditions(
-            self, flux_value: float, axis: tuple, indices: tuple):
+            self, flux_value: float, axes: tuple, indices: tuple):
 
-        index_array = mtx_func.get_axis_values(self.index_array, axis, indices)
+        index_array = mtx_func.get_axis_values(self.index_array, axes, indices)
         d_area = mtx_func.get_axis_values(
-            self.transport_layer.discretization.d_area[axis[0]], axis, indices)
+            self.transport_layer.discretization.d_area[axes[0]], axes, indices)
         source = flux_value * d_area
         rhs_vector, _ = self.add_explicit_source(
             self.rhs_const, source.flatten(order='F'),
             index_array.flatten(order='F'), replace=True)
 
     def set_dirichlet_boundary_conditions(
-            self, fixed_value: float, axis: tuple, indices: tuple):
-        index_array = mtx_func.get_axis_values(self.index_array, axis, indices)
+            self, fixed_value: float, axes: tuple, indices: tuple):
+        index_array = mtx_func.get_axis_values(self.index_array, axes, indices)
         index_vector = index_array.flatten(order='F')
         self.set_implicit_fixed(self.mtx_const, index_vector)
         self.add_explicit_source(self.rhs_const, -fixed_value, index_vector,
@@ -233,13 +233,13 @@ class BasicLinearSystem(LinearSystem):
         Create vector with the right hand side entries,
         Sources from outside the src to the src must be defined negative.
         """
-        pass
+        self.rhs[:] = self.rhs_const + self.rhs_dyn
 
     def update_matrix(self, *args, **kwargs):
         """
         Updates matrix coefficients
         """
-        pass
+        self.mtx[:] = self.mtx_const + self.mtx_dyn
 
 
 class BasicLinearSystem2D(BasicLinearSystem):
@@ -248,37 +248,11 @@ class BasicLinearSystem2D(BasicLinearSystem):
 
         super().__init__(transport_layer, transport_type, init_value)
 
-    def update_rhs(self, *args, **kwargs):
-        """
-        Create vector with the right hand side entries,
-        Sources from outside the src to the src must be defined negative.
-        """
-        pass
-
-    def update_matrix(self, *args, **kwargs):
-        """
-        Updates matrix coefficients
-        """
-        pass
-
 
 class BasicLinearSystem3D(BasicLinearSystem):
     def __init__(self, transport_layer: tl.TransportLayer, transport_type: str,
                  init_value=0.0):
         super().__init__(transport_layer, transport_type, init_value)
-
-    def update_rhs(self, *args, **kwargs):
-        """
-        Create vector with the right hand side entries,
-        Sources from outside the src to the src must be defined negative.
-        """
-        pass
-
-    def update_matrix(self, *args, **kwargs):
-        """
-        Updates matrix coefficients
-        """
-        pass
 
 
 class StackedLayerLinearSystem(LinearSystem):
@@ -294,9 +268,9 @@ class StackedLayerLinearSystem(LinearSystem):
         self.mtx_const = mtx_func.build_cell_conductance_matrix(
                 [self.conductance[0],
                  tl.TransportLayer2D.calc_inter_node_conductance(
-                    self.conductance[1], axis=1) * 1.0,
+                    self.conductance[1], axis=1),
                  tl.TransportLayer2D.calc_inter_node_conductance(
-                    self.conductance[2], axis=2) * 1.0])
+                    self.conductance[2], axis=2)])
 
         self.mtx_dyn = np.zeros(self.mtx_const.shape)
         self.rhs_const = np.zeros(self.rhs.shape)
@@ -477,7 +451,7 @@ class CellLinearSystem(StackedLayerLinearSystem):
         cell_property = [np.asarray(item) for item in cell_property]
 
         # Set solid transport property to zero at channel domain
-        # Channel: index 1, Land: index 0
+        # Land: index 0, Channel: index 1
         if (self.cell.channel_land_discretization
                 and modify_values):
             for i in range(len(cell_property)):
@@ -716,7 +690,7 @@ class TemperatureSystem(StackLinearSystem):
 
             if gas_transfer:
                 # Add thermal conductance for heat transfer to cathode gas
-                layer_id = self.cells[i].layer_id['cathode_gde']
+                idx = self.cells[i].interface_id['cathode_bpp_gde']
                 channel = self.cells[i].cathode.channel
                 source = - channel.k_coeff  # * self.n_cat_channels
 
@@ -731,11 +705,11 @@ class TemperatureSystem(StackLinearSystem):
 
                 matrix, source_vec_1 = self.add_implicit_source(
                     cell_sys.mtx_dyn, source, cell_sys.index_array,
-                    layer_id=layer_id)
+                    layer_id=idx)
                 source_vectors[i][:] += source_vec_1
 
                 # Add thermal conductance for heat transfer to anode gas
-                layer_id = self.cells[i].layer_id['anode_gde'] + 1
+                idx = self.cells[i].interface_id['anode_gde_bpp']
                 channel = self.cells[i].anode.channel
                 source = - channel.k_coeff  # * self.n_ano_channels
 
@@ -751,7 +725,7 @@ class TemperatureSystem(StackLinearSystem):
 
                 matrix, source_vec_2 = self.add_implicit_source(
                     cell_sys.mtx_dyn, source, cell_sys.index_array,
-                    layer_id=layer_id)
+                    layer_id=idx)
                 source_vectors[i][:] += source_vec_2
 
             # Add thermal conductance for heat transfer to coolant
@@ -816,7 +790,7 @@ class TemperatureSystem(StackLinearSystem):
             cell_sys.rhs_dyn[:] = 0.0
             if gas_transfer:
                 # Cathode bpp-gde source
-                layer_id = self.cells[i].layer_id['cathode_gde']
+                idx = self.cells[i].interface_id['cathode_bpp_gde']
                 # h_vap = w_prop.water.calc_h_vap(cell.cathode.channel.temp[:-1])
                 channel = self.cells[i].cathode.channel
                 source = channel.k_coeff * channel.temp_ele  # * self.n_cat_channels
@@ -839,10 +813,10 @@ class TemperatureSystem(StackLinearSystem):
                 cell_sys.rhs_dyn[:], _ = (
                     self.add_explicit_source(
                         cell_sys.rhs_dyn, source.flatten(order='F'),
-                        cell_sys.index_array, layer_id=layer_id))
+                        cell_sys.index_array, layer_id=idx))
 
                 # Anode bpp-gde
-                layer_id = self.cells[i].layer_id['anode_gde'] + 1
+                idx = self.cells[i].interface_id['anode_gde_bpp']
                 # h_vap = w_prop.water.calc_h_vap(cell.anode.temp_fluid[:-1])
                 channel = self.cells[i].anode.channel
                 source = channel.k_coeff * channel.temp_ele  # * self.n_ano_channels
@@ -864,12 +838,12 @@ class TemperatureSystem(StackLinearSystem):
                 cell_sys.rhs_dyn[:], _ = (
                     self.add_explicit_source(
                         cell_sys.rhs_dyn, source.flatten(order='F'),
-                        cell_sys.index_array, layer_id=layer_id))
+                        cell_sys.index_array, layer_id=idx))
 
             if electrochemical_heat:
                 # Cathode gde-mem source
-                layer_id = self.cells[i].layer_id['cathode_gde'] + 1
-                current = (self.cells[i].current_density[layer_id]
+                idx = self.cells[i].interface_id['cathode_gde_mem']
+                current = (self.cells[i].current_density[idx]
                            * self.cells[i].d_area)
 
                 cathode_ohmic_heat_membrane = (
@@ -901,11 +875,11 @@ class TemperatureSystem(StackLinearSystem):
                 cell_sys.rhs_dyn[:], _ = (
                     self.add_explicit_source(
                         cell_sys.rhs_dyn, source.flatten(order='F'),
-                        cell_sys.index_array, layer_id=layer_id))
+                        cell_sys.index_array, layer_id=idx))
 
                 # Anode gde-mem source
-                layer_id = self.cells[i].layer_id['anode_gde']
-                current = (self.cells[i].current_density[layer_id]
+                idx = self.cells[i].interface_id['anode_mem_gde']
+                current = (self.cells[i].current_density[idx]
                            * self.cells[i].d_area)
                 anode_ohmic_heat_membrane = (
                         0.5 * self.cells[i].membrane.omega * np.square(current))
@@ -917,7 +891,7 @@ class TemperatureSystem(StackLinearSystem):
                 source *= 1.0
                 cell_sys.rhs_dyn[:], _ = self.add_explicit_source(
                     cell_sys.rhs_dyn, source.flatten(order='F'),
-                    cell_sys.index_array, layer_id=layer_id)
+                    cell_sys.index_array, layer_id=idx)
 
             # Coolant source coefficients
             if self.cool_flow:
@@ -969,13 +943,13 @@ class TemperatureSystem(StackLinearSystem):
         Calculates the fluid temperatures in the anode and cathode channels
         """
         for i, cell in enumerate(self.cells):
-            layer_id = cell.layer_id['cathode_gde']
+            idx = cell.interface_id['cathode_bpp_gde']
             cell.cathode.channel.update_heat(
-                wall_temp=g_func.reduce_dimension(cell.temp_layer[layer_id]),
+                wall_temp=g_func.reduce_dimension(cell.temp_layer[idx]),
                 update_fluid=False)
-            layer_id = cell.layer_id['anode_gde']
+            idx = cell.interface_id['anode_gde_bpp']
             cell.anode.channel.update_heat(
-                wall_temp=g_func.reduce_dimension(cell.temp_layer[layer_id]),
+                wall_temp=g_func.reduce_dimension(cell.temp_layer[idx]),
                 update_fluid=False)
 
     def update_coolant_channel(self):
@@ -985,14 +959,14 @@ class TemperatureSystem(StackLinearSystem):
         for i, cool_chl in enumerate(self.cool_channels):
             if self.cool_ch_bc:
                 if i == self.n_cool - 1:
-                    layer_id = self.cells[i - 1].layer_id['anode_bpp'][-1]
-                    wall_temp = self.cells[i - 1].temp_layer[layer_id]
+                    idx = self.cells[i - 1].interface_id['anode_bpp_bc']
+                    wall_temp = self.cells[i - 1].temp_layer[idx]
                 else:
-                    layer_id = self.cells[i - 1].layer_id['cathode_bpp'][0]
-                    wall_temp = self.cells[i].temp_layer[layer_id]
+                    idx = self.cells[i - 1].interface_id['cathode_bc_bpp']
+                    wall_temp = self.cells[i].temp_layer[idx]
             else:
-                layer_id = self.cells[i + 1].layer_id['cathode_bpp'][0]
-                wall_temp = self.cells[i + 1].temp_layer[layer_id]
+                idx = self.cells[i + 1].interface_id['cathode_bc_bpp']
+                wall_temp = self.cells[i + 1].temp_layer[idx]
             wall_temp = g_func.reduce_dimension(wall_temp)
             cool_chl.update_heat(wall_temp=wall_temp, update_fluid=False)
 
@@ -1142,19 +1116,19 @@ class ElectricalSystem(StackLinearSystem):
         return current_density
 
 
-disc_dict = {
-    'length': 1.0,
-    'width': 1.0,
-    'depth': 1.0,
-    'shape': (10, 2),
-    'ratio': (1, 1),
-    'direction': (1, 1),
-}
-
-discretization_2d = dsct.Discretization(disc_dict)
-discretization_3d = dsct.Discretization3D.create_from(
-    discretization_2d, 0.4, 3)
-
-trans_layer = tl.TransportLayer.create({}, {'diffusion': [1.0, 2.0, 3.0]},
-                                       discretization_3d)
-lin_sys = BasicLinearSystem.create(trans_layer, trans_layer.types[0])
+# disc_dict = {
+#     'length': 1.0,
+#     'width': 1.0,
+#     'depth': 1.0,
+#     'shape': (10, 2),
+#     'ratio': (1, 1),
+#     'direction': (1, 1),
+# }
+#
+# discretization_2d = dsct.Discretization(disc_dict)
+# discretization_3d = dsct.Discretization3D.create_from(
+#     discretization_2d, 0.4, 3)
+#
+# trans_layer = tl.TransportLayer.create({}, {'diffusion': [1.0, 2.0, 3.0]},
+#                                        discretization_3d)
+# lin_sys = BasicLinearSystem.create(trans_layer, trans_layer.types[0])

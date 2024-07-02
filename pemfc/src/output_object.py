@@ -99,6 +99,7 @@ class OutputObject(ABC):
             self.single_print_data[name] = \
                 {'value': data_array, 'units': str(units),
                  'plot_axis': plot_axis, 'save': True}
+        self.print_data = [self.single_print_data, self.multi_print_data]
 
     def add_print_variables(self, print_variables, **kwargs):
         for i, name in enumerate(print_variables['names']):

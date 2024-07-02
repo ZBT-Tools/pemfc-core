@@ -8,7 +8,7 @@ from .fluid import fluid as fluids
 from . import electrochemistry as electrochem
 from . import interpolation as ip
 from . import discretization as dsct
-from . import diffusion as diff
+from . import diffusion_transport as diff
 
 warnings.filterwarnings("ignore")
 
@@ -111,7 +111,7 @@ class HalfCell:
             {'name': self.name + ' GDL',
              'thickness': electrochemistry_dict['thickness_gdl']})
 
-        self.gdl_diffusion = diff.DiffusionTransport(
+        self.gdl_diffusion = diff.DiffusionTransport.create(
             gdl_dict, self.channel.fluid,
             dsct.Discretization3D.create_from(self.discretization,
                                               gdl_dict['thickness'], 2))
@@ -134,29 +134,34 @@ class HalfCell:
         # voltage loss
         self.voltage_loss = np.zeros(self.gde.discretization.shape)
 
-    def update(self, current_density, update_channel=False,
+    def update(self, current_density: np.ndarray,
+               temperature: np.ndarray, update_channel=False,
                current_control=True):
         """
         This function coordinates the program sequence
         """
         if not self.break_program:
-            self.electrochemistry.update(current_density, self.channel)
             # self.channel.update(mole_flow_in, mole_source)
             # self.channel.mole_flow[:] = mole_flow_in
             current = self.surface_flux_to_channel_source(current_density)
+            mass_source, mole_source = self.calc_mass_source(current_density)
+            concentration = self.channel.fluid.concentration
+            self.gdl_diffusion.update(temperature, self.channel.pressure,
+                                      concentration, mole_source)
 
-            self.channel.mass_source[:], self.channel.mole_source[:] = \
-                self.calc_mass_source(current)
+            self.electrochemistry.update(current_density, self.channel)
+            # self.channel.mass_source[:], self.channel.mole_source[:] = (
+            #     mass_source, mole_source)
             if update_channel:
                 self.channel.update(update_mass=True, update_flow=False,
                                     update_heat=False, update_fluid=True)
             self.update_voltage_loss(current_density)
 
             # Calculate stoichiometry
-            self.inlet_stoi = \
-                self.channel.mole_flow[self.id_fuel, self.channel.id_in] \
-                * self.faraday * self.n_charge \
-                / (np.sum(current) * abs(self.n_stoi[self.id_fuel]))
+            self.inlet_stoi = (
+                self.channel.mole_flow[self.id_fuel, self.channel.id_in]
+                * self.faraday * self.n_charge
+                / (np.sum(current) * abs(self.n_stoi[self.id_fuel])))
             if current_control and self.inlet_stoi < 1.0:
                 raise ValueError('stoichiometry of cell {0} '
                                  'becomes smaller than one: {1:0.3f}'
@@ -181,19 +186,20 @@ class HalfCell:
         mass_flow_in = mole_flow_in * self.channel.fluid.species_mw
         return mass_flow_in, mole_flow_in
 
-    def calc_mass_source(self, current: np.ndarray):
-        if not isinstance(current, np.ndarray):
-            current = np.asarray(current)
+    def calc_mass_source(self, current_density: np.ndarray):
+        if not isinstance(current_density, np.ndarray):
+            current_density = np.asarray(current_density)
         mole_source = np.zeros((self.channel.fluid.n_species,
-                                *current.shape))
+                                *current_density.shape))
 
         for i in range(len(mole_source)):
-            mole_source[i] = current \
-                * self.n_stoi[i] / (self.n_charge * self.faraday)
+            mole_source[i] = (current_density * self.n_stoi[i]
+                              / (self.n_charge * self.faraday))
 
         # Water cross flow
-        water_cross_source = self.surface_flux_to_channel_source(self.w_cross_flow)
-        mole_source[self.id_h2o] += water_cross_source
+        # water_cross_source = self.surface_flux_to_channel_source(
+        #     self.w_cross_flow)
+        mole_source[self.id_h2o] += self.w_cross_flow
         # self.channel.flow_direction
         mass_source = (mole_source.transpose()
                        * self.channel.fluid.species_mw).transpose()
@@ -210,9 +216,9 @@ class HalfCell:
 
     def update_voltage_loss(self, current_density: np.ndarray):
         """
-        Calculates voltage loss at electrode. Solid layer losses are set to zero at the current
-        implementation, due to its inclusion in the overall electrical system calculation at
-        stack level.
+        Calculates voltage loss at electrode. Solid layer losses are set to zero
+        at the current implementation, due to its inclusion in the overall
+        electrical system calculation at stack level.
         Args:
             current_density: numpy array of local area-specific current density
                              distribution
@@ -236,15 +242,18 @@ class HalfCell:
             stoichiometry: scalar for flow stoichiometry
             reaction_stoichiometry: scalar for reaction stoichiometry,
                                     moles of reactants used in reaction balance
-            charge_number: number of electron charges transferred in reaction balance
+            charge_number: number of electron charges transferred in reaction
+                           balance
             reactant_index: index in species array for the reactant species
         Returns: mass_flow, mole_flow (species array according to fluid object)
         """
         if not isinstance(fluid, (fluids.GasMixture, fluids.TwoPhaseMixture,
-                                  fluids.CanteraGasMixture, fluids.CanteraTwoPhaseMixture)):
-            raise TypeError('Parameter "fluid" must be object of type GasMixture, '
-                            ' TwoPhaseMixture, CanteraGasMixture, or CanteraTwoPhaseMixture '
-                            'from module pemfc.fluid.fluid')
+                                  fluids.CanteraGasMixture,
+                                  fluids.CanteraTwoPhaseMixture)):
+            raise TypeError(
+                'Parameter "fluid" must be object of type GasMixture, '
+                'TwoPhaseMixture, CanteraGasMixture, or CanteraTwoPhaseMixture '
+                'from module pemfc.fluid.fluid')
         mole_flow = np.zeros(fluid.n_species)
 
         mole_flow[reactant_index] = (

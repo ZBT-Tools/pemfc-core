@@ -139,7 +139,9 @@ class TransportLayer(oo.OutputObject2D, ABC):
             raise ValueError('axis argument must be either 0, 1, 2 (-1)')
 
     def update(self, transport_properties, *args, **kwargs):
-        pass
+        for key in self.conductance:
+            self.conductance[key][:] = self.calc_conductance(
+                transport_properties[key])
 
 
 class TransportLayer2D(TransportLayer):
@@ -152,12 +154,6 @@ class TransportLayer2D(TransportLayer):
     'porosity' (default: 0.0) and optionally a Bruggeman exponent
     (default: 1.5) is provided.
     """
-
-    # def __new__(cls, input_dict: dict, transport_properties: dict,
-    #             discretization: dsct.Discretization2D, *args, **kwargs):
-    #     instance = super().__new__(cls, input_dict, transport_properties,
-    #                                discretization, *args, **kwargs)
-    #     return instance
 
     def __init__(self, input_dict: dict, transport_properties: dict,
                  discretization: dsct.Discretization2D, *args, **kwargs):
@@ -210,10 +206,7 @@ class TransportLayer3D(TransportLayer):
                     (1.0 - self.porosity) ** self.bruggeman_exponent)
         return result
 
-    def update(self, transport_properties, *args, **kwargs):
-        for key in self.conductance:
-            self.conductance[key][:] = self.calc_conductance(
-                transport_properties[key])
+
 
 # solid_dict = {
 #     'width': 1.0,

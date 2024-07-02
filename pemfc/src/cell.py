@@ -111,14 +111,6 @@ class Cell(OutputObject2D):
         self.thermal_system = self.linear_systems['thermal']
         self.electrical_system = self.linear_systems['electrical']
 
-        # Array to link all aggregate elements indexes of 1D-solution vector
-        # in groups of the corresponding layers
-        self.nx = self.thermal_system.shape[0]
-        self.n_layer = self.nx - 1
-
-        # Assign layer id corresponding to material name
-        self.layer_id = self.create_layer_index_dict(self.n_layer)
-
         # Set thermal boundary conditions at end plates
         if self.first_cell:
             self.thermal_system.set_layer_boundary_conditions(layer_id=0)
@@ -137,6 +129,11 @@ class Cell(OutputObject2D):
         self.temp_layer = self.thermal_system.solution_array
         # Cell voltage
         self.voltage_layer = self.electrical_system.solution_array
+
+        # Array to link all aggregate elements indexes of 1D-solution vector
+        # in groups of the corresponding layers
+        self.nx = self.thermal_system.shape[0]
+        self.n_layer = self.nx - 1
         # Interface names according to temperature array
         self.nx_names = [
             'Cathode BC-BPP',
@@ -148,6 +145,9 @@ class Cell(OutputObject2D):
         if self.additional_layer:
             self.nx_names.insert(1, 'Cathode BPP-BPP')
             self.nx_names.insert(-2, 'Anode BPP-BPP')
+
+        # Assign layer id corresponding to material name
+        self.layer_id, self.interface_id = self.create_layer_index_dict()
 
         # Current density
         self.current_density = np.zeros(
@@ -167,14 +167,18 @@ class Cell(OutputObject2D):
                             sub_names=self.nx_names[:self.nx])
         self.add_print_data(self.voltage, 'Voltage', 'K')
 
-    @staticmethod
-    def create_layer_index_dict(n_layer):
-        layer_id_dict = {}
-        if n_layer % 2 == 0.0:
+    def create_layer_index_dict(self):
+        if self.n_layer % 2 == 0.0:
             raise ValueError('Number of material layers in fuel cell must be '
                              'uneven')
         else:
-            membrane_id = n_layer // 2
+            interface_keys = [name.replace('-', '_').replace(' ', '_').lower()
+                              for name in self.nx_names]
+            interface_id_dict = {key: value for value, key in enumerate(
+                interface_keys)}
+
+            layer_id_dict = {}
+            membrane_id = self.n_layer // 2
             layer_id_dict['membrane'] = membrane_id
             layer_id_dict['cathode_gde'] = membrane_id - 1
             layer_id_dict['anode_gde'] = membrane_id + 1
@@ -184,7 +188,7 @@ class Cell(OutputObject2D):
             for i in range(membrane_id - 1):
                 layer_id_dict['cathode_bpp'].append(membrane_id - 2 - i)
                 layer_id_dict['anode_bpp'].append(membrane_id + 2 + i)
-        return layer_id_dict
+        return layer_id_dict, interface_id_dict
 
     def calc_ambient_conductance(self, alpha_amb: float,
                                  th_layer_amb: list[np.ndarray]):
@@ -210,16 +214,25 @@ class Cell(OutputObject2D):
                 (1.0 - urf) * current_density + urf * self.current_density)
 
         self.membrane.temp[:] = (
-                0.5 * (self.temp_layer[self.layer_id['cathode_gde']] +
-                       self.temp_layer[self.layer_id['anode_gde']]))
+                0.5 * (self.temp_layer[self.interface_id['cathode_gde_mem']] +
+                       self.temp_layer[self.interface_id['anode_mem_gde']]))
         if isinstance(self.membrane, membrane.WaterTransportMembrane):
             self.cathode.w_cross_flow[:] = self.membrane.water_flux * -1.0
             self.anode.w_cross_flow[:] = self.membrane.water_flux
 
-        self.cathode.update(current_density[self.layer_id['cathode_gde']],
+        cathode_temperature = np.stack(
+            [self.temp_layer[self.interface_id['cathode_bpp_gde']],
+             self.temp_layer[self.interface_id['cathode_gde_mem']]], axis=0)
+        self.cathode.update(current_density[self.layer_id['membrane']],
+                            cathode_temperature,
                             update_channel=update_channel,
                             current_control=current_control)
-        self.anode.update(current_density[self.layer_id['anode_gde']],
+
+        anode_temperature = np.stack(
+            [self.temp_layer[self.interface_id['anode_mem_gde']],
+             self.temp_layer[self.interface_id['anode_gde_bpp']]], axis=0)
+        self.anode.update(current_density[self.layer_id['membrane']],
+                          anode_temperature,
                           update_channel=update_channel,
                           current_control=True)
         if self.cathode.electrochemistry.corrected_current_density is not None:

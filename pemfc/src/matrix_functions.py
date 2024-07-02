@@ -230,11 +230,11 @@ def get_single_axis_values(array, axis: int,
     return np.take(array, indices, axis=axis)
 
 
-def get_axis_values(array, axis: tuple, indices: tuple):
-    if isinstance(axis, int):
-        axis = (axis,)
+def get_axis_values(array, axes: tuple, indices: tuple):
+    if isinstance(axes, int):
+        axes = (axes,)
     if isinstance(indices, int):
         indices = (indices,)
-    for i in reversed(range(len(axis))):
-        array = get_single_axis_values(array, axis[i], indices[i])
+    for i in reversed(range(len(axes))):
+        array = get_single_axis_values(array, axes[i], indices[i])
     return array

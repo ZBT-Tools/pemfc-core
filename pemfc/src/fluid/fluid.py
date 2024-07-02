@@ -9,7 +9,6 @@ import types
 from ..output_object import OutputObject1D
 from .. import constants, global_functions as gf
 from . import species
-from ..global_functions import move_axis
 from collections import OrderedDict
 
 try:
@@ -51,7 +50,7 @@ class DiscreteFluid(OutputObject1D, ABC):
             {
                 'names': ['temperature', 'pressure'],
                 'units': ['K', 'Pa'],
-                # 'sub_names': ['None', 'None']
+                'sub_names': ['None', 'None']
             }
         if 'print_variables' in kwargs:
             self.print_variables = self.combine_print_variables(
@@ -211,6 +210,7 @@ class DiscreteFluid(OutputObject1D, ABC):
                             setattr(self, name, rescaled)
             self.array_shape = new_array_shape
         self.add_print_variables(self.print_variables)
+        self.shapes = [self.array_shape]
         if 'plot_axis' in kwargs:
             self.set_plot_axis(
                 kwargs['plot_axis'], relative=kwargs.get('relative', False))
@@ -250,27 +250,17 @@ class DiscreteFluid(OutputObject1D, ABC):
         else:
             return None
 
-    def _rescale_array(self, array, new_array_shape):
+    def _rescale_array(self, array: np.ndarray, new_array_shape: tuple,
+                       axes: tuple = None):
         if new_array_shape != self.array_shape:
-            if isinstance(array, np.ndarray):
-                if len(array.shape) == 1:
-                    first = array[0]
-                    last = array[-1]
-                    return np.linspace(first, last, new_array_shape[0])
-                elif len(array.shape) == 2:
-                    first = array[:, 0]
-                    last = array[:, -1]
-                    linear_rescaled = \
-                        np.array([np.linspace(first[i], last[i],
-                                              new_array_shape[-1])
-                                  for i in range(len(first))])
-                    return linear_rescaled
+            if len(new_array_shape) == len(array.shape):
+                if isinstance(array, np.ndarray):
+                    return gf.rescale(array, new_array_shape, axes)
                 else:
-                    raise ValueError(
-                        'argument array must be one- or two-dimensional')
+                    raise TypeError(
+                        'argument array must be of type numpy.ndarray')
             else:
-                raise TypeError(
-                    'argument array must be of type numpy.ndarray')
+                ValueError('only same dimensions can be rescaled')
 
 
 class ConstantFluid(DiscreteFluid):
@@ -662,14 +652,14 @@ class CanteraGasMixture(DiscreteFluid):
         if np.shape(mole_composition)[0] != self.n_species:
             raise ValueError('First dimension of composition must be '
                              'equal to number of species')
-        self.solution_array.X[:, self.species_ids] = move_axis(
+        self.solution_array.X[:, self.species_ids] = gf.move_axis(
             mole_composition, 0, -1)
 
     def _get_composition(self, mole_fractions=True):
         if mole_fractions:
-            return move_axis(self.solution_array.X, -1, 0)[self.species_ids]
+            return gf.move_axis(self.solution_array.X, -1, 0)[self.species_ids]
         else:
-            return move_axis(self.solution_array.Y, -1, 0)[self.species_ids]
+            return gf.move_axis(self.solution_array.Y, -1, 0)[self.species_ids]
 
     def reshape(self, new_array_shape, method='rescale', **kwargs):
         super().reshape(new_array_shape, method=method, **kwargs)
@@ -744,7 +734,6 @@ class TwoPhaseMixture(DiscreteFluid):
             species_dict=gas_species_dict, mole_fractions=mole_fractions,
             temperature=self._temperature, pressure=self._pressure,
             print_data=False)
-        self.array_shape_2d = self.gas.array_shape_2d
         ids_pc = [self.species.names.index(name) for name in
                   phase_change_species_names]
         if len(ids_pc) > 1:
@@ -764,15 +753,15 @@ class TwoPhaseMixture(DiscreteFluid):
                     humidity, temperature, pressure, mole_fractions, self.id_pc)
 
         # Total properties (both phases)
-        array_shape_2d = self.gas.array_shape_2d
+        self.array_shape_2d = self.gas.array_shape_2d
         self._mole_fraction = \
-            gf.array_vector_multiply(np.ones(array_shape_2d),
+            gf.array_vector_multiply(np.ones(self.array_shape_2d),
                                      mole_fractions)
         mass_fraction_init = \
             mole_fractions * self.gas.species.mw / \
             np.sum(mole_fractions * self.gas.species.mw)
         self._mass_fraction = \
-            gf.array_vector_multiply(np.ones(array_shape_2d),
+            gf.array_vector_multiply(np.ones(self.array_shape_2d),
                                      mass_fraction_init)
         self.mw = np.zeros(self.array_shape)
 
@@ -790,6 +779,8 @@ class TwoPhaseMixture(DiscreteFluid):
                 'sub_names': ['None', 'self.species.names']
             }
         self.add_print_variables(print_variables)
+        self.combine_print_variables(self.print_variables, print_variables)
+
         # self.add_print_data(self.humidity, 'Humidity')
         # print(self.print_data)
         # print(self.gas.print_data)
@@ -806,7 +797,6 @@ class TwoPhaseMixture(DiscreteFluid):
                     self.gas.calc_mole_fraction(mole_composition)
 
         self.mw[:] = self.gas.calc_molar_mass(self.mole_fraction)
-        test = self.mw[0]
         self._mass_fraction[:] = \
             self.gas.calc_mass_fraction(self._mole_fraction, self.mw)
         self.saturation_pressure[:] = \
@@ -854,6 +844,9 @@ class TwoPhaseMixture(DiscreteFluid):
         self.gas.reshape(new_array_shape, method=method, **kwargs)
         self.liquid.reshape(new_array_shape, method=method, **kwargs)
         super().reshape(new_array_shape, method=method, **kwargs)
+        self.array_shape_2d = self.gas.array_shape_2d
+        self.shapes = [self.array_shape, self.array_shape_2d]
+
     # @property
     # def mole_fraction_gas(self):
     #     return self._mole_fraction_gas.transpose()
@@ -869,6 +862,10 @@ class TwoPhaseMixture(DiscreteFluid):
                  for i in range(array.shape[0])])
         else:
             return super()._reshape_array(array, new_shape, method)
+
+    # @property
+    # def array_shape_2d(self):
+    #     return self.gas.array_shape_2d
 
     @property
     def temperature(self):
@@ -897,6 +894,14 @@ class TwoPhaseMixture(DiscreteFluid):
     @property
     def mass_fraction(self):
         return self._mass_fraction
+
+    @property
+    def concentration(self):
+        return self.gas.concentration
+
+    @concentration.setter
+    def concentration(self, value):
+        self.gas.concentration[:] = value
 
     @property
     def species(self):

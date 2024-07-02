@@ -350,3 +350,17 @@ def cartesian_product(*arrays):
         arr[..., i] = a
     return arr.reshape(-1, la)
 
+
+def linear_rescale_1d(arr: np.ndarray, new_shape: int):
+    x_old = np.arange(len(arr))
+    x_new = np.arange(new_shape)
+    return np.interp(x_new, x_old, arr)
+
+
+def rescale(arr, new_shape: tuple[int, ...], axes: tuple[int, ...] = None):
+    if axes is None:
+        axes = tuple(i for i in range(len(new_shape)))
+    for i in range(len(axes)):
+        arr = np.apply_along_axis(linear_rescale_1d, axes[i], arr, new_shape[i])
+    return arr
+
