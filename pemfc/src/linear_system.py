@@ -95,6 +95,8 @@ class LinearSystem(ABC):
             self.solution_vector[:] = spsolve(mtx, self.rhs)
         else:
             self.solution_vector[:] = np.linalg.tensorsolve(self.mtx, self.rhs)
+        self.solution_array[:] = np.reshape(
+            self.solution_vector, self.shape, order='F')
 
     @abstractmethod
     def add_explicit_source(self, *args, **kwargs):

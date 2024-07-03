@@ -40,6 +40,19 @@ class HalfCell:
         self.id_fuel = 0
         if isinstance(self.channel, chl.TwoPhaseMixtureChannel):
             self.id_h2o = self.channel.fluid.id_pc
+        else:
+            raise NotImplementedError('fluid for HalfCell class must be a '
+                                      'TwoPhaseMixture at the moment')
+
+        inert_ids = [i for i in range(self.channel.fluid.n_species)
+                     if i not in (self.id_fuel, self.id_h2o)]
+        # self.id_inert = None
+        if inert_ids:
+            self.id_inert = inert_ids[-1]
+        else:
+            raise ValueError('species in fluid the HalfCell class must '
+                             'include an inert species')
+
         self.faraday = constants.FARADAY
 
         # Initialize flow field geometry
@@ -114,7 +127,8 @@ class HalfCell:
         self.gdl_diffusion = diff.DiffusionTransport.create(
             gdl_dict, self.channel.fluid,
             dsct.Discretization3D.create_from(self.discretization,
-                                              gdl_dict['thickness'], 2))
+                                              gdl_dict['thickness'], 2),
+            self.id_inert)
 
         self.thickness = self.bpp.thickness + self.gde.thickness
 

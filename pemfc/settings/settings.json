@@ -9,7 +9,7 @@
         "maximum_iteration": 500,
         "minimum_iteration": 3,
         "convergence_criteria": 1e-09,
-        "underrelaxation_factor": 0.95,
+        "underrelaxation_factor": 0.5,
         "current_control": true,
         "operation_control": "Current",
         "elements": 10,
