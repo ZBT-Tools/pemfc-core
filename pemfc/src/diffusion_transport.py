@@ -125,10 +125,10 @@ class GDLDiffusionTransport(DiffusionTransport):
                 boundary_flux[i], axes=axes, indices=indices)
             axes = (0, 2)
             indices = (0, 1)
-            concentration = mf.get_axis_values(
+            bc_concentration = mf.get_axis_values(
                     boundary_composition[i], axes=axes, indices=indices)
             lin_sys.set_dirichlet_boundary_conditions(
-                concentration, axes=axes, indices=indices)
+                bc_concentration, axes=axes, indices=indices)
             lin_sys.update()
 
         # Update species transport for inert species
@@ -139,7 +139,9 @@ class GDLDiffusionTransport(DiffusionTransport):
         total_gas_concentration = (
                 self.fluid.pressure / (gas_constant * self.fluid.temperature))
 
-        concentrations = [lin_sys.solution_array for lin_sys in self.linear_systems]
+        # TODO: Test diffusion calculation
+        concentrations = [lin_sys.solution_array for
+                          lin_sys in self.linear_systems]
         active_concentrations = np.sum(concentrations, axis=0)
         inert_concentration = total_gas_concentration - active_concentrations
         concentrations.insert(self.id_inert, inert_concentration)

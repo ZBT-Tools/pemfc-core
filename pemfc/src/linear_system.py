@@ -106,21 +106,67 @@ class LinearSystem(ABC):
     def add_implicit_source(self, *args, **kwargs):
         pass
 
+    # @staticmethod
+    # def shift_nodes(conductance_list: list, axis=0, **kwargs):
+    #     conductance_list = [np.asarray(item) for item in conductance_list]
+    #     shift_axes = tuple(i for i in range(len(conductance_list)) if i != axis)
+    #     for i in shift_axes:
+    #         conductance_list[i] = (
+    #                 (conductance_list[i]
+    #                  + np.roll(conductance_list[i], 1, axis=axis)) * 0.5)
+    #         conductance_list[i] = np.concatenate(
+    #             (conductance_list[i], [conductance_list[i][0]]), axis=axis)
+    #         conductance_list[i][0] *= 0.5
+    #         conductance_list[i][-1] *= 0.5
+    #     return conductance_list
+
+    @staticmethod
+    def shift_nodes(conductance: list, axis=0, **kwargs):
+        conductance = [np.asarray(item) for item in conductance]
+        if len(conductance) != conductance[0].ndim:
+            raise ValueError('conductance values must be given for '
+                             'all dimensions')
+        shift_axes = tuple(i for i in range(len(conductance)) if i != axis)
+        if axis == -1:
+            axis = conductance[0].ndim - 1
+        for i in shift_axes:
+            old_shape = conductance[i].shape
+            new_shape = tuple(size + 1 if j == axis else size
+                              for j, size in enumerate(old_shape))
+            new_conductance = np.zeros(new_shape)
+            half_values = 0.5 * np.moveaxis(conductance[i], axis, 0)
+            np.moveaxis(new_conductance, axis, 0)[:-1] += half_values
+            np.moveaxis(new_conductance, axis, 0)[1:] += half_values
+            conductance[i] = new_conductance
+        return conductance
+
 
 class BasicLinearSystem(LinearSystem):
     def __init__(self, transport_layer: tl.TransportLayer, transport_type: str,
                  init_value=0.0):
         self.transport_layer = transport_layer
         self.type = transport_type
-        self.conductance = self.transport_layer.conductance[self.type]
+        conductance = self.transport_layer.conductance[self.type]
+        # Shift conductance nodes along first axis to the outer edges of layer
+        self.conductance = self.shift_nodes(conductance, axis=0)
         shape = self.conductance[1].shape
         super().__init__(shape)
-        inter_node_conductance = (
-            [self.transport_layer.calc_inter_node_conductance(
-                self.conductance[i], axis=i)
-             for i in range(len(self.conductance))])
+
+        # inter_node_conductance = (
+        #     [self.transport_layer.calc_inter_node_conductance(
+        #         self.conductance[i], axis=i)
+        #      for i in range(len(self.conductance))])
+        # self.mtx_const = mtx_func.build_cell_conductance_matrix(
+        #     inter_node_conductance)
+
+        # With shifted nodes for axis 0, only the inter-nodal conductance for
+        # the remaining axes must be recalculated
         self.mtx_const = mtx_func.build_cell_conductance_matrix(
-            inter_node_conductance)
+                [self.conductance[0],
+                 tl.TransportLayer.calc_inter_node_conductance(
+                    self.conductance[1], axis=1),
+                 tl.TransportLayer.calc_inter_node_conductance(
+                    self.conductance[2], axis=2)])
         self.mtx_dyn = np.zeros(self.mtx_const.shape)
         self.rhs_const = np.zeros(self.rhs.shape)
         self.rhs_dyn = np.zeros(self.rhs.shape)
@@ -295,7 +341,10 @@ class StackedLayerLinearSystem(LinearSystem):
         conductance = [
             [layer.conductance[transport_type][i] for layer in layers]
             for i in range(dims)]
-        return self.stack_cell_property(conductance, stacking_axis=0)
+        return self.stack_conductance_layers(conductance)
+
+    def stack_conductance_layers(self, conductance_list: list, axis: int = 0):
+        return super().shift_nodes(conductance_list, axis=axis)
 
     @staticmethod
     def add_explicit_source(rhs_vector, source_term, index_array,
@@ -354,22 +403,6 @@ class StackedLayerLinearSystem(LinearSystem):
             self.rhs_const, -fixed_value, self.index_array, layer_id,
             replace=True)
 
-    def stack_cell_property(self, cell_property: list, stacking_axis,
-                            shift_along_axis=(False, True, True), **kwargs):
-
-        cell_property = [np.asarray(item) for item in cell_property]
-        for i in range(len(cell_property)):
-            if shift_along_axis[i]:
-                cell_property[i] = (
-                        (cell_property[i]
-                         + np.roll(cell_property[i], 1, axis=0)) * 0.5)
-                cell_property[i] = np.concatenate(
-                    (cell_property[i], [cell_property[i][0]]),
-                    axis=stacking_axis)
-                cell_property[i][0] *= 0.5
-                cell_property[i][-1] *= 0.5
-        return cell_property
-
     @staticmethod
     def create_cell_index_list(shape: tuple[int, ...]):
         """
@@ -426,9 +459,8 @@ class CellLinearSystem(StackedLayerLinearSystem):
             raise KeyError('either values for "flux_endplate" or '
                            '"value_endplate" must be provided')
 
-    def stack_cell_property(self, cell_property: list, stacking_axis,
-                            shift_along_axis=(False, True, True),
-                            modify_values=True, **kwargs):
+    def stack_conductance_layers(self, conductance_list: list,
+                                 modify_values=True, axis=0, **kwargs):
 
         # Split bipolar plate in two elements among x-direction if
         # channel-land-discretization is applied
@@ -439,28 +471,27 @@ class CellLinearSystem(StackedLayerLinearSystem):
                                    / self.cell.cathode.bpp.thickness)
             ano_bpp_split_ratio = (self.cell.anode.channel.height
                                    / self.cell.anode.bpp.thickness)
-            for i in range(len(cell_property)):
-                value = np.copy(cell_property[i][0])
-                cell_property[i].insert(0, value * math.pow(
+            for i in range(len(conductance_list)):
+                value = np.copy(conductance_list[i][0])
+                conductance_list[i].insert(0, value * math.pow(
                     1.0 - cat_bpp_split_ratio, exp[i]))
-                cell_property[i][1] = value * math.pow(
+                conductance_list[i][1] = value * math.pow(
                     cat_bpp_split_ratio, exp[i])
-                value = np.copy(cell_property[i][-1])
-                cell_property[i].append(value * math.pow(
+                value = np.copy(conductance_list[i][-1])
+                conductance_list[i].append(value * math.pow(
                     1.0 - ano_bpp_split_ratio, exp[i]))
-                cell_property[i][-2] = (
+                conductance_list[i][-2] = (
                         value * math.pow(ano_bpp_split_ratio, exp[i]))
-        cell_property = [np.asarray(item) for item in cell_property]
+        conductance_list = [np.asarray(item) for item in conductance_list]
 
         # Set solid transport property to zero at channel domain
         # Land: index 0, Channel: index 1
         if (self.cell.channel_land_discretization
                 and modify_values):
-            for i in range(len(cell_property)):
-                cell_property[i][[1, -2], :, 1] = 0.0
-        cell_property = super().stack_cell_property(
-            cell_property, stacking_axis, shift_along_axis=shift_along_axis)
-        return cell_property
+            for i in range(len(conductance_list)):
+                conductance_list[i][[1, -2], :, 1] = 0.0
+        conductance_list = self.shift_nodes(conductance_list, axis=axis)
+        return conductance_list
 
     def add_ambient_convection(self):
         """
@@ -471,9 +502,9 @@ class CellLinearSystem(StackedLayerLinearSystem):
             alpha_amb = self.cell.cell_dict['alpha_amb']
             temp_amb = self.cell.cell_dict['temp_amb']
 
-            th_layer_amb = self.stack_cell_property(
-                [self.cell.th_layer], stacking_axis=-1,
-                modify_values=False, shift_along_axis=(True,),
+            th_layer_amb = self.stack_conductance_layers(
+                [self.cell.th_layer], axis=-1,
+                modify_values=False,
                 exponents=(1.0, ))
             k_amb = self.cell.calc_ambient_conductance(alpha_amb, th_layer_amb)
             k_amb_vector = k_amb.flatten(order='F')

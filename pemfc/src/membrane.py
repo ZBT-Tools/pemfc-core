@@ -110,7 +110,6 @@ class Constant(Membrane):
 
     def __init__(self, membrane_dict: dict,
                  discretization: dsct.Discretization2D, *args, **kwargs):
-        test = 1
 
         super().__init__(membrane_dict, discretization, *args, **kwargs)
         # self.water_flux = np.zeros_like(self.dx)

@@ -127,7 +127,7 @@ class HalfCell:
         self.gdl_diffusion = diff.DiffusionTransport.create(
             gdl_dict, self.channel.fluid,
             dsct.Discretization3D.create_from(self.discretization,
-                                              gdl_dict['thickness'], 2),
+                                              gdl_dict['thickness'], 5),
             self.id_inert)
 
         self.thickness = self.bpp.thickness + self.gde.thickness
