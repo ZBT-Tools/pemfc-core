@@ -123,6 +123,11 @@ class HalfCell:
         gdl_dict.update(
             {'name': self.name + ' GDL',
              'thickness': electrochemistry_dict['thickness_gdl']})
+        discretization_dict = {
+            'shape': (5, self.discretization.shape[1], 10),
+            'depth': gdl_dict['thickness'],
+            'length': self.discretization.length[0],
+            'width': self.discretization.length[1]}
 
         self.gdl_diffusion = diff.DiffusionTransport.create(
             gdl_dict, self.channel.fluid,
