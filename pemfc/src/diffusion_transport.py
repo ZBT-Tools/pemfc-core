@@ -130,7 +130,7 @@ class GDLDiffusionTransport(DiffusionTransport):
                 {self.transport_type: [self.gas_diff_coeff.d_eff[i],
                                        self.gas_diff_coeff.d_eff[i],
                                        self.gas_diff_coeff.d_eff[i]]})
-            trans_layer.conductance['diffusion'][:, 0:5, :, 0:10] = 1e-16
+            # trans_layer.conductance['diffusion'][:, 0:5, :, 0:10] = 1e-16
             # print(test)
 
         for i, lin_sys in enumerate(self.linear_systems):

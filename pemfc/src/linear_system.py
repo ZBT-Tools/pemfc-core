@@ -147,30 +147,11 @@ class BasicLinearSystem(LinearSystem):
         self.transport_layer = transport_layer
         self.type = transport_type
         conductance = self.transport_layer.conductance[self.type]
-        # Shift conductance nodes along first axis to the outer edges of layer
-        self.conductance = self.shift_nodes(conductance, axis=0)
-        shape = self.conductance[1].shape
+        self.conductance, shape = self.calculate_conductance(conductance)
         super().__init__(shape)
 
-        # inter_node_conductance = (
-        #     [self.transport_layer.calc_inter_node_conductance(
-        #         self.conductance[i], axis=i)
-        #      for i in range(len(self.conductance))])
-        # self.mtx_const = mtx_func.build_cell_conductance_matrix(
-        #     inter_node_conductance)
         self.mtx[:] = mtx_func.build_cell_conductance_matrix(
-                [self.conductance[0],
-                 tl.TransportLayer.calc_inter_node_conductance(
-                    self.conductance[1], axis=1),
-                 tl.TransportLayer.calc_inter_node_conductance(
-                    self.conductance[2], axis=2)])
-
-        # With shifted nodes for axis 0, only the inter-nodal conductance for
-        # the remaining axes must be recalculated
-        # self.mtx_const = np.zeros(self.mtx.shape)
-        # self.mtx_dyn = np.zeros(self.mtx_const.shape)
-        # self.rhs_const = np.zeros(self.rhs.shape)
-        # self.rhs_dyn = np.zeros(self.rhs.shape)
+            self.conductance)
 
         self.index_array = self.create_index_array()
 
@@ -184,6 +165,23 @@ class BasicLinearSystem(LinearSystem):
         # Initialize solution values
         self.solution_vector[:] = init_value
         self.solution_array[:] = init_value
+
+    def calculate_conductance(self, conductance_array):
+        # Shift conductance nodes along first axis (x-axis) to the outer edges
+        # of the domain. This results in one more node in x-axis, due to the
+        # assumption the Dirichlet boundary conditions are set on the
+        # x-planes in this implementation.
+        conductance = self.shift_nodes(conductance_array, axis=0)
+        shape = conductance[1].shape
+        # With shifted nodes for axis 0, only the inter-nodal conductance for
+        # the remaining axes must be recalculated
+        conductance = [
+            conductance[0],
+            tl.TransportLayer.calc_inter_node_conductance(
+                conductance[1], axis=1),
+            tl.TransportLayer.calc_inter_node_conductance(
+                conductance[2], axis=2)]
+        return conductance, shape
 
     @classmethod
     def create(cls, transport_layer: tl.TransportLayer, transport_type: str,
@@ -304,13 +302,9 @@ class BasicLinearSystem(LinearSystem):
         """
         conductance = self.transport_layer.conductance[self.type]
         # Shift conductance nodes along first axis to the outer edges of layer
-        self.conductance[:] = self.shift_nodes(conductance, axis=0)
+        self.conductance, shape = self.calculate_conductance(conductance)
         self.mtx[:] = mtx_func.build_cell_conductance_matrix(
-                [self.conductance[0],
-                 tl.TransportLayer.calc_inter_node_conductance(
-                    self.conductance[1], axis=1),
-                 tl.TransportLayer.calc_inter_node_conductance(
-                    self.conductance[2], axis=2)])
+                self.conductance)
         # self.mtx[:] = self.mtx_const + self.mtx_dyn
 
 
