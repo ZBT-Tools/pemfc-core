@@ -43,6 +43,7 @@ class Discretization(ABC):
     def __init__(self, discretization_dict, **kwargs):
         # Shape parameter defines the dimensionality and the division of each
         # dimension
+        self.dict = discretization_dict
         self.shape: tuple = discretization_dict['shape']
         # Vector defining the complete length of the discretization shape
         self.length: np.ndarray
@@ -193,7 +194,7 @@ class Discretization3D(Discretization):
     def create_from(cls, discretization: Discretization, depth: float,
                     nodes: int = 1, ratio: float = 1, direction: int = 1):
         if isinstance(discretization, Discretization3D):
-            return discretization.copy()
+            return cls(discretization.dict)
         else:
             discretization_dict = {
                 'ratio': (ratio,) + discretization.ratio,

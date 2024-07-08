@@ -60,7 +60,7 @@ class LinearSystem(ABC):
         """
         Wrapper to update the overall linear system.
         """
-        self.update_and_solve_linear_system()
+        self.update_and_solve_linear_system(*args, **kwargs)
 
     def update_and_solve_linear_system(self, *args, **kwargs):
         """
@@ -90,7 +90,7 @@ class LinearSystem(ABC):
         Solves for the solution vector.
         """
         if self.sparse_solve:
-            cond_number = np.linalg.cond(self.mtx)
+            # cond_number = np.linalg.cond(self.mtx)
             mtx = sparse.csr_matrix(self.mtx)
             self.solution_vector[:] = spsolve(mtx, self.rhs)
         else:
@@ -158,18 +158,19 @@ class BasicLinearSystem(LinearSystem):
         #      for i in range(len(self.conductance))])
         # self.mtx_const = mtx_func.build_cell_conductance_matrix(
         #     inter_node_conductance)
-
-        # With shifted nodes for axis 0, only the inter-nodal conductance for
-        # the remaining axes must be recalculated
-        self.mtx_const = mtx_func.build_cell_conductance_matrix(
+        self.mtx[:] = mtx_func.build_cell_conductance_matrix(
                 [self.conductance[0],
                  tl.TransportLayer.calc_inter_node_conductance(
                     self.conductance[1], axis=1),
                  tl.TransportLayer.calc_inter_node_conductance(
                     self.conductance[2], axis=2)])
-        self.mtx_dyn = np.zeros(self.mtx_const.shape)
-        self.rhs_const = np.zeros(self.rhs.shape)
-        self.rhs_dyn = np.zeros(self.rhs.shape)
+
+        # With shifted nodes for axis 0, only the inter-nodal conductance for
+        # the remaining axes must be recalculated
+        # self.mtx_const = np.zeros(self.mtx.shape)
+        # self.mtx_dyn = np.zeros(self.mtx_const.shape)
+        # self.rhs_const = np.zeros(self.rhs.shape)
+        # self.rhs_dyn = np.zeros(self.rhs.shape)
 
         self.index_array = self.create_index_array()
 
@@ -244,23 +245,25 @@ class BasicLinearSystem(LinearSystem):
         return matrix
 
     def set_neumann_boundary_conditions(
-            self, flux_value: float, axes: tuple, indices: tuple):
+            self, values: (float, np.ndarray), axes: tuple, indices: tuple):
 
         index_array = mtx_func.get_axis_values(self.index_array, axes, indices)
         d_area = mtx_func.get_axis_values(
             self.transport_layer.discretization.d_area[axes[0]], axes, indices)
-        source = flux_value * d_area
-        rhs_vector, _ = self.add_explicit_source(
-            self.rhs_const, source.flatten(order='F'),
+        source = values * d_area
+        self.add_explicit_source(
+            self.rhs, source.flatten(order='F'),
             index_array.flatten(order='F'), replace=True)
 
     def set_dirichlet_boundary_conditions(
-            self, fixed_value: float, axes: tuple, indices: tuple):
+            self, values: (float, np.ndarray), axes: tuple, indices: tuple):
+        if isinstance(values, np.ndarray):
+            values = values.flatten(order='F')
         index_array = mtx_func.get_axis_values(self.index_array, axes, indices)
         index_vector = index_array.flatten(order='F')
-        self.set_implicit_fixed(self.mtx_const, index_vector)
-        self.add_explicit_source(self.rhs_const, -fixed_value, index_vector,
-                                 replace=True)
+        self.set_implicit_fixed(self.mtx, index_vector)
+        self.add_explicit_source(
+            self.rhs, -values, index_vector, replace=True)
 
     def get_boundary_planes(self, axis):
         first_plane = np.moveaxis(self.index_array, axis, 0)[0]
@@ -281,13 +284,34 @@ class BasicLinearSystem(LinearSystem):
         Create vector with the right hand side entries,
         Sources from outside the src to the src must be defined negative.
         """
-        self.rhs[:] = self.rhs_const + self.rhs_dyn
+        if 'rhs_values' in kwargs:
+            rhs_values = kwargs['rhs_values']
+            if 'Neumann' in rhs_values:
+                neumann_dict = rhs_values['Neumann']
+                self.set_neumann_boundary_conditions(
+                    neumann_dict['values'], neumann_dict['axes'],
+                    neumann_dict['indices'])
+            if 'Dirichlet' in rhs_values:
+                dirichlet_dict = rhs_values['Dirichlet']
+                self.set_dirichlet_boundary_conditions(
+                    dirichlet_dict['values'], dirichlet_dict['axes'],
+                    dirichlet_dict['indices'])
+        # self.rhs[:] = self.rhs_const + self.rhs_dyn
 
     def update_matrix(self, *args, **kwargs):
         """
         Updates matrix coefficients
         """
-        self.mtx[:] = self.mtx_const + self.mtx_dyn
+        conductance = self.transport_layer.conductance[self.type]
+        # Shift conductance nodes along first axis to the outer edges of layer
+        self.conductance[:] = self.shift_nodes(conductance, axis=0)
+        self.mtx[:] = mtx_func.build_cell_conductance_matrix(
+                [self.conductance[0],
+                 tl.TransportLayer.calc_inter_node_conductance(
+                    self.conductance[1], axis=1),
+                 tl.TransportLayer.calc_inter_node_conductance(
+                    self.conductance[2], axis=2)])
+        # self.mtx[:] = self.mtx_const + self.mtx_dyn
 
 
 class BasicLinearSystem2D(BasicLinearSystem):

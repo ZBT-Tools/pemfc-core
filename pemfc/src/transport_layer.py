@@ -109,10 +109,20 @@ class TransportLayer(oo.OutputObject2D, ABC):
         conductance_a = np.asarray(conductance_a)
         conductance_b = np.asarray(conductance_b)
         if mode == 'serial':
-            try:
-                return 1.0 / (1.0 / (conductance_a + conductance_b))
-            except FloatingPointError:
-                raise
+            inf_array = np.ones(conductance_a.shape) * 1e16
+            zero_array = np.zeros(conductance_a.shape)
+            resistance_a = np.divide(
+                1.0, conductance_a, out=inf_array, where=conductance_a != 0.0)
+            resistance_b = np.divide(
+                1.0, conductance_b, out=inf_array, where=conductance_a != 0.0)
+            resistance_sum = resistance_a + resistance_b
+            return np.divide(
+                1.0, resistance_sum, out=zero_array,
+                where=resistance_sum != 0.0)
+            # try:
+            #     return 1.0 / (1.0 / (conductance_a + conductance_b))
+            # except FloatingPointError:
+            #     raise
         elif mode == 'parallel':
             return conductance_a + conductance_b
         else:

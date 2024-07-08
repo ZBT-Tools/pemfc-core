@@ -119,20 +119,32 @@ class HalfCell:
                                        self.discretization)
 
         # Initialize diffusion transport model
-        gdl_dict = gde_dict.copy()
-        gdl_dict.update(
-            {'name': self.name + ' GDL',
-             'thickness': electrochemistry_dict['thickness_gdl']})
-        discretization_dict = {
-            'shape': (5, self.discretization.shape[1], 10),
-            'depth': gdl_dict['thickness'],
-            'length': self.discretization.length[0],
-            'width': self.discretization.length[1]}
 
+        nx = 10
+        ny = self.discretization.shape[0]
+        nz = 20
+        test = list(range(int(nz/2), nz))
+
+        gdl_diffusion_dict = gde_dict.copy()
+        gdl_diffusion_dict.update(
+            {'name': self.name + ' GDL',
+             'thickness': electrochemistry_dict['thickness_gdl'],
+             'boundary_patches': {
+                 'Neumann': {'axes': (0,),
+                             'indices': (-1,)},
+                 'Dirichlet': {'axes': (0, 2),
+                               'indices': (0, list(range(int(nz/2), nz)))}}})
+        discretization_dict = {
+            'shape': (nx, ny, nz),
+            'depth': gdl_diffusion_dict['thickness'],
+            'length': self.discretization.length[0],
+            'width': self.discretization.length[1] * 0.5}
+
+        gdl_discretization = dsct.Discretization(discretization_dict)
         self.gdl_diffusion = diff.DiffusionTransport.create(
-            gdl_dict, self.channel.fluid,
-            dsct.Discretization3D.create_from(self.discretization,
-                                              gdl_dict['thickness'], 5),
+            gdl_diffusion_dict, self.channel.fluid,
+            dsct.Discretization3D.create_from(gdl_discretization,
+                                              gdl_diffusion_dict['thickness']),
             self.id_inert)
 
         self.thickness = self.bpp.thickness + self.gde.thickness

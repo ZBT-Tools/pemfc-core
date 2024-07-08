@@ -49,6 +49,9 @@ class DiffusionTransport(ABC):
         self.linear_systems = [
             ls.BasicLinearSystem.create(item, self.transport_type) for item in
             self.transport_layers]
+        solution_shape = (len(self.linear_systems) + 1,
+                          *self.linear_systems[0].solution_array.shape)
+        self.concentrations = np.zeros(solution_shape)
         # test_lin_sys.set_neumann_boundary_conditions(15.0, axis=(0, 2),
         #                                              indices=(0, 1))
         # self.set_neumann_boundary_conditions(200.0, axis=(0, 2),
@@ -65,8 +68,14 @@ class DiffusionTransport(ABC):
                fluid: (fl.GasMixture, fl.CanteraGasMixture,
                        fl.TwoPhaseMixture, fl.CanteraTwoPhaseMixture),
                discretization: dsct.Discretization, id_inert: int = -1):
-        return GDLDiffusionTransport(input_dict, fluid, discretization,
-                                     id_inert)
+        if 'boundary_patches' in input_dict:
+            return GDLDiffusionTransport(input_dict, fluid, discretization,
+                                         id_inert)
+        else:
+            raise NotImplementedError(
+                'only GDLDiffusionTransport model is currently implemented '
+                'which requires the subdict entry "boundary_patches" in the '
+                '"input_dict" parameter')
 
 
 class GDLDiffusionTransport(DiffusionTransport):
@@ -82,13 +91,14 @@ class GDLDiffusionTransport(DiffusionTransport):
         super().__init__(input_dict, fluid, discretization, inert_id)
         self.initialize = True
 
+        self.boundary_patches = input_dict['boundary_patches']
         # Initialize Dirichlet boundary conditions at GDL-Channel interface
         # (z-index: 1); all other boundaries are flux boundaries;
         # specific boundary (rhs) values for GDL-Channel (concentration) and
         # CL-GDL interfaces (flux) will be set dynamically in update function
-        for lin_sys in self.linear_systems:
-            lin_sys.set_dirichlet_boundary_conditions(
-                0.0, axes=(0, 2), indices=(0, 1))
+        # for lin_sys in self.linear_systems:
+        #     lin_sys.set_dirichlet_boundary_conditions(
+        #         0.0, axes=(0, 2), indices=(0, 1))
 
     def update(self, temperature: np.ndarray, pressure: np.ndarray,
                molar_composition: np.ndarray, flux: np.ndarray):
@@ -97,9 +107,12 @@ class GDLDiffusionTransport(DiffusionTransport):
         pressure = gf.rescale(pressure, self.fluid.pressure.shape)
 
         molar_composition = np.asarray(
-            [self.reshape_1d_input(mol_comp) for mol_comp in molar_composition])
+            [self.reshape_input(mol_comp) for mol_comp in molar_composition])
         molar_composition = gf.rescale(
             molar_composition, self.fluid.gas.mole_fraction.shape)
+
+        flux = np.asarray([self.reshape_input(item) for item in flux])
+        flux = gf.rescale(flux, self.fluid.gas.mole_fraction.shape)
         if self.initialize:
             self.fluid.update(temperature, pressure, molar_composition)
         else:
@@ -117,19 +130,29 @@ class GDLDiffusionTransport(DiffusionTransport):
                 {self.transport_type: [self.gas_diff_coeff.d_eff[i],
                                        self.gas_diff_coeff.d_eff[i],
                                        self.gas_diff_coeff.d_eff[i]]})
+            trans_layer.conductance['diffusion'][:, 0:5, :, 0:10] = 1e-16
+            # print(test)
 
         for i, lin_sys in enumerate(self.linear_systems):
-            axes = (0,)
-            indices = (1,)
-            lin_sys.set_neumann_boundary_conditions(
-                boundary_flux[i], axes=axes, indices=indices)
-            axes = (0, 2)
-            indices = (0, 1)
-            bc_concentration = mf.get_axis_values(
+            #
+            # axes = (0,)
+            # indices = (-1,)
+            axes = self.boundary_patches['Neumann']['axes']
+            indices = self.boundary_patches['Neumann']['indices']
+            # lin_sys.set_neumann_boundary_conditions(
+            #     boundary_flux[i], axes=axes, indices=indices)
+            # axes = (0, 2)
+            # indices = (0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
+            axes = self.boundary_patches['Dirichlet']['axes']
+            indices = self.boundary_patches['Dirichlet']['indices']
+            boundary_concentration = mf.get_axis_values(
                     boundary_composition[i], axes=axes, indices=indices)
-            lin_sys.set_dirichlet_boundary_conditions(
-                bc_concentration, axes=axes, indices=indices)
-            lin_sys.update()
+            # lin_sys.set_dirichlet_boundary_conditions(
+            #     boundary_concentration, axes=axes, indices=indices)
+            boundary_conditions = self.boundary_patches
+            boundary_conditions['Neumann']['values'] = boundary_flux[i]
+            boundary_conditions['Dirichlet']['values'] = boundary_concentration
+            lin_sys.update(rhs_values=boundary_conditions)
 
         # Update species transport for inert species
         if isinstance(self.fluid, (fl.GasMixture, fl.CanteraGasMixture)):
@@ -143,11 +166,31 @@ class GDLDiffusionTransport(DiffusionTransport):
         concentrations = [lin_sys.solution_array for
                           lin_sys in self.linear_systems]
         active_concentrations = np.sum(concentrations, axis=0)
+        total_gas_concentration = gf.rescale(total_gas_concentration,
+                                             active_concentrations.shape)
         inert_concentration = total_gas_concentration - active_concentrations
         concentrations.insert(self.id_inert, inert_concentration)
         concentrations = np.asarray(concentrations)
+        self.concentrations[:] = concentrations
+        show_concentrations = np.round(np.moveaxis(concentrations,
+                                       (0, 1, 2, 3), (0, 2, 1, 3)), 2)
+        conductances = [lin_sys.conductance for lin_sys in self.linear_systems]
+        # show_conductances = np.round(np.)
         self.initialize = False
 
     @staticmethod
-    def reshape_1d_input(array):
+    def reshape_1d_input(array: np.ndarray):
         return np.moveaxis(np.asarray([[array,],]), (0, 1, 2), (0, 2, 1))
+
+    @staticmethod
+    def reshape_2d_input(array: np.ndarray):
+        return np.moveaxis(np.asarray([array,]), (0, 1, 2), (0, 1, 2))
+
+    def reshape_input(self, array: np.ndarray):
+        array = np.asarray(array)
+        if array.ndim == 1:
+            return self.reshape_1d_input(array)
+        elif array.ndim == 2:
+            return self.reshape_2d_input(array)
+        else:
+            raise ValueError('only 1- or 2-dimensional array allowed')
