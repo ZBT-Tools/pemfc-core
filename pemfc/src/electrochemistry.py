@@ -1,5 +1,6 @@
 # General imports
 from abc import ABC
+import copy
 import numpy as np
 from scipy import optimize
 
@@ -58,11 +59,7 @@ class ElectrochemistryModel(ABC):
         self.index_cat = shape[0]
         # Characteristic current density, see (Kulikovsky, 2013)
         self.i_star = self.prot_con_cl * self.tafel_slope / self.th_cl
-        # Concentration at channel inlet
-        self.conc_in = None
-        # Limiting current density due to diffusion through the gdl
-        # at channel inlet (calculated when inlet concentration is known)
-        self.i_lim_star = None
+
         # Numerical parameters for tangent line extension at limiting current
         self.conc_eps = input_dict['c_eps']
         self.delta_i = input_dict['delta_i']
@@ -83,7 +80,8 @@ class ElectrochemistryModel(ABC):
         self.updated_v_loss = False
         self.corrected_current_density = None
 
-    def update(self, current_density: np.ndarray, channel: chl.Channel,
+    def update(self, current_density: np.ndarray, concentration: np.ndarray,
+               reference_concentration: float,
                current_control: bool = True):
         """
         This function coordinates the program sequence
@@ -94,16 +92,21 @@ class ElectrochemistryModel(ABC):
             raise ValueError('current density became smaller 0')
         if not current_control and self.updated_v_loss:
             self.corrected_current_density = \
-                self.calc_current_density(current_density, channel, self.v_loss)
+                self.calc_current_density(current_density,
+                                          concentration,
+                                          reference_concentration, self.v_loss)
         if current_control or self.corrected_current_density is None:
             corrected_current_density = current_density
         else:
             corrected_current_density = self.corrected_current_density
-        self.update_voltage_loss(corrected_current_density, channel)
+        self.update_voltage_loss(corrected_current_density, concentration,
+                                 reference_concentration)
 
     def update_voltage_loss(self, current_density: np.ndarray,
-                            channel: chl.Channel):
-        eta = self.calc_electrode_loss(current_density, channel)
+                            concentration: np.ndarray,
+                            reference_concentration: float):
+        eta = self.calc_electrode_loss(current_density, concentration,
+                                       reference_concentration)
         self.v_loss[:] = eta
         self.updated_v_loss = True
 
@@ -137,6 +140,7 @@ class ElectrochemistryModel(ABC):
         """
         # try:
         i_hat = current_density / self.i_star
+        i_hat[i_hat < 0.0] = 0.0
         short_save = np.sqrt(2. * i_hat)
         beta = \
             short_save / (1. + np.sqrt(1.12 * i_hat) * np.exp(short_save)) \
@@ -144,15 +148,15 @@ class ElectrochemistryModel(ABC):
         # except FloatingPointError:
         #     test = np.any(current_density < 0.0)
         #     raise
-        # try:
-        v_loss_cl_diff = \
-            ((self.prot_con_cl * self.tafel_slope ** 2.)
-             / (4. * self.faraday * self.diff_coeff_cl * conc)
-             * (current_density / self.i_star
-                - np.log10(1. + np.square(current_density) /
-                           (self.i_star ** 2. * beta ** 2.)))) / var
-        # except FloatingPointError:
-        #     raise
+        try:
+            v_loss_cl_diff = \
+                ((self.prot_con_cl * self.tafel_slope ** 2.)
+                 / (4. * self.faraday * self.diff_coeff_cl * conc)
+                 * (current_density / self.i_star
+                    - np.log10(1. + np.square(current_density) /
+                               (self.i_star ** 2. * beta ** 2.)))) / var
+        except FloatingPointError:
+            raise
         return v_loss_cl_diff
 
     def calc_transport_loss_diffusion_layer(self, var: np.ndarray):
@@ -170,44 +174,47 @@ class ElectrochemistryModel(ABC):
         return v_loss_gdl_diff
 
     def calc_electrode_loss(self, current_density: np.ndarray,
-                            channel: chl.Channel):
-
-        if hasattr(channel.fluid, 'gas'):
-            conc = channel.fluid.gas.concentration[self.id_fuel]
+                            concentration: np.ndarray,
+                            reference_concentration: float,
+                            inlet_concentration: float = None):
+        # conc_ele = ip.interpolate_1d(concentration)
+        # conc_ele = np.asarray([
+        #     conc_ele for i in range(current_density.shape[-1])]).transpose()
+        conc = concentration / reference_concentration
+        # TODO: Revisit calculation of critical current density
+        if inlet_concentration is None:
+            i_lim_star = (self.n_charge * self.faraday * concentration
+                          * self.diff_coeff_cl / self.th_cl)
+            i_crit = (conc - self.conc_eps) / self.delta_i
+            i_crit = (i_lim_star * (conc - self.conc_eps)
+                      / reference_concentration)
         else:
-            conc = channel.fluid.concentration[self.id_fuel]
+            # Limiting current density due to diffusion through the gdl
+            # at inlet (calculated when inlet concentration is known)
+            i_lim_star = (self.n_charge * self.faraday * inlet_concentration
+                          * self.diff_coeff_gdl_by_length)
 
-        conc_ref = np.max(conc[channel.id_in])
-        conc_ele = ip.interpolate_1d(conc)
-        conc_ele = np.asarray([
-            conc_ele for i in range(current_density.shape[-1])]).transpose()
-        conc_star = conc_ele / conc_ref
-        conc_in = conc[channel.id_in]
-        if conc_in != self.conc_in:
-            self.i_lim_star = (self.n_charge * self.faraday * conc_in
-                               * self.diff_coeff_gdl_by_length)
-            self.conc_in = conc_in
-        self.i_crit[:] = self.i_lim_star * (conc_ele - self.conc_eps) / conc_ref
+            i_crit = (i_lim_star * (conc - self.conc_eps)
+                      / reference_concentration)
 
-        id_lin = np.nonzero(current_density >= self.i_crit)
-        id_reg = np.nonzero(current_density < self.i_crit)
+        id_lin = np.nonzero(current_density >= i_crit)
+        id_reg = np.nonzero(current_density < i_crit)
         if id_lin[0].size:
-            i_crit = self.i_crit[id_lin]
-            conc_crit = conc_ele[id_lin]
+            i_crit = i_crit[id_lin]
+            conc_crit = conc[id_lin]
             conc_crit_stack = np.stack((conc_crit, conc_crit),
-                                        axis=conc_crit.ndim)
+                                       axis=conc_crit.ndim)
             i_crit_stack = np.stack(
                 (i_crit - self.delta_i, i_crit + self.delta_i),
                 axis=i_crit.ndim)
-            # conc_crit = conc_crit.transpose()
-            # i_crit = i_crit.transpose()
-            # if np.any(i_crit < 0.0):
-            #     raise ValueError
-            i_lim_star = self.i_lim_star[id_lin]
-            i_lim_star_stack = np.stack((i_lim_star, i_lim_star),
-                                        axis=i_lim_star.ndim)
+            i_lim_star_lin = copy.deepcopy(i_lim_star)
+            if i_lim_star_lin is not None:
+                i_lim_star_lin = i_lim_star_lin[id_lin]
+                i_lim_star_lin = np.stack((i_lim_star_lin, i_lim_star_lin),
+                                          axis=i_lim_star_lin.ndim)
             eta_crit_stack = self.calc_electrode_loss_kulikovsky(
-                i_crit_stack, conc_crit_stack, conc_ref, i_lim_star_stack)
+                i_crit_stack, conc_crit_stack, reference_concentration,
+                i_lim_star_lin)
 
             grad_eta = np.moveaxis(
                 np.gradient(eta_crit_stack, self.delta_i, axis=-1), -1, 0)[0]
@@ -218,26 +225,32 @@ class ElectrochemistryModel(ABC):
             # curr_lin = current_density[id_lin[0]] \
             #     + current_density[id_lin] - self.i_crit[id_lin]
             # eta_lin = grad_eta * curr_lin + b
-
+            if i_lim_star is not None:
+                i_lim_star = i_lim_star[id_reg]
             eta_reg = self.calc_electrode_loss_kulikovsky(
-                current_density[id_reg], conc_ele[id_reg], conc_ref,
-                self.i_lim_star[id_reg])
+                current_density[id_reg], conc[id_reg], reference_concentration,
+                i_lim_star)
             eta = np.zeros(current_density.shape)
             eta[id_lin] = eta_lin
             eta[id_reg] = eta_reg
             return eta
         else:
             return self.calc_electrode_loss_kulikovsky(
-                current_density, conc_ele, conc_ref, self.i_lim_star)
+                current_density, conc, reference_concentration, i_lim_star)
 
     def calc_electrode_loss_kulikovsky(
             self, current_density: np.ndarray, conc: np.ndarray,
-            conc_ref: float, i_lim_star: np.ndarray):
+            conc_ref: float, i_lim_star=None):
         """
         Calculates the full voltage losses of the electrode
         """
         conc_star = conc / conc_ref
-        var = 1. - current_density / (i_lim_star * conc_star)
+        if i_lim_star is None:
+            self.calc_gdl_diff_loss = False
+            var = 1.0
+        else:
+            var = 1. - current_density / (i_lim_star * conc_star)
+
         # var = np.where(var0 < 1e-4, 1e-4, var0)
         v_loss = np.zeros(current_density.shape)
         if self.calc_act_loss:
@@ -260,9 +273,12 @@ class ElectrochemistryModel(ABC):
         return v_loss
 
     def calc_current_density(self, current_density: np.ndarray,
-                             channel: chl.Channel, v_loss: np.ndarray):
+                             concentration: np.ndarray,
+                             reference_concentration: float,
+                             v_loss: np.ndarray):
         def func(curr_den: np.ndarray, over_pot: np.ndarray):
-            return self.calc_electrode_loss(curr_den, channel) - over_pot
+            return self.calc_electrode_loss(curr_den, concentration,
+                                            reference_concentration) - over_pot
         return np.asarray(optimize.newton(func, current_density,
                                           args=(v_loss,)))
 

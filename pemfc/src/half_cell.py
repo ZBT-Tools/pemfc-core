@@ -1,6 +1,7 @@
 # General imports
 import warnings
 import numpy as np
+from scipy import ndimage
 
 # Local module imports
 from . import transport_layer as tl, constants, flow_field as ff, channel as chl
@@ -9,6 +10,7 @@ from . import electrochemistry as electrochem
 from . import interpolation as ip
 from . import discretization as dsct
 from . import diffusion_transport as diff
+from . import global_functions as gf
 
 warnings.filterwarnings("ignore")
 
@@ -119,11 +121,9 @@ class HalfCell:
                                        self.discretization)
 
         # Initialize diffusion transport model
-
         nx = 10
         ny = self.discretization.shape[0]
         nz = 20
-        test = list(range(int(nz/2), nz))
 
         gdl_diffusion_dict = gde_dict.copy()
         gdl_diffusion_dict.update(
@@ -179,8 +179,24 @@ class HalfCell:
             concentration = self.channel.fluid.concentration
             self.gdl_diffusion.update(temperature, self.channel.pressure,
                                       concentration, mole_source)
-
-            self.electrochemistry.update(current_density, self.channel)
+            # Reshape 3D-concentration fields from the GDL-Diffusion sub-model
+            # to the reduced discretization in this model
+            # Take only the concentration at the CL-Interface
+            # (axis: 1, last index)
+            cl_concentration = (
+                self.gdl_diffusion.concentrations[self.id_fuel, -1, :, :])
+            reduced_shape = mole_source[self.id_fuel].shape
+            # Average along z-axis according to the reduced discretization
+            filter_size = (
+                int(cl_concentration.shape[-1] / reduced_shape[-1]))
+            cl_concentration = ndimage.uniform_filter(
+                cl_concentration, size=filter_size, axes=(-1,))
+            # Rescale to reduced discretization
+            cl_concentration = gf.rescale(cl_concentration, reduced_shape)
+            reference_concentration = np.max(self.channel.fluid.concentration[
+                self.id_fuel, self.channel.id_in])
+            self.electrochemistry.update(current_density, cl_concentration,
+                                         reference_concentration)
             # self.channel.mass_source[:], self.channel.mole_source[:] = (
             #     mass_source, mole_source)
             if update_channel:

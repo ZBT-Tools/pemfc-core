@@ -12,8 +12,8 @@
         "underrelaxation_factor": 0.5,
         "current_control": true,
         "operation_control": "Current",
-        "elements": 1,
-        "current_density": 10000.0,
+        "elements": 10,
+        "current_density": 15000.0,
         "average_cell_voltage": 0.5,
         "channel_land_discretization": true
     },
@@ -83,8 +83,8 @@
             "calc_act_loss": true,
             "calc_cl_diff_loss": true,
             "calc_gdl_diff_loss": true,
-            "c_eps": 0.1,
-            "delta_i": 5.0
+            "c_eps": 0.02,
+            "delta_i": 1e-3
         },
         "channel": {
             "name": "Cathode Channel",

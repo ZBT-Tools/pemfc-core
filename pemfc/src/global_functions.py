@@ -32,6 +32,10 @@ def full(shape, value):
     return result
 
 
+def neighbouring_average(array: np.ndarray):
+    return (array[:-1] + array[1:]) * 0.5
+
+
 def zeros_like(array):
     """faster than native numpy version"""
     if isinstance(array, np.ndarray):
@@ -352,8 +356,8 @@ def cartesian_product(*arrays):
 
 
 def linear_rescale_1d(arr: np.ndarray, new_shape: int):
-    x_old = np.arange(len(arr))
-    x_new = np.arange(new_shape)
+    x_old = neighbouring_average(np.linspace(0.0, 1.0, len(arr) + 1))
+    x_new = neighbouring_average(np.linspace(0.0, 1.0, new_shape + 1))
     return np.interp(x_new, x_old, arr)
 
 

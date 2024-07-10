@@ -162,9 +162,10 @@ class GDLDiffusionTransport(DiffusionTransport):
         total_gas_concentration = (
                 self.fluid.pressure / (gas_constant * self.fluid.temperature))
 
-        # TODO: Test diffusion calculation
         concentrations = [lin_sys.solution_array for
                           lin_sys in self.linear_systems]
+        concentrations = [np.where(conc < 0.0, 0.0, conc) for conc in
+                          concentrations]
         active_concentrations = np.sum(concentrations, axis=0)
         total_gas_concentration = gf.rescale(total_gas_concentration,
                                              active_concentrations.shape)
