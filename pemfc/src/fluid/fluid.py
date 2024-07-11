@@ -36,7 +36,9 @@ class DiscreteFluid(OutputObject1D, ABC):
                       'thermal_conductivity']
     TYPE_NAME = 'Base Fluid'
 
-    def __init__(self, array_shape, name, temperature=298.15, pressure=101325.0,
+    def __init__(self, array_shape: tuple, name: str,
+                 temperature: (float, np.ndarray) = 298.15,
+                 pressure: (float, np.ndarray) = 101325.0,
                  **kwargs):
         # print("__init__ for Fluid")
         super().__init__(name)
@@ -267,8 +269,10 @@ class ConstantFluid(DiscreteFluid):
 
     TYPE_NAME = 'Constant Fluid'
 
-    def __init__(self, array_shape, name, fluid_props, temperature=298.15,
-                 pressure=101325.0, **kwargs):
+    def __init__(self, array_shape: tuple, name: str,
+                 fluid_props: species.ConstantProperties,
+                 temperature: (float, np.ndarray) = 298.15,
+                 pressure: (float, np.ndarray) = 101325.0, **kwargs):
         # print("__init__ for IncompressibleFluid")
         super().__init__(array_shape, name, temperature, pressure, **kwargs)
         self.name = name

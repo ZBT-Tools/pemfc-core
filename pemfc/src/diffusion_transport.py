@@ -92,6 +92,13 @@ class GDLDiffusionTransport(DiffusionTransport):
         self.initialize = True
 
         self.boundary_patches = input_dict['boundary_patches']
+        neumann_axes = self.boundary_patches['Neumann']['axes']
+        neumann_indices = self.boundary_patches['Neumann']['indices']
+        neumann_shape = np.asarray(
+            [mf.get_axis_values(conc, neumann_axes, neumann_indices)
+             for i, conc in enumerate(self.concentrations)
+             if i != self.id_inert]).shape
+        self.flux_scaling_factors = np.zeros(neumann_shape)
         # Initialize Dirichlet boundary conditions at GDL-Channel interface
         # (z-index: 1); all other boundaries are flux boundaries;
         # specific boundary (rhs) values for GDL-Channel (concentration) and
@@ -164,6 +171,12 @@ class GDLDiffusionTransport(DiffusionTransport):
 
         concentrations = [lin_sys.solution_array for
                           lin_sys in self.linear_systems]
+        conc_array = np.array(concentrations)
+        show_concentrations = np.round(np.moveaxis(conc_array,
+                                       (0, 1, 2, 3), (0, 2, 1, 3)), 2)
+
+        self.flux_scaling_factors[:] = self.calc_flux_scaling_factors(
+            concentrations, boundary_composition)
         concentrations = [np.where(conc < 0.0, 0.0, conc) for conc in
                           concentrations]
         active_concentrations = np.sum(concentrations, axis=0)
@@ -178,6 +191,22 @@ class GDLDiffusionTransport(DiffusionTransport):
         conductances = [lin_sys.conductance for lin_sys in self.linear_systems]
         # show_conductances = np.round(np.)
         self.initialize = False
+
+    def calc_flux_scaling_factors(
+            self, neumann_bc_concentrations: (list, np.ndarray),
+            dirichlet_bc_concentrations: (list, np.ndarray)):
+        neumann_bc_axes = self.boundary_patches['Neumann']['axes']
+        neumann_bc_indices = self.boundary_patches['Neumann']['indices']
+        flux_boundary_concentrations = np.asarray([
+            mf.get_axis_values(conc, neumann_bc_axes, neumann_bc_indices)
+            for conc in neumann_bc_concentrations])
+        channel_concentration = np.asarray([
+            mf.get_axis_values(conc, neumann_bc_axes, neumann_bc_indices)
+            for conc in dirichlet_bc_concentrations])
+        flux_scaling_factors = (
+            (channel_concentration - flux_boundary_concentrations)
+            / channel_concentration)
+        return flux_scaling_factors
 
     @staticmethod
     def reshape_1d_input(array: np.ndarray):

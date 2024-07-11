@@ -121,9 +121,9 @@ class HalfCell:
                                        self.discretization)
 
         # Initialize diffusion transport model
-        nx = 10
+        nx = 4
         ny = self.discretization.shape[0]
-        nz = 20
+        nz = 8
 
         gdl_diffusion_dict = gde_dict.copy()
         gdl_diffusion_dict.update(
@@ -191,12 +191,18 @@ class HalfCell:
                 int(cl_concentration.shape[-1] / reduced_shape[-1]))
             cl_concentration = ndimage.uniform_filter(
                 cl_concentration, size=filter_size, axes=(-1,))
+            flux_scaling_factors = ndimage.uniform_filter(
+                self.gdl_diffusion.flux_scaling_factors[0],
+                size=filter_size, axes=(-1,))
             # Rescale to reduced discretization
             cl_concentration = gf.rescale(cl_concentration, reduced_shape)
+            flux_scaling_factors = gf.rescale(flux_scaling_factors, reduced_shape)
+
             reference_concentration = np.max(self.channel.fluid.concentration[
                 self.id_fuel, self.channel.id_in])
-            self.electrochemistry.update(current_density, cl_concentration,
-                                         reference_concentration)
+            self.electrochemistry.update(
+                current_density, cl_concentration, reference_concentration,
+                scaling_factors=flux_scaling_factors)
             # self.channel.mass_source[:], self.channel.mole_source[:] = (
             #     mass_source, mole_source)
             if update_channel:
