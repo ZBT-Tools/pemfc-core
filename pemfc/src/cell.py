@@ -220,6 +220,8 @@ class Cell(OutputObject2D):
             self.cathode.w_cross_flow[:] = self.membrane.water_flux * -1.0
             self.anode.w_cross_flow[:] = self.membrane.water_flux
 
+        mea_current_density_prev = (
+            self.current_density[self.layer_id['membrane']])
         mea_current_density = current_density[self.layer_id['membrane']]
         cathode_temperature = np.stack(
             [self.temp_layer[self.interface_id['cathode_bpp_gde']],

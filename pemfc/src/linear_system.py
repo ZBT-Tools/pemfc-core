@@ -1150,7 +1150,8 @@ class ElectricalSystem(StackLinearSystem):
             # cell.update_voltage_loss(v_diff[i])
         return voltage_array
 
-    def update_current_density(self, voltage_array, conductance):
+    def update_current_density(self, voltage_array, conductance,
+                               update_cells=False):
         """
         Calculates the current density in each layer of each in through-plane
         direction, i.e. the x-direction
@@ -1162,8 +1163,9 @@ class ElectricalSystem(StackLinearSystem):
              for cell in self.cells])
         current_density = v_diff * conductance / active_area_array
         self.current_density[:] = current_density
-        for i, cell in enumerate(self.cells):
-            cell.current_density[:] = current_density[i]
+        if update_cells:
+            for i, cell in enumerate(self.cells):
+                cell.current_density[:] = current_density[i]
         return current_density
 
 
