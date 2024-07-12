@@ -203,7 +203,7 @@ class Cell(OutputObject2D):
             * alpha_amb * self.cathode.flow_field.external_surface_factor
         return k_amb
 
-    def update(self, current_density, update_channel=False,
+    def update(self, current_density, update_channel=True,
                current_control=True, urf=None):
         """
         This function coordinates the program sequence

@@ -23,28 +23,41 @@ class DiffusionTransport(ABC):
 
         self.dict = input_dict
         self.discretization = discretization
-        self.fluid = fluid.copy(discretization.shape, plot_axis=-2)
-        if isinstance(fluid, (fl.GasMixture, fl.CanteraGasMixture)):
-            self.gas_diff_coeff = (
-                dc.MixtureAveragedDiffusionCoefficient(self.fluid))
-        elif isinstance(fluid, (fl.TwoPhaseMixture, fl.CanteraTwoPhaseMixture)):
-            self.gas_diff_coeff = (
-                dc.MixtureAveragedDiffusionCoefficient(self.fluid.gas))
-        else:
-            raise TypeError(
-                'fluid must be of types (GasMixture, CanteraGasMixture, '
-                'TwoPhaseMixture, or CanteraTwoPhaseMixture)')
         self.id_inert = inert_id
         self.transport_type = 'diffusion'
-        input_dict['effective'] = True
-        self.transport_layers = [
-            tl.TransportLayer.create(
-                input_dict,
-                {self.transport_type: [self.gas_diff_coeff.d_eff[i],
-                                       self.gas_diff_coeff.d_eff[i],
-                                       self.gas_diff_coeff.d_eff[i]]},
-                discretization)
-            for i in range(self.fluid.n_species) if i != self.id_inert]
+        self.fluid = fluid.copy(discretization.shape, plot_axis=-2)
+        if 'diffusion_coefficient' in input_dict:
+            input_dict['effective'] = False
+            self.constant_diffusion = True
+            self.transport_layers = [
+                tl.TransportLayer.create(
+                    input_dict,
+                    {self.transport_type: input_dict['diffusion_coefficient']},
+                    discretization)
+                for i in range(self.fluid.n_species) if i != self.id_inert]
+        else:
+            self.constant_diffusion = False
+            if isinstance(fluid, (fl.GasMixture, fl.CanteraGasMixture)):
+                self.gas_diff_coeff = (
+                    dc.MixtureAveragedDiffusionCoefficient(self.fluid))
+            elif isinstance(fluid, (fl.TwoPhaseMixture,
+                                    fl.CanteraTwoPhaseMixture)):
+                self.gas_diff_coeff = (
+                    dc.MixtureAveragedDiffusionCoefficient(self.fluid.gas))
+            else:
+                raise TypeError(
+                    'fluid must be of types (GasMixture, CanteraGasMixture, '
+                    'TwoPhaseMixture, or CanteraTwoPhaseMixture)')
+            input_dict['volume_fraction'] = input_dict['porosity']
+            input_dict['effective'] = True
+            self.transport_layers = [
+                tl.TransportLayer.create(
+                    input_dict,
+                    {self.transport_type: [self.gas_diff_coeff.d_eff[i],
+                                           self.gas_diff_coeff.d_eff[i],
+                                           self.gas_diff_coeff.d_eff[i]]},
+                    discretization)
+                for i in range(self.fluid.n_species) if i != self.id_inert]
 
         self.linear_systems = [
             ls.BasicLinearSystem.create(item, self.transport_type) for item in
@@ -131,12 +144,13 @@ class GDLDiffusionTransport(DiffusionTransport):
             if i != self.id_inert]
         boundary_flux = [flux[i] for i in range(len(flux)) if i !=
                          self.id_inert]
-        self.gas_diff_coeff.update()
-        for i, trans_layer in enumerate(self.transport_layers):
-            trans_layer.update(
-                {self.transport_type: [self.gas_diff_coeff.d_eff[i],
-                                       self.gas_diff_coeff.d_eff[i],
-                                       self.gas_diff_coeff.d_eff[i]]})
+        if not self.constant_diffusion:
+            self.gas_diff_coeff.update()
+            for i, trans_layer in enumerate(self.transport_layers):
+                trans_layer.update(
+                    {self.transport_type: [self.gas_diff_coeff.d_eff[i],
+                                           self.gas_diff_coeff.d_eff[i],
+                                           self.gas_diff_coeff.d_eff[i]]})
             # trans_layer.conductance['diffusion'][:, 0:5, :, 0:10] = 1e-16
             # print(test)
 
@@ -216,11 +230,12 @@ class GDLDiffusionTransport(DiffusionTransport):
     def reshape_2d_input(array: np.ndarray):
         return np.moveaxis(np.asarray([array,]), (0, 1, 2), (0, 1, 2))
 
-    def reshape_input(self, array: np.ndarray):
+    @classmethod
+    def reshape_input(cls, array: np.ndarray):
         array = np.asarray(array)
         if array.ndim == 1:
-            return self.reshape_1d_input(array)
+            return cls.reshape_1d_input(array)
         elif array.ndim == 2:
-            return self.reshape_2d_input(array)
+            return cls.reshape_2d_input(array)
         else:
             raise ValueError('only 1- or 2-dimensional array allowed')

@@ -41,7 +41,7 @@ class TransportLayer(oo.OutputObject2D, ABC):
         self.dict = input_dict
         self.thickness: float = 0.0
         self.transport_properties = transport_properties
-        self.porosity = input_dict.get('porosity', 0.0)
+        self.volume_fraction = input_dict.get('volume_fraction', 1.0)
         self.bruggeman_exponent = input_dict.get('bruggeman_exponent', 1.5)
         self.effective = input_dict.get('effective', False)
         self.geometric_factors: np.ndarray = np.asarray([0.0, 0.0, 0.0])
@@ -109,23 +109,26 @@ class TransportLayer(oo.OutputObject2D, ABC):
         conductance_a = np.asarray(conductance_a)
         conductance_b = np.asarray(conductance_b)
         if mode == 'serial':
-            # inf_array = np.ones(conductance_a.shape) * 1e16
-            # zero_array = np.zeros(conductance_a.shape)
-            # resistance_a = np.divide(
-            #     1.0, conductance_a, out=inf_array, where=conductance_a != 0.0)
-            # resistance_b = np.divide(
-            #     1.0, conductance_b, out=inf_array, where=conductance_a != 0.0)
-            # resistance_sum = resistance_a + resistance_b
-            # return np.divide(
-            #     1.0, resistance_sum, out=zero_array,
-            #     where=resistance_sum != 0.0)
+            inf_array = np.ones(conductance_a.shape) * 1e16
+            zero_array = np.zeros(conductance_a.shape)
+            resistance_a = np.divide(
+                1.0, conductance_a, out=inf_array, where=conductance_a != 0.0)
+            resistance_b = np.divide(
+                1.0, conductance_b, out=inf_array, where=conductance_a != 0.0)
+            resistance_sum = resistance_a + resistance_b
+            return np.divide(
+                1.0, resistance_sum, out=zero_array,
+                where=resistance_sum != 0.0)
             # TODO: Check serial and parallel conductance connection. Results
             #  seem more plausible with current implementation, which seems equal
             #  to the parallel implementation
-            try:
-                return 1.0 / (1.0 / (conductance_a + conductance_b))
-            except FloatingPointError:
-                raise
+            # try:
+            #     result = 1.0 / (1.0 / (conductance_a + conductance_b))
+            #     result_2 = conductance_a + conductance_b
+            #     test = np.all(result == result_2)
+            #     return result_3
+            # except FloatingPointError:
+            #     raise
         elif mode == 'parallel':
             return conductance_a + conductance_b
         else:
@@ -184,8 +187,7 @@ class TransportLayer2D(TransportLayer):
             self.discretization.dx[0] / self.discretization.dx[1] * self.thickness
             ])
         if self.effective:
-            result *= (
-                    (1.0 - self.porosity) ** self.bruggeman_exponent)
+            result *= self.volume_fraction ** self.bruggeman_exponent
         return result
 
 
@@ -215,8 +217,7 @@ class TransportLayer3D(TransportLayer):
             self.discretization.d_area[2] / self.discretization.dx[2]
             ])
         if self.effective:
-            result *= (
-                    (1.0 - self.porosity) ** self.bruggeman_exponent)
+            result *= self.volume_fraction ** self.bruggeman_exponent
         return result
 
 

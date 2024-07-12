@@ -11,6 +11,7 @@ import json
 from . import stack
 from . import output
 from . import global_functions as gf
+from . import global_state as gs
 # from data import input_dicts
 
 # if 'main_app.py' in sys.argv[0]:
@@ -130,6 +131,8 @@ class Simulation:
                 if len(target_value) < 1:
                     print(counter)
                 counter += 1
+                gs.global_state.iteration = counter
+                gs.global_state.error = current_error + temp_error
                 if ((current_error < self.it_crit and temp_error < self.it_crit)
                         and counter > self.min_it) or counter > self.max_it:
                     break

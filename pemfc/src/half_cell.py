@@ -11,6 +11,7 @@ from . import interpolation as ip
 from . import discretization as dsct
 from . import diffusion_transport as diff
 from . import global_functions as gf
+from . import global_state as gs
 
 warnings.filterwarnings("ignore")
 
@@ -120,32 +121,42 @@ class HalfCell:
         self.gde = tl.TransportLayer2D(gde_dict, gde_transport_properties,
                                        self.discretization)
 
-        # Initialize diffusion transport model
-        nx = 4
-        ny = self.discretization.shape[0]
-        nz = 8
+        self.calc_gdl_diffusion = True
+        if self.calc_gdl_diffusion:
+            gdl_diffusion_dict = gde_dict.copy()
+            gdl_diffusion_dict.update(
+                {'name': self.name + ' GDL',
+                 'thickness': electrochemistry_dict['thickness_gdl'],
+                 'boundary_patches': {
+                     'Neumann': {'axes': (0,),
+                                 'indices': (-1,)}}})
+            # gdl_diffusion_dict['diffusion_coefficient'] = (
+            #     electrochemistry_dict['diff_coeff_gdl'])
+            if self.channel_land_discretization:
+                # Initialize diffusion transport model
+                nx = 4
+                ny = self.discretization.shape[0]
+                nz = 8
+                gdl_diffusion_dict['boundary_patches']['Dirichlet'] = {
+                    'axes': (0, 2), 'indices': (0, list(range(int(nz/2), nz)))}
+            else:
+                nx = 2
+                ny = self.discretization.shape[0]
+                nz = 1
+                gdl_diffusion_dict['boundary_patches']['Dirichlet'] = {
+                    'axes': (0,), 'indices': (0,)}
+            discretization_dict = {
+                'shape': (nx, ny, nz),
+                'depth': gdl_diffusion_dict['thickness'],
+                'length': self.discretization.length[0],
+                'width': self.discretization.length[1] * 0.5}
 
-        gdl_diffusion_dict = gde_dict.copy()
-        gdl_diffusion_dict.update(
-            {'name': self.name + ' GDL',
-             'thickness': electrochemistry_dict['thickness_gdl'],
-             'boundary_patches': {
-                 'Neumann': {'axes': (0,),
-                             'indices': (-1,)},
-                 'Dirichlet': {'axes': (0, 2),
-                               'indices': (0, list(range(int(nz/2), nz)))}}})
-        discretization_dict = {
-            'shape': (nx, ny, nz),
-            'depth': gdl_diffusion_dict['thickness'],
-            'length': self.discretization.length[0],
-            'width': self.discretization.length[1] * 0.5}
-
-        gdl_discretization = dsct.Discretization(discretization_dict)
-        self.gdl_diffusion = diff.DiffusionTransport.create(
-            gdl_diffusion_dict, self.channel.fluid,
-            dsct.Discretization3D.create_from(gdl_discretization,
-                                              gdl_diffusion_dict['thickness']),
-            self.id_inert)
+            gdl_discretization = dsct.Discretization(discretization_dict)
+            self.gdl_diffusion = diff.DiffusionTransport.create(
+                gdl_diffusion_dict, self.channel.fluid,
+                dsct.Discretization3D.create_from(gdl_discretization,
+                                                  gdl_diffusion_dict['thickness']),
+                self.id_inert)
 
         self.thickness = self.bpp.thickness + self.gde.thickness
 
@@ -166,51 +177,72 @@ class HalfCell:
         self.voltage_loss = np.zeros(self.gde.discretization.shape)
 
     def update(self, current_density: np.ndarray,
-               temperature: np.ndarray, update_channel=False,
+               temperature: np.ndarray, update_channel=True,
                current_control=True):
         """
         This function coordinates the program sequence
         """
-        if not self.break_program:
-            # self.channel.update(mole_flow_in, mole_source)
-            # self.channel.mole_flow[:] = mole_flow_in
-            current = self.surface_flux_to_channel_source(current_density)
-            mass_source, mole_source = self.calc_mass_source(current_density)
-            concentration = self.channel.fluid.concentration
-            self.gdl_diffusion.update(temperature, self.channel.pressure,
-                                      concentration, mole_source)
-            # Reshape 3D-concentration fields from the GDL-Diffusion sub-model
-            # to the reduced discretization in this model
-            # Take only the concentration at the CL-Interface
-            # (axis: 1, last index)
-            cl_concentration = (
-                self.gdl_diffusion.concentrations[self.id_fuel, -1, :, :])
-            reduced_shape = mole_source[self.id_fuel].shape
-            # Average along z-axis according to the reduced discretization
-            filter_size = (
-                int(cl_concentration.shape[-1] / reduced_shape[-1]))
-            cl_concentration = ndimage.uniform_filter(
-                cl_concentration, size=filter_size, axes=(-1,))
-            flux_scaling_factors = ndimage.uniform_filter(
-                self.gdl_diffusion.flux_scaling_factors[0],
-                size=filter_size, axes=(-1,))
-            # Rescale to reduced discretization
-            cl_concentration = gf.rescale(cl_concentration, reduced_shape)
-            flux_scaling_factors = gf.rescale(flux_scaling_factors, reduced_shape)
 
-            reference_concentration = np.max(self.channel.fluid.concentration[
-                self.id_fuel, self.channel.id_in])
-            self.electrochemistry.update(
-                current_density, cl_concentration, reference_concentration,
-                scaling_factors=flux_scaling_factors)
-            # self.channel.mass_source[:], self.channel.mole_source[:] = (
-            #     mass_source, mole_source)
+        if not self.break_program:
+            # self.channel.update(mole_flow_in, mole_flux)
+            # self.channel.mole_flow[:] = mole_flow_in
+            mass_flux, mole_flux = self.calc_species_flux(current_density)
+            channel_concentration = self.channel.fluid.concentration
+            reference_fuel_concentration = np.max(
+                channel_concentration[self.id_fuel, self.channel.id_in])
+            if self.calc_gdl_diffusion:
+                self.gdl_diffusion.update(temperature, self.channel.pressure,
+                                          channel_concentration, mole_flux)
+                # Reshape 3D-concentration fields from the GDL-Diffusion
+                # sub-model to the reduced discretization in this model
+                # Take only the concentration at the CL-Interface
+                # (axis: 1, last index)
+                fuel_cl_concentration = (
+                    self.gdl_diffusion.concentrations[self.id_fuel, -1, :, :])
+                reduced_shape = mole_flux[self.id_fuel].shape
+                # Average along z-axis according to the reduced discretization
+                filter_size = (
+                    int(fuel_cl_concentration.shape[-1] / reduced_shape[-1]))
+                fuel_cl_concentration = ndimage.uniform_filter(
+                    fuel_cl_concentration, size=filter_size, axes=(-1,))
+                flux_scaling_factors = ndimage.uniform_filter(
+                    self.gdl_diffusion.flux_scaling_factors[0],
+                    size=filter_size, axes=(-1,))
+                # Rescale to reduced discretization
+                fuel_cl_concentration = gf.rescale(fuel_cl_concentration,
+                                                   reduced_shape)
+                flux_scaling_factors = gf.rescale(flux_scaling_factors,
+                                                  reduced_shape)
+                if gs.global_state.iteration == 20:
+                    print('test')
+                self.electrochemistry.update(
+                    current_density, fuel_cl_concentration,
+                    reference_fuel_concentration,
+                    scaling_factors=flux_scaling_factors)
+            else:
+                fuel_gdl_concentration = np.asarray([
+                    ip.interpolate_1d(channel_concentration[self.id_fuel])
+                    for i in range(current_density.shape[-1])]).transpose()
+                self.electrochemistry.update(
+                    current_density, fuel_gdl_concentration,
+                    reference_fuel_concentration,
+                    inlet_concentration=reference_fuel_concentration)
+
             if update_channel:
-                self.channel.update(update_mass=True, update_flow=False,
-                                    update_heat=False, update_fluid=True)
+                # Calculate mole and mass source from fluxes
+                mass_source = self.surface_flux_to_channel_source(
+                    mass_flux)
+                mole_source = self.surface_flux_to_channel_source(mole_flux)
+                self.channel.mass_source[:], self.channel.mole_source[:] = (
+                    mass_source, mole_source)
+                # self.channel.update(update_mass=True, update_flow=False,
+                #                     update_heat=False, update_fluid=True)
+            # if gs.global_state.iteration == 50:
+            #     print('test')
             self.update_voltage_loss(current_density)
 
             # Calculate stoichiometry
+            current = self.surface_flux_to_channel_source(current_density)
             self.inlet_stoi = (
                 self.channel.mole_flow[self.id_fuel, self.channel.id_in]
                 * self.faraday * self.n_charge
@@ -239,32 +271,35 @@ class HalfCell:
         mass_flow_in = mole_flow_in * self.channel.fluid.species_mw
         return mass_flow_in, mole_flow_in
 
-    def calc_mass_source(self, current_density: np.ndarray):
+    def calc_species_flux(self, current_density: np.ndarray):
         if not isinstance(current_density, np.ndarray):
             current_density = np.asarray(current_density)
-        mole_source = np.zeros((self.channel.fluid.n_species,
-                                *current_density.shape))
+        mole_flux = np.zeros((self.channel.fluid.n_species,
+                             *current_density.shape))
 
-        for i in range(len(mole_source)):
-            mole_source[i] = (current_density * self.n_stoi[i]
-                              / (self.n_charge * self.faraday))
+        for i in range(len(mole_flux)):
+            mole_flux[i] = (current_density * self.n_stoi[i]
+                            / (self.n_charge * self.faraday))
 
         # Water cross flow
         # water_cross_source = self.surface_flux_to_channel_source(
         #     self.w_cross_flow)
-        mole_source[self.id_h2o] += self.w_cross_flow
+        mole_flux[self.id_h2o] += self.w_cross_flow
         # self.channel.flow_direction
-        mass_source = (mole_source.transpose()
-                       * self.channel.fluid.species_mw).transpose()
-        return mass_source, mole_source
+        mass_flux = (mole_flux.transpose()
+                     * self.channel.fluid.species_mw).transpose()
+        return mass_flux, mole_flux
 
     def surface_flux_to_channel_source(self, flux: np.ndarray):
         if np.isscalar(flux) or flux.ndim in (0, 1):
             return np.sum(self.discretization.d_area, axis=0) * flux
         elif flux.ndim == 2:
             return np.sum(self.discretization.d_area * flux, axis=1)
+        elif flux.ndim == 3 and flux.shape[0] == self.channel.fluid.n_species:
+            return np.asarray([self.surface_flux_to_channel_source(flux[i])
+                               for i in range(self.channel.fluid.n_species)])
         else:
-            raise ValueError('flux variable must be one- or'
+            raise ValueError('flux variable must be one- or '
                              'two-dimensional numpy array')
 
     def update_voltage_loss(self, current_density: np.ndarray):

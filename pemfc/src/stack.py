@@ -271,7 +271,7 @@ class Stack(OutputObject1D):
         for i, cell in enumerate(self.cells):
             cell.update(self.current_density[i, :],
                         current_control=self.current_control,
-                        update_channel=False)
+                        update_channel=True)
             if cell.break_program:
                 self.break_program = True
                 break
