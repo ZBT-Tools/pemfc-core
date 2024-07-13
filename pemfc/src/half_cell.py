@@ -191,6 +191,10 @@ class HalfCell:
             reference_fuel_concentration = np.max(
                 channel_concentration[self.id_fuel, self.channel.id_in])
             if self.calc_gdl_diffusion:
+                # Explicitly calculate diffusion in GDL and use calculated
+                # concentrations at CL-GDL-Interface for the electrochemistry
+                # model, therefore the electrochemistry model does not need
+                # to account for GDL losses anymore
                 self.gdl_diffusion.update(temperature, self.channel.pressure,
                                           channel_concentration, mole_flux)
                 # Reshape 3D-concentration fields from the GDL-Diffusion
@@ -206,19 +210,28 @@ class HalfCell:
                 fuel_cl_concentration = ndimage.uniform_filter(
                     fuel_cl_concentration, size=filter_size, axes=(-1,))
                 flux_scaling_factors = ndimage.uniform_filter(
-                    self.gdl_diffusion.flux_scaling_factors[0],
+                    self.gdl_diffusion.flux_scaling_factors[self.id_fuel],
+                    size=filter_size, axes=(-1,))
+                diff_coeff_by_length = ndimage.uniform_filter(
+                    self.gdl_diffusion.diff_coeff_by_length[self.id_fuel],
                     size=filter_size, axes=(-1,))
                 # Rescale to reduced discretization
                 fuel_cl_concentration = gf.rescale(fuel_cl_concentration,
                                                    reduced_shape)
                 flux_scaling_factors = gf.rescale(flux_scaling_factors,
                                                   reduced_shape)
-                if gs.global_state.iteration == 20:
-                    print('test')
+                diff_coeff_by_length = gf.rescale(diff_coeff_by_length,
+                                                  reduced_shape)
+                # if gs.global_state.iteration == 20:
+                #     print('test')
+                fuel_gdl_concentration = np.asarray([
+                    ip.interpolate_1d(channel_concentration[self.id_fuel])
+                    for i in range(current_density.shape[-1])]).transpose()
                 self.electrochemistry.update(
                     current_density, fuel_cl_concentration,
                     reference_fuel_concentration,
-                    scaling_factors=flux_scaling_factors)
+                    scaling_factors=flux_scaling_factors,
+                    inlet_concentration=reference_fuel_concentration)
             else:
                 fuel_gdl_concentration = np.asarray([
                     ip.interpolate_1d(channel_concentration[self.id_fuel])

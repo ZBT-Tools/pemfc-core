@@ -2,17 +2,17 @@
     "stack": {
         "cell_number": 1,
         "cool_flow": true,
-        "calc_temperature": true,
+        "calc_temperature": false,
         "calc_current_density": true
     },
     "simulation": {
-        "maximum_iteration": 500,
+        "maximum_iteration": 300,
         "minimum_iteration": 20,
         "convergence_criteria": 1e-09,
         "underrelaxation_factor": 0.9,
         "current_control": true,
         "operation_control": "Current",
-        "elements": 20,
+        "elements": 10,
         "current_density": 30000.0,
         "average_cell_voltage": 0.5,
         "channel_land_discretization": true

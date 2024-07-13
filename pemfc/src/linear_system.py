@@ -294,6 +294,10 @@ class BasicLinearSystem(LinearSystem):
                 self.set_dirichlet_boundary_conditions(
                     dirichlet_dict['values'], dirichlet_dict['axes'],
                     dirichlet_dict['indices'])
+            # if 'Sources' in rhs_values:
+        # TODO: Enable so simply add source term to domain,
+        #  for condensation/evaporation in two-phase flow, also consider in
+        #  temperature model
         # self.rhs[:] = self.rhs_const + self.rhs_dyn
 
     def update_matrix(self, *args, **kwargs):

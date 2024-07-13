@@ -114,6 +114,12 @@ class ElectrochemistryModel(ABC):
             i_lim_star = current_density / scaling_factors
             i_crit = i_lim_star * 1.1
             gdl_loss = False
+            # diff_coeff_gdl_by_length = kwargs['scaling_factors']
+            # i_lim_star = (self.n_charge * self.faraday * inlet_concentration
+            #               * diff_coeff_gdl_by_length)
+            # i_crit = (i_lim_star * (concentration - self.conc_eps)
+            #           / reference_concentration)
+            # gdl_loss = True
         else:
             # Additional in-plane diffusion resistance for
             # channel-land-discretization with channel located at index 1 and
@@ -142,7 +148,7 @@ class ElectrochemistryModel(ABC):
         #  iteration when approaching limiting currents
         id_lin = np.nonzero(current_density > i_crit)
         id_reg = np.nonzero(current_density <= i_crit)
-        if gs.global_state.iteration == 40:
+        if gs.global_state.iteration == 50:
             print('test')
         if id_lin[0].size:
             i_crit_lin = np.copy(i_crit[id_lin])
