@@ -8,7 +8,8 @@ import numpy as np
 from scipy import linalg as sp_la
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
-# import pemfc.src.matrix_functions as mtx_func
+from dataclasses import dataclass
+
 # Local module imports
 from . import (
     stack as stack_module, channel as chl, matrix_functions as mtx_func,
@@ -121,29 +122,51 @@ class LinearSystem(ABC):
     #     return conductance_list
 
     @staticmethod
-    def shift_nodes(conductance: list, axis=0, **kwargs):
-        conductance = [np.asarray(item) for item in conductance]
-        if len(conductance) != conductance[0].ndim:
+    def shift_nodes(node_values: (list, np.ndarray), axis, **kwargs):
+        node_values = [np.asarray(item) for item in node_values]
+        if len(node_values) != node_values[0].ndim:
             raise ValueError('conductance values must be given for '
                              'all dimensions')
-        shift_axes = tuple(i for i in range(len(conductance)) if i != axis)
+        shift_axes = tuple(i for i in range(len(node_values)) if i != axis)
         if axis == -1:
-            axis = conductance[0].ndim - 1
+            axis = node_values[0].ndim - 1
         for i in shift_axes:
-            old_shape = conductance[i].shape
+            old_shape = node_values[i].shape
             new_shape = tuple(size + 1 if j == axis else size
                               for j, size in enumerate(old_shape))
-            new_conductance = np.zeros(new_shape)
-            half_values = 0.5 * np.moveaxis(conductance[i], axis, 0)
-            np.moveaxis(new_conductance, axis, 0)[:-1] += half_values
-            np.moveaxis(new_conductance, axis, 0)[1:] += half_values
-            conductance[i] = new_conductance
-        return conductance
+            new_values = np.zeros(new_shape)
+            half_values = 0.5 * np.moveaxis(node_values[i], axis, 0)
+            np.moveaxis(new_values, axis, 0)[:-1] += half_values
+            np.moveaxis(new_values, axis, 0)[1:] += half_values
+            node_values[i] = new_values
+        return node_values
 
 
-class BasicLinearSystem(LinearSystem):
+@dataclass
+class BoundaryData:
+    values: np.ndarray
+    axes: tuple
+    indices: tuple
+
+
+@dataclass
+class SourceData:
+    values: np.ndarray
+    indices: tuple = None
+    volumetric: bool = True
+
+
+@dataclass
+class RHSInput:
+    neumann_bc: BoundaryData = None
+    dirichlet_bc: BoundaryData = None
+    volumetric_sources: SourceData = None
+
+
+class BasicLinearSystem(LinearSystem, ABC):
     def __init__(self, transport_layer: tl.TransportLayer, transport_type: str,
-                 init_value=0.0):
+                 init_value=0.0, shift_axis=None):
+        self.shift_axis = shift_axis
         self.transport_layer = transport_layer
         self.type = transport_type
         conductance = self.transport_layer.conductance[self.type]
@@ -171,24 +194,31 @@ class BasicLinearSystem(LinearSystem):
         # of the domain. This results in one more node in x-axis, due to the
         # assumption the Dirichlet boundary conditions are set on the
         # x-planes in this implementation.
-        conductance = self.shift_nodes(conductance_array, axis=0)
-        shape = conductance[1].shape
-        # With shifted nodes for axis 0, only the inter-nodal conductance for
-        # the remaining axes must be recalculated
-        conductance = [
-            conductance[0],
-            tl.TransportLayer.calc_inter_node_conductance(
-                conductance[1], axis=1),
-            tl.TransportLayer.calc_inter_node_conductance(
-                conductance[2], axis=2)]
+        if self.shift_axis is None:
+            conductance = [item for item in conductance_array]
+        else:
+
+            conductance = self.shift_nodes(conductance_array,
+                                           axis=self.shift_axis)
+            # With shifted nodes for axis=self.shift_axis, only the inter-nodal
+            # conductance for the remaining axes must be recalculated
+            conductance = [
+                tl.TransportLayer.calc_inter_node_conductance(
+                    conductance[i], axis=i)
+                if i != self.shift_axis else conductance[i]
+                for i in range(len(conductance))]
+        non_shifted_axes = [i for i in range(len(conductance)) if i !=
+                            self.shift_axis]
+        shape = conductance[non_shifted_axes[0]].shape
         return conductance, shape
 
     @classmethod
     def create(cls, transport_layer: tl.TransportLayer, transport_type: str,
-               init_value=0.0):
+               init_value=0.0, shift_axis=None):
         if isinstance(transport_layer, tl.TransportLayer2D):
-            return BasicLinearSystem2D(transport_layer, transport_type,
-                                       init_value)
+            raise NotImplementedError('class not implemented for pure'
+                                      'two-dimensional yet, try to use the '
+                                      'three-dimensional class')
         elif isinstance(transport_layer, tl.TransportLayer3D):
             return BasicLinearSystem3D(transport_layer, transport_type,
                                        init_value)
@@ -242,16 +272,10 @@ class BasicLinearSystem(LinearSystem):
             matrix[row_id] = row
         return matrix
 
+    @abstractmethod
     def set_neumann_boundary_conditions(
             self, values: (float, np.ndarray), axes: tuple, indices: tuple):
-
-        index_array = mtx_func.get_axis_values(self.index_array, axes, indices)
-        d_area = mtx_func.get_axis_values(
-            self.transport_layer.discretization.d_area[axes[0]], axes, indices)
-        source = values * d_area
-        self.add_explicit_source(
-            self.rhs, source.flatten(order='F'),
-            index_array.flatten(order='F'), replace=True)
+        pass
 
     def set_dirichlet_boundary_conditions(
             self, values: (float, np.ndarray), axes: tuple, indices: tuple):
@@ -262,6 +286,12 @@ class BasicLinearSystem(LinearSystem):
         self.set_implicit_fixed(self.mtx, index_vector)
         self.add_explicit_source(
             self.rhs, -values, index_vector, replace=True)
+
+    @abstractmethod
+    def add_source_values(
+            self, values: (float, np.ndarray), indices: (tuple, None) = None,
+            volumetric: bool = True):
+        pass
 
     def get_boundary_planes(self, axis):
         first_plane = np.moveaxis(self.index_array, axis, 0)[0]
@@ -277,27 +307,27 @@ class BasicLinearSystem(LinearSystem):
         ids_flat = np.arange(self.solution_vector.shape[0])
         return np.reshape(ids_flat, self.solution_array.shape, order='F')
 
-    def update_rhs(self, *args, **kwargs):
+    def update_rhs(self, rhs_input: RHSInput, *args, **kwargs):
         """
         Create vector with the right hand side entries,
         Sources from outside the src to the src must be defined negative.
         """
-        if 'rhs_values' in kwargs:
-            rhs_values = kwargs['rhs_values']
-            if 'Neumann' in rhs_values:
-                neumann_dict = rhs_values['Neumann']
-                self.set_neumann_boundary_conditions(
-                    neumann_dict['values'], neumann_dict['axes'],
-                    neumann_dict['indices'])
-            if 'Dirichlet' in rhs_values:
-                dirichlet_dict = rhs_values['Dirichlet']
-                self.set_dirichlet_boundary_conditions(
-                    dirichlet_dict['values'], dirichlet_dict['axes'],
-                    dirichlet_dict['indices'])
-            # if 'Sources' in rhs_values:
-        # TODO: Enable so simply add source term to domain,
-        #  for condensation/evaporation in two-phase flow, also consider in
-        #  temperature model
+        if rhs_input.neumann_bc is not None:
+            self.set_neumann_boundary_conditions(
+                rhs_input.neumann_bc.values,
+                rhs_input.neumann_bc.axes,
+                rhs_input.neumann_bc.indices)
+        if rhs_input.dirichlet_bc is not None:
+            self.set_dirichlet_boundary_conditions(
+                rhs_input.dirichlet_bc.values,
+                rhs_input.dirichlet_bc.axes,
+                rhs_input.dirichlet_bc.indices)
+        if rhs_input.volumetric_sources is not None:
+            self.add_source_values(
+                rhs_input.volumetric_sources.values,
+                rhs_input.volumetric_sources.indices,
+                rhs_input.volumetric_sources.volumetric
+            )
         # self.rhs[:] = self.rhs_const + self.rhs_dyn
 
     def update_matrix(self, *args, **kwargs):
@@ -312,17 +342,57 @@ class BasicLinearSystem(LinearSystem):
         # self.mtx[:] = self.mtx_const + self.mtx_dyn
 
 
-class BasicLinearSystem2D(BasicLinearSystem):
-    def __init__(self, transport_layer: tl.TransportLayer, transport_type: str,
-                 init_value=0.0):
-
-        super().__init__(transport_layer, transport_type, init_value)
-
-
 class BasicLinearSystem3D(BasicLinearSystem):
     def __init__(self, transport_layer: tl.TransportLayer, transport_type: str,
                  init_value=0.0):
         super().__init__(transport_layer, transport_type, init_value)
+        if not isinstance(self.transport_layer.discretization,
+                          dsct.Discretization3D):
+            raise TypeError('attribute "transport_layer" and its attribute '
+                            '"discretization" must be three-dimensional types')
+        self.d_volume = self.shift_nodes(
+            self.transport_layer.discretization.d_volume, axis=0)
+
+    # def calculate_conductance(self, conductance_array):
+    #     # Shift conductance nodes along first axis (x-axis) to the outer edges
+    #     # of the domain. This results in one more node in x-axis, due to the
+    #     # assumption the Dirichlet boundary conditions are set on the
+    #     # x-planes in this implementation.
+    #     conductance = self.shift_nodes(conductance_array, axis=0)
+    #     shape = conductance[1].shape
+    #     # With shifted nodes for axis 0, only the inter-nodal conductance for
+    #     # the remaining axes must be recalculated
+    #     conductance = [
+    #         conductance[0],
+    #         tl.TransportLayer.calc_inter_node_conductance(
+    #             conductance[1], axis=1),
+    #         tl.TransportLayer.calc_inter_node_conductance(
+    #             conductance[2], axis=2)]
+    #     return conductance, shape
+
+    def set_neumann_boundary_conditions(
+            self, values: (float, np.ndarray), axes: tuple, indices: tuple):
+
+        index_array = mtx_func.get_axis_values(self.index_array, axes, indices)
+        d_area = mtx_func.get_axis_values(
+            self.transport_layer.discretization.d_area[axes[0]], axes, indices)
+        source = values * d_area
+        self.add_explicit_source(
+            self.rhs, source.flatten(order='F'),
+            index_array.flatten(order='F'), replace=True)
+
+    def add_source_values(
+            self, values: (float, np.ndarray), indices: (tuple, None) = None,
+            volumetric: bool = True):
+        if indices is None:
+            index_array = None
+        else:
+            index_array = self.index_array[indices].flatten(order='F')
+        source = values
+        if volumetric:
+            source *= self.d_volume
+        self.add_explicit_source(self.rhs, source.flatten(order='F'),
+                                 index_array, replace=False)
 
 
 class StackedLayerLinearSystem(LinearSystem):
