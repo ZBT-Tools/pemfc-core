@@ -195,6 +195,36 @@ def build_cell_conductance_matrix(conductance_list: list[np.ndarray]):
     return np.sum(cond_mtx_list, axis=0)
 
 
+def shift_nodes(node_values: (list, np.ndarray), axis,
+                include_axis=False, **kwargs):
+    if len(node_values) == node_values[0].ndim:
+        node_values = [np.asarray(item) for item in node_values]
+        if include_axis:
+            transform_axes = tuple(range(len(node_values)))
+        else:
+            transform_axes = tuple(i for i in range(len(node_values))
+                                   if i != axis)
+        if axis == -1:
+            axis = node_values[0].ndim - 1
+        for i in transform_axes:
+            new_values = shift_array_nodes(node_values[i], axis)
+            node_values[i] = new_values
+        return node_values
+    else:
+        return shift_array_nodes(np.asarray(node_values), axis)
+
+
+def shift_array_nodes(array: np.ndarray, axis: int):
+    old_shape = array.shape
+    new_shape = tuple(size + 1 if j == axis else size
+                      for j, size in enumerate(old_shape))
+    new_array = np.zeros(new_shape)
+    half_values = 0.5 * np.moveaxis(array, axis, 0)
+    np.moveaxis(new_array, axis, 0)[:-1] += half_values
+    np.moveaxis(new_array, axis, 0)[1:] += half_values
+    return new_array
+
+
 def connect_cells(matrix, cell_ids, layer_ids, values, mtx_ids,
                   replace=False):
     if np.isscalar(values):

@@ -90,6 +90,8 @@ class HalfCell:
 
         # Initialize electrochemistry model
         electrochemistry_dict = halfcell_dict['electrochemistry']
+        electrochemistry_dict['thickness_gdl'] = (
+            halfcell_dict)['gde']['thickness']
         electrochemistry_dict['fuel_index'] = self.id_fuel
         self.electrochemistry = electrochem.ElectrochemistryModel(
             electrochemistry_dict, self.discretization)
@@ -106,10 +108,10 @@ class HalfCell:
                                        self.discretization)
 
         # Initialize gas diffusion electrode (gde: gdl + cl)
-        gde_dict = halfcell_dict['gde']
+        gde_dict = halfcell_dict['gde'].copy()
         gde_dict.update(
             {'name': self.name + ' GDE',
-             'thickness': electrochemistry_dict['thickness_gdl']
+             'thickness': gde_dict['thickness']
                 + electrochemistry_dict['thickness_cl']})
         gde_transport_properties = {
             'thermal': gde_dict['thermal_conductivity'],
@@ -126,7 +128,8 @@ class HalfCell:
             gdl_diffusion_dict = gde_dict.copy()
             gdl_diffusion_dict.update(
                 {'name': self.name + ' GDL',
-                 'thickness': electrochemistry_dict['thickness_gdl'],
+                 'type': 'GasMixture',
+                 'thickness': halfcell_dict['gde']['thickness'],
                  'boundary_patches': {
                      'Neumann': {'axes': (0,),
                                  'indices': (-1,)}}})
@@ -150,12 +153,11 @@ class HalfCell:
                 'depth': gdl_diffusion_dict['thickness'],
                 'length': self.discretization.length[0],
                 'width': self.discretization.length[1] * 0.5}
-
             gdl_discretization = dsct.Discretization(discretization_dict)
             self.gdl_diffusion = diff.DiffusionTransport.create(
-                gdl_diffusion_dict, self.channel.fluid,
-                dsct.Discretization3D.create_from(gdl_discretization,
-                                                  gdl_diffusion_dict['thickness']),
+                gdl_diffusion_dict, dsct.Discretization3D.create_from(
+                    gdl_discretization, gdl_diffusion_dict['thickness']),
+                self.channel.fluid,
                 self.id_inert)
 
         self.thickness = self.bpp.thickness + self.gde.thickness
@@ -202,7 +204,7 @@ class HalfCell:
                 # Take only the concentration at the CL-Interface
                 # (axis: 1, last index)
                 fuel_cl_concentration = (
-                    self.gdl_diffusion.concentrations[self.id_fuel, -1, :, :])
+                    self.gdl_diffusion.solution_array[self.id_fuel, -1, :, :])
                 reduced_shape = mole_flux[self.id_fuel].shape
                 # Average along z-axis according to the reduced discretization
                 filter_size = (

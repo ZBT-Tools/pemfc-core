@@ -2,3 +2,4 @@ matplotlib>=3.8.0
 numpy>=1.26.3
 scipy>=1.11.4
 setuptools>=68.2.2
+git+https://github.com/lufire/PorousTwoPhaseFlow.git@master

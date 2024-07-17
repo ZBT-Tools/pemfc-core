@@ -121,26 +121,6 @@ class LinearSystem(ABC):
     #         conductance_list[i][-1] *= 0.5
     #     return conductance_list
 
-    @staticmethod
-    def shift_nodes(node_values: (list, np.ndarray), axis, **kwargs):
-        node_values = [np.asarray(item) for item in node_values]
-        if len(node_values) != node_values[0].ndim:
-            raise ValueError('conductance values must be given for '
-                             'all dimensions')
-        shift_axes = tuple(i for i in range(len(node_values)) if i != axis)
-        if axis == -1:
-            axis = node_values[0].ndim - 1
-        for i in shift_axes:
-            old_shape = node_values[i].shape
-            new_shape = tuple(size + 1 if j == axis else size
-                              for j, size in enumerate(old_shape))
-            new_values = np.zeros(new_shape)
-            half_values = 0.5 * np.moveaxis(node_values[i], axis, 0)
-            np.moveaxis(new_values, axis, 0)[:-1] += half_values
-            np.moveaxis(new_values, axis, 0)[1:] += half_values
-            node_values[i] = new_values
-        return node_values
-
 
 @dataclass
 class BoundaryData:
@@ -190,16 +170,20 @@ class BasicLinearSystem(LinearSystem, ABC):
         self.solution_array[:] = init_value
 
     def calculate_conductance(self, conductance_array):
-        # Shift conductance nodes along first axis (x-axis) to the outer edges
-        # of the domain. This results in one more node in x-axis, due to the
-        # assumption the Dirichlet boundary conditions are set on the
-        # x-planes in this implementation.
-        if self.shift_axis is None:
-            conductance = [item for item in conductance_array]
-        else:
 
-            conductance = self.shift_nodes(conductance_array,
-                                           axis=self.shift_axis)
+        shape = conductance_array[0].shape
+        if self.shift_axis is None:
+            conductance = [
+                tl.TransportLayer.calc_inter_node_conductance(
+                    conductance_array[i], axis=i)
+                for i in range(len(conductance_array))]
+        else:
+            # Shift conductance nodes along the provided axis to the outer edges
+            # of the domain. This results in one more node in this axis,
+            # due to the assumption the Dirichlet boundary conditions are set on
+            # the outer planes in this implementation.
+            conductance = mtx_func.shift_nodes(
+                conductance_array, axis=self.shift_axis)
             # With shifted nodes for axis=self.shift_axis, only the inter-nodal
             # conductance for the remaining axes must be recalculated
             conductance = [
@@ -207,9 +191,9 @@ class BasicLinearSystem(LinearSystem, ABC):
                     conductance[i], axis=i)
                 if i != self.shift_axis else conductance[i]
                 for i in range(len(conductance))]
-        non_shifted_axes = [i for i in range(len(conductance)) if i !=
-                            self.shift_axis]
-        shape = conductance[non_shifted_axes[0]].shape
+        # non_shifted_axes = [i for i in range(len(conductance)) if i !=
+        #                     self.shift_axis]
+        # shape = conductance[non_shifted_axes[0]].shape
         return conductance, shape
 
     @classmethod
@@ -350,7 +334,7 @@ class BasicLinearSystem3D(BasicLinearSystem):
                           dsct.Discretization3D):
             raise TypeError('attribute "transport_layer" and its attribute '
                             '"discretization" must be three-dimensional types')
-        self.d_volume = self.shift_nodes(
+        self.d_volume = mtx_func.shift_nodes(
             self.transport_layer.discretization.d_volume, axis=0)
 
     # def calculate_conductance(self, conductance_array):
@@ -358,7 +342,7 @@ class BasicLinearSystem3D(BasicLinearSystem):
     #     # of the domain. This results in one more node in x-axis, due to the
     #     # assumption the Dirichlet boundary conditions are set on the
     #     # x-planes in this implementation.
-    #     conductance = self.shift_nodes(conductance_array, axis=0)
+    #     conductance = mtx_func.shift_nodes(conductance_array, axis=0)
     #     shape = conductance[1].shape
     #     # With shifted nodes for axis 0, only the inter-nodal conductance for
     #     # the remaining axes must be recalculated
@@ -436,7 +420,7 @@ class StackedLayerLinearSystem(LinearSystem):
         return self.stack_conductance_layers(conductance)
 
     def stack_conductance_layers(self, conductance_list: list, axis: int = 0):
-        return super().shift_nodes(conductance_list, axis=axis)
+        return mtx_func.shift_nodes(conductance_list, axis=axis)
 
     @staticmethod
     def add_explicit_source(rhs_vector, source_term, index_array,
@@ -582,7 +566,7 @@ class CellLinearSystem(StackedLayerLinearSystem):
                 and modify_values):
             for i in range(len(conductance_list)):
                 conductance_list[i][[1, -2], :, 1] = 0.0
-        conductance_list = self.shift_nodes(conductance_list, axis=axis)
+        conductance_list = mtx_func.shift_nodes(conductance_list, axis=axis)
         return conductance_list
 
     def add_ambient_convection(self):

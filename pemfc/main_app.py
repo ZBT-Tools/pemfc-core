@@ -14,8 +14,10 @@ run_location = os.path.realpath(os.path.join(
 # if run_location == __location__:
 if __name__ == "__main__":
     from src import simulation
+    from src import global_state as gs
 else:
     from .src import simulation
+    from .src import global_state as gs
 # import .src.simulation as simulation
 
 np.set_printoptions(threshold=sys.maxsize, linewidth=10000,
@@ -40,6 +42,7 @@ def main(settings=None, save_settings=True):
 if __name__ == "__main__":
     base_dir = \
         os.path.dirname(os.path.abspath(inspect.getsourcefile(lambda: 0)))
+    gs.global_state.base_directory = base_dir
     with open(os.path.join(base_dir, 'settings', 'settings.json')) as file:
         settings = json.load(file)
     # settings = input_dicts.sim_dict

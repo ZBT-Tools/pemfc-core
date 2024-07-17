@@ -59,6 +59,7 @@
             ]
         },
         "gde": {
+            "thickness": 0.0002,
             "porosity":
                     0.8,
             "electrical_conductivity": [
@@ -79,7 +80,6 @@
             "diff_coeff_cl": 1e-07,
             "diff_coeff_gdl": 6e-06,
             "thickness_cl": 1e-05,
-            "thickness_gdl": 0.0002,
             "calc_act_loss": true,
             "calc_cl_diff_loss": true,
             "calc_gdl_diff_loss": true,
@@ -185,6 +185,7 @@
             ]
         },
         "gde": {
+            "thickness": 0.0002,
             "porosity":
                     0.8,
             "electrical_conductivity": [
@@ -205,7 +206,6 @@
             "diff_coeff_cl": 1e-06,
             "diff_coeff_gdl": 0.0001,
             "thickness_cl": 1e-05,
-            "thickness_gdl": 0.0002,
             "calc_act_loss": true,
             "calc_cl_diff_loss": true,
             "calc_gdl_diff_loss": true,

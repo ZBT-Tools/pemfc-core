@@ -5,11 +5,10 @@ from dataclasses import dataclass
 class GlobalState:
     iteration: int
     error: float
-
-    def __init__(self, iteration=0, error=1e8):
-        self.iteration = iteration
-        self.error = error
+    base_directory: str
 
 
-global_state = GlobalState()
-
+global_state = GlobalState(
+    iteration=0,
+    error=1e8,
+    base_directory='.')

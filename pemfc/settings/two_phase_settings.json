@@ -1,0 +1,145 @@
+{
+    "porosity_model": {
+        "name": "Cathode GDL",
+        "type": "CarbonPaper",
+        "porosity": 0.8,
+        "bruggemann_coefficient": 1.5,
+        "permeability": [
+            1.0e-12,
+            1.0e-12,
+            1.0e-12
+        ],
+        "pore_radius": 1e-5,
+        "relative_permeability_exponent": 3.0,
+        "saturation_model": {
+            "type": "leverett",
+            "leverett": {
+                "type": "leverett",
+                "contact_angle": 120.0,
+                "precalculate_pressure": true,
+                "precalculate_gradient": true
+            },
+            "data_table": {
+                "type": "data_table",
+                "data_format": "file",
+                "file_path": "C:\\Users\\lukas\\Desktop\\test.csv"
+            },
+            "psd": {
+                "type": "psd",
+                "r": [
+                    [
+                        14.20e-6,
+                        34.00e-6
+                    ],
+                    [
+                        14.20e-6,
+                        34.00e-6
+                    ]
+                ],
+                "F": [
+                    0.08,
+                    0.92
+                ],
+                "f": [
+                    [
+                        0.28,
+                        0.72
+                    ],
+                    [
+                        0.28,
+                        0.72
+                    ]
+                ],
+                "s": [
+                    [
+                        0.35,
+                        1.0
+                    ],
+                    [
+                        0.35,
+                        1.0
+                    ]
+                ],
+                "contact_angle": [
+                    80.0,
+                    120.0
+                ]
+            },
+            "imbibition_drainage": {
+                "type": "imbibition_drainage",
+                "imbibition_model": {
+                    "type": "gostick_correlation",
+                    "maximum_water_saturation": 0.99,
+                    "residual_water_saturation": 0.1,
+                    "f": [
+                        0.25,
+                        0.75
+                    ],
+                    "m": [
+                        250,
+                        200
+                    ],
+                    "n": [
+                        0.4,
+                        0.5
+                    ],
+                    "P_C_b": [
+                        101500.0,
+                        107500.0
+                    ],
+                    "precalculate_pressure": true,
+                    "precalculate_gradient": true
+                },
+                "drainage_model": {
+                    "type": "gostick_correlation",
+                    "maximum_water_saturation": 0.99,
+                    "residual_water_saturation": 0.1,
+                    "f": [
+                        1.0
+                    ],
+                    "m": [
+                        150
+                    ],
+                    "n": [
+                        1.0
+                    ],
+                    "P_C_b": [
+                        105000.0
+                    ],
+                    "precalculate_pressure": true,
+                    "precalculate_gradient": true
+                }
+            },
+            "gostick_correlation": {
+                "type": "gostick_correlation",
+                "maximum_saturation": 1.0,
+                "residual_saturation": 0.0,
+                "f": [
+                    0.25,
+                    0.75
+                ],
+                "m": [
+                    250,
+                    200
+                ],
+                "n": [
+                    0.3,
+                    0.5
+                ],
+                "P_C_b": [
+                    101500.0,
+                    108000.0
+                ],
+                "precalculate_pressure": true,
+                "precalculate_gradient": true
+            }
+        }
+    },
+    "evaporation_model": {
+        "name": "Evaporation Model",
+        "type": "WangSi",
+        "evaporation_coefficient": 1e-4,
+        "condensation_coefficient": 5000
+    }
+}
+

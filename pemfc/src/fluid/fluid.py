@@ -691,11 +691,11 @@ class CanteraGasMixture(DiscreteFluid):
 
     @property
     def concentration(self):
-        return self.solution_array.concentrations[:, self.species_ids] * 1e3
+        return self.solution_array.solution_array[:, self.species_ids] * 1e3
 
     @concentration.setter
     def concentration(self, value):
-        self.solution_array.concentrations[:, self.species_ids] = value * 1000.0
+        self.solution_array.solution_array[:, self.species_ids] = value * 1000.0
 
 
 class TwoPhaseMixture(DiscreteFluid):

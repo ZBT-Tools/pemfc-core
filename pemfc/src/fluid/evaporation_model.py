@@ -3,14 +3,14 @@ Diffusion models
 """
 import numpy as np
 from abc import ABC, abstractmethod
-from . import species
+# from . import species
 from . import fluid as fl
-from pemfc.data import material_properties as mat_prop
-from pemfc.src import constants as constants
+# from pemfc.data import material_properties as mat_prop
+from .. import constants
 
 
 class EvaporationModel(ABC):
-    def __new__(cls, fluid, model_dict, *arg, **kwargs):
+    def __new__(cls, model_dict, fluid, *arg, **kwargs):
         model_type = model_dict.get('type', 'HertzKnudsenSchrage')
         if model_type == 'HertzKnudsenSchrage':
             return super(EvaporationModel, cls).\
@@ -20,7 +20,7 @@ class EvaporationModel(ABC):
         else:
             raise NotImplementedError
 
-    def __init__(self, fluid, model_dict, *arg, **kwargs):
+    def __init__(self, model_dict, fluid, *arg, **kwargs):
         if not isinstance(fluid, (fl.TwoPhaseMixture,
                                   fl.CanteraTwoPhaseMixture)):
             raise TypeError('Argument fluid of type TwoPhaseMixture or '
@@ -49,8 +49,8 @@ class EvaporationModel(ABC):
 
 
 class HertzKnudsenSchrageModel(EvaporationModel):
-    def __init__(self, fluid, model_dict, *arg, **kwargs):
-        super().__init__(fluid, model_dict)
+    def __init__(self, model_dict, fluid, *arg, **kwargs):
+        super().__init__(model_dict, fluid)
         self.evap_coeff = model_dict['evaporation_coefficient']
         self.mw = fluid.gas.species.mw[fluid.id_pc]
         self.evap_rate = np.zeros(*fluid.array_shape)
@@ -117,13 +117,13 @@ class HertzKnudsenSchrageModel(EvaporationModel):
 
 
 class WangSiModel(EvaporationModel):
-    def __init__(self, fluid, model_dict, *arg, **kwargs):
-        super().__init__(fluid, model_dict)
+    def __init__(self, model_dict, fluid, *arg, **kwargs):
+        super().__init__(model_dict, fluid)
         self.evap_coeff = model_dict['evaporation_coefficient']
         self.cond_coeff = model_dict['condensation_coefficient']
         self.evap_rate = np.zeros(*fluid.array_shape)
-        self. evap_coeff_factor = 2.0 * self.evap_coeff \
-            / (2.0 - self.evap_coeff)
+        # self.evap_coeff_factor = 2.0 * self.evap_coeff \
+        #     / (2.0 - self.evap_coeff)
 
         # k_b = constants.BOLTZMANN
         # m = self.mw / constants.AVOGADRO_NUMBER
