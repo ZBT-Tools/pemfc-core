@@ -12,6 +12,7 @@ from . import discretization as dsct
 from . import diffusion_transport as diff
 from . import global_functions as gf
 from . import global_state as gs
+from . import porous_two_phase_flow as p2pf
 
 warnings.filterwarnings("ignore")
 
@@ -124,6 +125,8 @@ class HalfCell:
                                        self.discretization)
 
         self.calc_gdl_diffusion = True
+        self.calc_two_phase_flow = True
+
         if self.calc_gdl_diffusion:
             gdl_diffusion_dict = gde_dict.copy()
             gdl_diffusion_dict.update(
@@ -153,12 +156,18 @@ class HalfCell:
                 'depth': gdl_diffusion_dict['thickness'],
                 'length': self.discretization.length[0],
                 'width': self.discretization.length[1] * 0.5}
-            gdl_discretization = dsct.Discretization(discretization_dict)
+            gdl_discretization_2d = dsct.Discretization(discretization_dict)
+            gdl_discretization = dsct.Discretization3D.create_from(
+                    gdl_discretization_2d, gdl_diffusion_dict['thickness'])
             self.gdl_diffusion = diff.DiffusionTransport.create(
-                gdl_diffusion_dict, dsct.Discretization3D.create_from(
-                    gdl_discretization, gdl_diffusion_dict['thickness']),
-                self.channel.fluid,
-                self.id_inert)
+                gdl_diffusion_dict, gdl_discretization,
+                self.channel.fluid, self.id_inert)
+
+            if self.calc_two_phase_flow:
+                gdl_two_phase_flow_dict = gdl_diffusion_dict.copy()
+                gdl_diffusion_dict['type'] = 'DarcyFlow'
+                self.two_phase_flow = p2pf.TwoPhaseMixtureDiffusionTransport(
+                    gdl_diffusion_dict, gdl_discretization, self.channel.fluid)
 
         self.thickness = self.bpp.thickness + self.gde.thickness
 

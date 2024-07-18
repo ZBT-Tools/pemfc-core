@@ -205,7 +205,7 @@ class BasicLinearSystem(LinearSystem, ABC):
                                       'three-dimensional class')
         elif isinstance(transport_layer, tl.TransportLayer3D):
             return BasicLinearSystem3D(transport_layer, transport_type,
-                                       init_value)
+                                       init_value, shift_axis=shift_axis)
         else:
             raise NotImplementedError(
                 'argument "transport_layer" must be of '
@@ -291,27 +291,29 @@ class BasicLinearSystem(LinearSystem, ABC):
         ids_flat = np.arange(self.solution_vector.shape[0])
         return np.reshape(ids_flat, self.solution_array.shape, order='F')
 
-    def update_rhs(self, rhs_input: RHSInput, *args, **kwargs):
+    def update_rhs(self, *args, **kwargs):
         """
         Create vector with the right hand side entries,
         Sources from outside the src to the src must be defined negative.
         """
-        if rhs_input.neumann_bc is not None:
-            self.set_neumann_boundary_conditions(
-                rhs_input.neumann_bc.values,
-                rhs_input.neumann_bc.axes,
-                rhs_input.neumann_bc.indices)
-        if rhs_input.dirichlet_bc is not None:
-            self.set_dirichlet_boundary_conditions(
-                rhs_input.dirichlet_bc.values,
-                rhs_input.dirichlet_bc.axes,
-                rhs_input.dirichlet_bc.indices)
-        if rhs_input.volumetric_sources is not None:
-            self.add_source_values(
-                rhs_input.volumetric_sources.values,
-                rhs_input.volumetric_sources.indices,
-                rhs_input.volumetric_sources.volumetric
-            )
+        rhs_input = kwargs.get('rhs_input', None)
+        if isinstance(rhs_input, RHSInput):
+            if rhs_input.neumann_bc is not None:
+                self.set_neumann_boundary_conditions(
+                    rhs_input.neumann_bc.values,
+                    rhs_input.neumann_bc.axes,
+                    rhs_input.neumann_bc.indices)
+            if rhs_input.dirichlet_bc is not None:
+                self.set_dirichlet_boundary_conditions(
+                    rhs_input.dirichlet_bc.values,
+                    rhs_input.dirichlet_bc.axes,
+                    rhs_input.dirichlet_bc.indices)
+            if rhs_input.volumetric_sources is not None:
+                self.add_source_values(
+                    rhs_input.volumetric_sources.values,
+                    rhs_input.volumetric_sources.indices,
+                    rhs_input.volumetric_sources.volumetric
+                )
         # self.rhs[:] = self.rhs_const + self.rhs_dyn
 
     def update_matrix(self, *args, **kwargs):
@@ -328,8 +330,9 @@ class BasicLinearSystem(LinearSystem, ABC):
 
 class BasicLinearSystem3D(BasicLinearSystem):
     def __init__(self, transport_layer: tl.TransportLayer, transport_type: str,
-                 init_value=0.0):
-        super().__init__(transport_layer, transport_type, init_value)
+                 init_value=0.0, shift_axis=None):
+        super().__init__(transport_layer, transport_type,
+                         init_value=init_value, shift_axis=shift_axis)
         if not isinstance(self.transport_layer.discretization,
                           dsct.Discretization3D):
             raise TypeError('attribute "transport_layer" and its attribute '

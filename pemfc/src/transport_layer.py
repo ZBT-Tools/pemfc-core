@@ -59,7 +59,7 @@ class TransportLayer(oo.OutputObject2D, ABC):
         if self.shift_axis is not None:
             result = mf.shift_nodes(result, axis=self.shift_axis,
                                     include_axis=True)
-        return result
+        return np.asarray(result)
 
     def calc_conductance(self, conductivity):
         conductivity = np.asarray(conductivity)

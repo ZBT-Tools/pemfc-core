@@ -30,12 +30,12 @@ class DiffusionTransport(ABC):
         self.transport_type = 'diffusion'
 
         self.linear_systems = [
-            ls.BasicLinearSystem.create(item, self.transport_type,
-                                        shift_axis=0) for item in
-            self.transport_layers]
+            ls.BasicLinearSystem.create(item, self.transport_type)
+            for item in self.transport_layers]
         solution_shape = (len(self.linear_systems),
                           *self.linear_systems[0].solution_array.shape)
         self.solution_array = np.zeros(solution_shape)
+        self.base_shape = self.linear_systems[0].solution_array.shape
         self.neumann_bc = self.create_boundary_condition('Neumann')
         self.dirichlet_bc = self.create_boundary_condition('Dirichlet')
         self.flux_scaling_factors = np.zeros(self.neumann_bc.values.shape)
@@ -61,11 +61,17 @@ class DiffusionTransport(ABC):
             return ConstantDiffusionTransport(
                 input_dict, transport_layers, **kwargs)
         elif model_type == 'GasMixture' and fluid is not None:
+            if id_inert is None:
+                raise ValueError('for type GasMixtureDiffusionTransport the '
+                                 'integer value "id_inert" must be specified')
             input_dict['volume_fraction'] = input_dict['porosity']
             input_dict['effective'] = True
+            species_names = fluid.species_names
             transport_layers = [
                 tl.TransportLayer.create(
-                    input_dict, {'diffusion': 0.0}, discretization)]
+                    input_dict, {'diffusion': 0.0}, discretization)
+                for i in range(len(species_names)) if i != id_inert]
+
             return GasMixtureDiffusionTransport(
                 input_dict, transport_layers, fluid, id_inert=id_inert,
                 **kwargs)
@@ -74,7 +80,7 @@ class DiffusionTransport(ABC):
             input_dict['effective'] = True
             transport_layers = [
                 tl.TransportLayer.create(
-                    input_dict, {'diffusion': input_dict['permeability']},
+                    input_dict, {'diffusion': 0.0},
                     discretization)]
             return DarcyFlowDiffusionTransport(
                 input_dict, transport_layers, **kwargs)
@@ -119,10 +125,17 @@ class DiffusionTransport(ABC):
             else:
                 raise ValueError('only up to three-dimensional arrays allowed')
 
-    def rescale_input(self, array: np.ndarray, except_first_axis=False):
+    def rescale_input(self, array: np.ndarray, except_first_axis=False,
+                      shape=None):
+        if shape is None:
+            shape = self.base_shape
         reshaped_array = self.reshape_input(
             array, except_first_axis=except_first_axis)
-        return gf.rescale(reshaped_array, self.solution_array.shape)
+        if except_first_axis:
+            return np.asarray([gf.rescale(arr, shape)
+                               for arr in reshaped_array])
+        else:
+            return gf.rescale(reshaped_array, shape)
 
     def calc_bc_array_shape(self, axes: tuple, indices: tuple):
         return np.asarray([mf.get_axis_values(item, axes, indices)
@@ -194,12 +207,11 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
                  transport_layers: list[tl.TransportLayer],
                  fluid: (fl.GasMixture, fl.CanteraGasMixture,
                          fl.TwoPhaseMixture, fl.CanteraTwoPhaseMixture),
-                 inert_id: int = None, **kwargs):
+                 id_inert: int, **kwargs):
         super().__init__(input_dict, transport_layers)
-        self.id_inert = inert_id
+        self.id_inert = id_inert
         self.initialize = True
-        self.fluid = fluid.copy(self.solution_array.shape,
-                                plot_axis=-2)
+        self.fluid = fluid.copy(self.base_shape, plot_axis=-2)
 
         if isinstance(fluid, (fl.GasMixture, fl.CanteraGasMixture)):
             self.gas_diff_coeff = (
@@ -260,20 +272,20 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
             self.dirichlet_bc.values = boundary_concentration
             rhs_input = ls.RHSInput(neumann_bc=self.neumann_bc,
                                     dirichlet_bc=self.dirichlet_bc)
-            lin_sys.update(rhs_values=rhs_input)
+            lin_sys.update(rhs_input=rhs_input)
 
         concentrations = [lin_sys.solution_array for
                           lin_sys in self.linear_systems]
         conc_array = np.array(concentrations)
         show_concentrations = np.round(np.moveaxis(conc_array,
                                        (0, 1, 2, 3), (0, 2, 1, 3)), 2)
-        self.flux_scaling_factors[:], self.diff_coeff_by_length[:] = (
+        self.flux_scaling_factors, self.diff_coeff_by_length = (
             self.calc_flux_scaling_factors(
                 concentrations, boundary_composition, boundary_flux))
         concentrations = [np.where(conc < 0.0, 0.0, conc) for conc in
                           concentrations]
         concentrations = self.calculate_inert_concentration(concentrations)
-        self.solution_array[:] = concentrations
+        self.solution_array = concentrations
         show_concentrations = np.round(np.moveaxis(concentrations,
                                        (0, 1, 2, 3), (0, 2, 1, 3)), 2)
         conductances = [lin_sys.conductance for lin_sys in self.linear_systems]
