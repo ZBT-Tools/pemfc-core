@@ -30,7 +30,7 @@ fluid_dict = \
 humid_air = fluid.create(fluid_dict, backend='pemfc')
 temp = np.linspace(0, 400, n)
 temp += 273.15
-humid_air.update(temperature=temp, pressure=101325)
+humid_air.update(temperature=temp, gas_pressure=101325)
 plt.plot(temp-273.15, humid_air.saturation_pressure/1000.0)
 # plt.plot(temp-273.15, humid_air.humidity)
 plt.yscale('log')

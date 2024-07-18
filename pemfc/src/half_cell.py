@@ -165,9 +165,10 @@ class HalfCell:
 
             if self.calc_two_phase_flow:
                 gdl_two_phase_flow_dict = gdl_diffusion_dict.copy()
-                gdl_diffusion_dict['type'] = 'DarcyFlow'
+                gdl_two_phase_flow_dict['type'] = 'DarcyFlow'
                 self.two_phase_flow = p2pf.TwoPhaseMixtureDiffusionTransport(
-                    gdl_diffusion_dict, gdl_discretization, self.channel.fluid)
+                    gdl_two_phase_flow_dict, gdl_discretization,
+                    self.gdl_diffusion.fluid)
 
         self.thickness = self.bpp.thickness + self.gde.thickness
 
@@ -208,6 +209,15 @@ class HalfCell:
                 # to account for GDL losses anymore
                 self.gdl_diffusion.update(temperature, self.channel.pressure,
                                           channel_concentration, mole_flux)
+                if self.calc_two_phase_flow:
+                    temp = self.gdl_diffusion.fluid.temperature
+                    press = self.gdl_diffusion.fluid.pressure
+                    mol_comp = self.gdl_diffusion.solution_array
+                    ch_gdl_sat = np.zeros(temp.shape)
+                    water_flux = mass_flux[self.id_h2o]
+                    self.two_phase_flow.update(
+                        temp, press, mol_comp, ch_gdl_sat, water_flux,
+                        update_fluid=True)
                 # Reshape 3D-concentration fields from the GDL-Diffusion
                 # sub-model to the reduced discretization in this model
                 # Take only the concentration at the CL-Interface

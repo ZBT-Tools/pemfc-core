@@ -11,6 +11,7 @@ from . import linear_system as ls
 from . import global_functions as gf
 from . import matrix_functions as mf
 from . import global_state as gs
+from . import porous_two_phase_flow as p2pf
 from porous_two_phase_flow import porous_layer as pl
 
 
@@ -46,7 +47,7 @@ class DiffusionTransport(ABC):
                discretization: dsct.Discretization,
                fluid: (fl.GasMixture, fl.CanteraTwoPhaseMixture,
                        fl.TwoPhaseMixture, fl.CanteraTwoPhaseMixture) = None,
-               id_inert: int = None,
+               id_inert: int = None, *args,
                **kwargs):
         model_type = input_dict['type']
         input_dict['shift_axis'] = 0
@@ -78,12 +79,22 @@ class DiffusionTransport(ABC):
         elif model_type == 'DarcyFlow':
             input_dict['volume_fraction'] = input_dict['porosity']
             input_dict['effective'] = True
+            permeability = input_dict.get('permeability', 0.0)
             transport_layers = [
                 tl.TransportLayer.create(
-                    input_dict, {'diffusion': 0.0},
-                    discretization)]
+                    input_dict, {'diffusion': permeability}, discretization)]
             return DarcyFlowDiffusionTransport(
                 input_dict, transport_layers, **kwargs)
+        # elif (model_type == 'TwoPhaseMixture'
+        #       and isinstance(fluid, fl.TwoPhaseMixture)):
+        #     input_dict['volume_fraction'] = input_dict['porosity']
+        #     input_dict['effective'] = True
+        #     permeability = input_dict.get('permeability', 0.0)
+        #     transport_layers = [
+        #         tl.TransportLayer.create(
+        #             input_dict, {'diffusion': permeability}, discretization)]
+        #     return p2pf.TwoPhaseMixtureDiffusionTransport(
+        #         input_dict, transport_layers, fluid, **kwargs)
         else:
             raise NotImplementedError(
                 'given type {} not implemented as concrete '
@@ -193,9 +204,38 @@ class DarcyFlowDiffusionTransport(DiffusionTransport):
                  transport_layers: list[tl.TransportLayer], *args, **kwargs):
         super().__init__(input_dict, transport_layers, *args, **kwargs)
 
-    def update(self, dirichlet_values: np.ndarray, neumann_values: np.ndarray,
-               relative_permeability: np.ndarray, *args, **kwargs):
-        pass
+    def update(self, dirichlet_values: np.ndarray,
+               neumann_values: np.ndarray,
+               transport_property: (list, np.ndarray), *args, **kwargs):
+        dirichlet_values = self.rescale_input(dirichlet_values)
+        neumann_values = self.rescale_input(neumann_values)
+        for i, trans_layer in enumerate(self.transport_layers):
+            trans_layer.update({self.transport_type: transport_property})
+            # trans_layer.conductance['diffusion'][:, 0:5, :, 0:10] = 1e-16
+
+        for i, lin_sys in enumerate(self.linear_systems):
+            boundary_concentration = mf.get_axis_values(
+                    dirichlet_values,
+                    axes=self.dirichlet_bc.axes,
+                    indices=self.dirichlet_bc.indices)
+            self.neumann_bc.values = neumann_values
+            self.dirichlet_bc.values = boundary_concentration
+            rhs_input = ls.RHSInput(neumann_bc=self.neumann_bc,
+                                    dirichlet_bc=self.dirichlet_bc)
+            lin_sys.update(rhs_input=rhs_input)
+
+        solution_list = [lin_sys.solution_array for lin_sys
+                         in self.linear_systems]
+        solution_array = np.asarray(solution_list)
+        show_solution = np.round(np.moveaxis(solution_array,
+                                 (0, 1, 2, 3), (0, 2, 1, 3)), 2)
+        self.flux_scaling_factors, self.diff_coeff_by_length = (
+            self.calc_flux_scaling_factors(
+                solution_list, dirichlet_values, neumann_values))
+        self.solution_array[:] = solution_array
+        # self.solution_array[self.solution_array < 0.0] = 0.0
+        show_solution = np.round(np.moveaxis(solution_array,
+                                 (0, 1, 2, 3), (0, 2, 1, 3)), 2)
 
 
 class GasMixtureDiffusionTransport(DiffusionTransport):
@@ -237,8 +277,6 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         #     molar_composition, self.fluid.gas.mole_fraction.shape)
         # flux = np.asarray([self.reshape_input(item) for item in flux])
         # flux = gf.rescale(flux, self.fluid.gas.mole_fraction.shape)
-        # TODO: Resolve errors with array reshaping or previous array node
-        #  shifting
         temperature = self.rescale_input(temperature)
         pressure = self.rescale_input(pressure)
         molar_composition = self.rescale_input(molar_composition,
@@ -247,7 +285,7 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         if self.initialize:
             self.fluid.update(temperature, pressure, molar_composition)
         else:
-            self.fluid.update(temperature, pressure)
+            self.fluid.update(temperature, pressure, self.solution_array)
 
         # Update species transport for active species
         boundary_composition = [
