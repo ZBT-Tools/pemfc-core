@@ -38,6 +38,7 @@ class TransportLayer(oo.OutputObject2D, ABC):
         self.effective = input_dict.get('effective', False)
         self.geometric_factors: np.ndarray = np.asarray([0.0, 0.0, 0.0])
         self.conductance: dict = {}
+        self.d_volume = self.discretization.d_volume
 
     @classmethod
     def create(cls, input_dict: dict, transport_properties: dict,
@@ -59,6 +60,8 @@ class TransportLayer(oo.OutputObject2D, ABC):
         if self.shift_axis is not None:
             result = mf.shift_nodes(result, axis=self.shift_axis,
                                     include_axis=True)
+            self.d_volume = mf.shift_nodes(self.d_volume, axis=self.shift_axis,
+                                           include_axis=True)
         return np.asarray(result)
 
     def calc_conductance(self, conductivity):
@@ -141,8 +144,9 @@ class TransportLayer(oo.OutputObject2D, ABC):
         else:
             raise ValueError('axis argument must be either 0, 1, 2 (-1)')
 
-    def update(self, transport_properties, *args, **kwargs):
+    def update(self, transport_properties: dict, *args, **kwargs):
         for key in self.conductance:
+            self.transport_properties.update(transport_properties)
             self.conductance[key][:] = self.calc_conductance(
                 transport_properties[key])
 

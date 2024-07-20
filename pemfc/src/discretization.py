@@ -60,8 +60,10 @@ class Discretization(ABC):
         # Direction of each axis (limited to (-1, 1))
         self.direction: tuple
         self.x, self.dx = self._calc_discretization()
-        self.area = self._calc_area()
+        self.area: float = 0.0
+        self.volume: float = 0.0
         self.d_area = self._calc_area()
+        self.d_volume = self._calc_volume()
 
     def copy(self, *args, **kwargs):
         if kwargs.get('deepcopy', True):
@@ -72,6 +74,10 @@ class Discretization(ABC):
 
     @abstractmethod
     def _calc_area(self) -> np.ndarray:
+        pass
+
+    @abstractmethod
+    def _calc_volume(self) -> np.ndarray:
         pass
 
     def _calc_x(self) -> list:
@@ -115,6 +121,8 @@ class Discretization2D(Discretization):
                                   discretization_dict['width']])
 
         self.area = np.asarray([self.length[0] * self.length[1], ])
+        self.volume = np.prod(self.length) * 1.0
+
         self.ratio = discretization_dict.get('ratio', (1.0, 1.0))
         self.direction = \
             discretization_dict.get('direction', (1, 1))
@@ -123,6 +131,9 @@ class Discretization2D(Discretization):
 
     def _calc_area(self) -> np.ndarray:
         return self.dx[0] * self.dx[1]
+
+    def _calc_volume(self) -> np.ndarray:
+        return self.dx[0] * self.dx[1] * 1.0
 
     def _calc_discretization(self) -> (np.ndarray,
                                        np.ndarray):
@@ -157,8 +168,8 @@ class Discretization3D(Discretization):
         self.direction = discretization_dict.get('direction', (1, 1, 1))
 
         super().__init__(discretization_dict, **kwargs)
+        self.area = np.asarray([self.length[1] * self.length[2], ])
         self.volume = np.prod(self.length)
-        self.d_volume = self._calc_volume()
 
     def _calc_area(self) -> np.ndarray:
         return np.asarray([self.dx[1] * self.dx[2],

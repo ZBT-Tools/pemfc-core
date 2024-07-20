@@ -33,10 +33,12 @@ class DiffusionTransport(ABC):
         self.linear_systems = [
             ls.BasicLinearSystem.create(item, self.transport_type)
             for item in self.transport_layers]
-        solution_shape = (len(self.linear_systems),
-                          *self.linear_systems[0].solution_array.shape)
-        self.solution_array = np.zeros(solution_shape)
         self.base_shape = self.linear_systems[0].solution_array.shape
+        if len(self.linear_systems) == 1:
+            solution_shape = self.base_shape
+        else:
+            solution_shape = (len(self.linear_systems), *self.base_shape)
+        self.solution_array = np.zeros(solution_shape)
         self.neumann_bc = self.create_boundary_condition('Neumann')
         self.dirichlet_bc = self.create_boundary_condition('Dirichlet')
         self.flux_scaling_factors = np.zeros(self.neumann_bc.values.shape)
@@ -149,14 +151,62 @@ class DiffusionTransport(ABC):
             return gf.rescale(reshaped_array, shape)
 
     def calc_bc_array_shape(self, axes: tuple, indices: tuple):
-        return np.asarray([mf.get_axis_values(item, axes, indices)
-                           for item in self.solution_array]).shape
+        if len(self.linear_systems) > 1:
+            return np.asarray([mf.get_axis_values(item, axes, indices)
+                               for item in self.solution_array]).shape
+        else:
+            return mf.get_axis_values(self.solution_array, axes, indices).shape
 
-    @staticmethod
-    def get_boundary_values(values: (list, np.ndarray), axes: tuple,
-                            indices: tuple) -> np.ndarray:
-        return np.asarray([mf.get_axis_values(item, axes, indices)
-                           for item in values])
+    def get_boundary_values(self, values: (list, np.ndarray), axes: tuple,
+                            indices: tuple) \
+            -> np.ndarray:
+        if isinstance(values, list):
+            return np.asarray([mf.get_axis_values(item, axes, indices)
+                               for item in values])
+        elif isinstance(values, np.ndarray):
+            if values.ndim == len(self.base_shape) + 1:
+                return np.asarray([mf.get_axis_values(item, axes, indices)
+                                   for item in values])
+            elif values.ndim == len(self.base_shape):
+                return mf.get_axis_values(values, axes, indices)
+            else:
+                raise ValueError('values must be of same shape as '
+                                 'attribute solution_array')
+        else:
+            raise TypeError('values must be of types (list, np.ndarray)')
+
+    def calc_boundary_flux(self, boundary_type: str):
+        if boundary_type == 'Neumann':
+            axes = self.neumann_bc.axes
+            indices = self.neumann_bc.indices
+        elif boundary_type == 'Dirichlet':
+            axes = self.dirichlet_bc.axes
+            indices = self.dirichlet_bc.indices
+        else:
+            raise ValueError('"boundary_type" must be "Neumann" or "Dirichlet"')
+        index_next = 1 if axes[0] == 0 else -2
+        indices_next = list(indices)
+        indices_next[0] = index_next
+        indices_next = tuple(indices_next)
+        boundary_values = (self.get_boundary_values(self.solution_array, axes,
+                           indices))
+        adjacent_values = (self.get_boundary_values(self.solution_array, axes,
+                           indices_next))
+        # Calculate boundary flux: defined positive if going into domain,
+        # negative if going out of domain
+        d_volume = self.get_boundary_values(
+            self.transport_layers[0].d_volume, axes, indices)
+        d_area = self.get_boundary_values(
+            self.transport_layers[0].discretization.d_area, axes, indices)
+        diff_coeffs = [item.transport_properties[self.transport_type][axes[0]]
+                       for item in self.transport_layers]
+        diff_coeff = self.get_boundary_values(diff_coeffs, axes, indices)
+        # TODO: Include inert species diffusion coefficient
+
+        diff_coeff_by_length = diff_coeff * d_area[axes[0]] / d_volume
+        boundary_flux = - diff_coeff_by_length * (adjacent_values -
+                                                       boundary_values)
+        return boundary_flux
 
     def calc_flux_scaling_factors(
             self, solution_values: (list, np.ndarray),
@@ -206,6 +256,7 @@ class DarcyFlowDiffusionTransport(DiffusionTransport):
 
     def update(self, dirichlet_values: np.ndarray,
                neumann_values: np.ndarray,
+               source_values: np.ndarray,
                transport_property: (list, np.ndarray), *args, **kwargs):
         dirichlet_values = self.rescale_input(dirichlet_values)
         neumann_values = self.rescale_input(neumann_values)
@@ -214,28 +265,30 @@ class DarcyFlowDiffusionTransport(DiffusionTransport):
             # trans_layer.conductance['diffusion'][:, 0:5, :, 0:10] = 1e-16
 
         for i, lin_sys in enumerate(self.linear_systems):
-            boundary_concentration = mf.get_axis_values(
+            boundary_values = mf.get_axis_values(
                     dirichlet_values,
                     axes=self.dirichlet_bc.axes,
                     indices=self.dirichlet_bc.indices)
             self.neumann_bc.values = neumann_values
-            self.dirichlet_bc.values = boundary_concentration
+            self.dirichlet_bc.values = boundary_values
+            volumetric_source = ls.SourceData(values=source_values)
             rhs_input = ls.RHSInput(neumann_bc=self.neumann_bc,
-                                    dirichlet_bc=self.dirichlet_bc)
+                                    dirichlet_bc=self.dirichlet_bc,
+                                    volumetric_sources=volumetric_source)
             lin_sys.update(rhs_input=rhs_input)
 
         solution_list = [lin_sys.solution_array for lin_sys
                          in self.linear_systems]
-        solution_array = np.asarray(solution_list)
+        solution_array = np.asarray(solution_list[0])
         show_solution = np.round(np.moveaxis(solution_array,
-                                 (0, 1, 2, 3), (0, 2, 1, 3)), 2)
+                                 (0, 1, 2), (1, 0, 2)), 2)
         self.flux_scaling_factors, self.diff_coeff_by_length = (
             self.calc_flux_scaling_factors(
-                solution_list, dirichlet_values, neumann_values))
+                solution_array, dirichlet_values, neumann_values))
         self.solution_array[:] = solution_array
-        # self.solution_array[self.solution_array < 0.0] = 0.0
-        show_solution = np.round(np.moveaxis(solution_array,
-                                 (0, 1, 2, 3), (0, 2, 1, 3)), 2)
+        # # self.solution_array[self.solution_array < 0.0] = 0.0
+        # show_solution = np.round(np.moveaxis(solution_array,
+        #                          (0, 1, 2), (1, 0, 2)), 2)
 
 
 class GasMixtureDiffusionTransport(DiffusionTransport):

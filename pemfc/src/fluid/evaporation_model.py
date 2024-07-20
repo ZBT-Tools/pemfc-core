@@ -53,8 +53,8 @@ class HertzKnudsenSchrageModel(EvaporationModel):
         super().__init__(model_dict, fluid)
         self.evap_coeff = model_dict['evaporation_coefficient']
         self.mw = fluid.gas.species.mw[fluid.id_pc]
-        self.evap_rate = np.zeros(*fluid.array_shape)
-        self. evap_coeff_factor = 2.0 * self.evap_coeff \
+        self.evap_rate = np.zeros(fluid.array_shape)
+        self.evap_coeff_factor = 2.0 * self.evap_coeff \
             / (2.0 - self.evap_coeff)
 
         k_b = constants.BOLTZMANN

@@ -16,8 +16,8 @@
             "leverett": {
                 "type": "leverett",
                 "contact_angle": 120.0,
-                "precalculate_pressure": true,
-                "precalculate_gradient": true
+                "precalculate_pressure": false,
+                "precalculate_gradient": false
             },
             "data_table": {
                 "type": "data_table",
@@ -137,8 +137,8 @@
     },
     "evaporation_model": {
         "name": "Evaporation Model",
-        "type": "WangSi",
-        "evaporation_coefficient": 1e-4,
+        "type": "HertzKnudsenSchrage",
+        "evaporation_coefficient": 0.37,
         "condensation_coefficient": 5000
     }
 }

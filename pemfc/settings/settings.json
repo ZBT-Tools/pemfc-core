@@ -2,7 +2,7 @@
     "stack": {
         "cell_number": 1,
         "cool_flow": true,
-        "calc_temperature": false,
+        "calc_temperature": true,
         "calc_current_density": true
     },
     "simulation": {

@@ -140,9 +140,9 @@ class HalfCell:
             #     electrochemistry_dict['diff_coeff_gdl'])
             if self.channel_land_discretization:
                 # Initialize diffusion transport model
-                nx = 4
+                nx = 6
                 ny = self.discretization.shape[0]
-                nz = 8
+                nz = 16
                 gdl_diffusion_dict['boundary_patches']['Dirichlet'] = {
                     'axes': (0, 2), 'indices': (0, list(range(int(nz/2), nz)))}
             else:
@@ -213,8 +213,9 @@ class HalfCell:
                     temp = self.gdl_diffusion.fluid.temperature
                     press = self.gdl_diffusion.fluid.pressure
                     mol_comp = self.gdl_diffusion.solution_array
-                    ch_gdl_sat = np.zeros(temp.shape)
-                    water_flux = mass_flux[self.id_h2o]
+                    ch_gdl_sat = (np.ones(temp.shape)
+                                  * self.two_phase_flow.saturation_min)
+                    water_flux = mass_flux[self.id_h2o] * 0.0
                     self.two_phase_flow.update(
                         temp, press, mol_comp, ch_gdl_sat, water_flux,
                         update_fluid=True)
@@ -253,6 +254,9 @@ class HalfCell:
                     reference_fuel_concentration,
                     scaling_factors=flux_scaling_factors,
                     inlet_concentration=reference_fuel_concentration)
+
+                # Recalculate mass flux at GDL/Channel interface
+                mole_flux = self.gdl_diffusion.calc_boundary_flux('Dirichlet')
             else:
                 fuel_gdl_concentration = np.asarray([
                     ip.interpolate_1d(channel_concentration[self.id_fuel])
