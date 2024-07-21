@@ -140,9 +140,9 @@ class HalfCell:
             #     electrochemistry_dict['diff_coeff_gdl'])
             if self.channel_land_discretization:
                 # Initialize diffusion transport model
-                nx = 6
+                nx = 4
                 ny = self.discretization.shape[0]
-                nz = 16
+                nz = 8
                 gdl_diffusion_dict['boundary_patches']['Dirichlet'] = {
                     'axes': (0, 2), 'indices': (0, list(range(int(nz/2), nz)))}
             else:
@@ -215,9 +215,9 @@ class HalfCell:
                     mol_comp = self.gdl_diffusion.solution_array
                     ch_gdl_sat = (np.ones(temp.shape)
                                   * self.two_phase_flow.saturation_min)
-                    water_flux = mass_flux[self.id_h2o] * 0.0
+                    liquid_water_flux = mass_flux[self.id_h2o] * 0.0
                     self.two_phase_flow.update(
-                        temp, press, mol_comp, ch_gdl_sat, water_flux,
+                        temp, press, mol_comp, ch_gdl_sat, liquid_water_flux,
                         update_fluid=True)
                 # Reshape 3D-concentration fields from the GDL-Diffusion
                 # sub-model to the reduced discretization in this model
@@ -255,8 +255,44 @@ class HalfCell:
                     scaling_factors=flux_scaling_factors,
                     inlet_concentration=reference_fuel_concentration)
 
+                mass_flux_old = np.copy(mass_flux)
+                mole_flux_old = np.copy(mole_flux)
+                mole_flux_avg_old = np.average(np.average(mole_flux, axis=-1),
+                                               axis=-1)
                 # Recalculate mass flux at GDL/Channel interface
-                mole_flux = self.gdl_diffusion.calc_boundary_flux('Dirichlet')
+                bc_type = 'Dirichlet'
+                mole_flux = - self.gdl_diffusion.calc_boundary_flux(bc_type)
+                mole_flux_avg = np.average(np.average(mole_flux, axis=-1),
+                                           axis=-1)
+                mass_flux = (mole_flux.transpose() *
+                             self.channel.fluid.species_mw).transpose()
+                axes, indices, _ = self.gdl_diffusion.get_boundary_indices(
+                    bc_type)
+                flux_interface_area = (
+                    self.gdl_diffusion.get_values(
+                        self.gdl_diffusion.discretization.d_area[axes[0]],
+                        axes,
+                        indices))
+
+                # # Recalculate mass flux at GDL/Channel interface
+                # bc_type = 'Neumann'
+                # mole_flux_cl = - self.gdl_diffusion.calc_boundary_flux(
+                #     bc_type)
+                # mole_flux_avg_cl = np.average(np.average(mole_flux_cl, axis=-1),
+                #                               axis=-1)
+                #
+                # mass_flux_cl = (mole_flux_cl.transpose() *
+                #                 self.channel.fluid.species_mw).transpose()
+                # axes, indices, _ = self.gdl_diffusion.get_boundary_indices(
+                #     bc_type)
+                # flux_interface_area_cl = (
+                #     self.gdl_diffusion.get_values(
+                #         self.gdl_diffusion.discretization.d_area[axes[0]],
+                #         axes,
+                #         indices))
+                # Factor 2 due to symmetry in gdl_diffusion model
+                flux_interface_area *= 2.0
+
             else:
                 fuel_gdl_concentration = np.asarray([
                     ip.interpolate_1d(channel_concentration[self.id_fuel])
@@ -265,16 +301,20 @@ class HalfCell:
                     current_density, fuel_gdl_concentration,
                     reference_fuel_concentration,
                     inlet_concentration=reference_fuel_concentration)
+                flux_interface_area = self.discretization.d_area
 
             if update_channel:
                 # Calculate mole and mass source from fluxes
                 mass_source = self.surface_flux_to_channel_source(
-                    mass_flux)
-                mole_source = self.surface_flux_to_channel_source(mole_flux)
+                    -mass_flux, area=flux_interface_area)
+                # mass_source_old = self.surface_flux_to_channel_source(
+                #     mass_flux_old)
+                mole_source = self.surface_flux_to_channel_source(
+                    -mole_flux, flux_interface_area)
                 self.channel.mass_source[:], self.channel.mole_source[:] = (
                     mass_source, mole_source)
-                # self.channel.update(update_mass=True, update_flow=False,
-                #                     update_heat=False, update_fluid=True)
+                self.channel.update(update_mass=True, update_flow=False,
+                                    update_heat=False, update_fluid=True)
             # if gs.global_state.iteration == 50:
             #     print('test')
             self.update_voltage_loss(current_density)
@@ -328,14 +368,17 @@ class HalfCell:
                      * self.channel.fluid.species_mw).transpose()
         return mass_flux, mole_flux
 
-    def surface_flux_to_channel_source(self, flux: np.ndarray):
+    def surface_flux_to_channel_source(self, flux: np.ndarray, area=None):
+        if area is None:
+            area = self.discretization.d_area
         if np.isscalar(flux) or flux.ndim in (0, 1):
-            return np.sum(self.discretization.d_area, axis=0) * flux
+            return np.sum(area, axis=0) * flux
         elif flux.ndim == 2:
-            return np.sum(self.discretization.d_area * flux, axis=1)
+            return np.sum(area * flux, axis=1)
         elif flux.ndim == 3 and flux.shape[0] == self.channel.fluid.n_species:
-            return np.asarray([self.surface_flux_to_channel_source(flux[i])
-                               for i in range(self.channel.fluid.n_species)])
+            return np.asarray(
+                [self.surface_flux_to_channel_source(flux[i], area)
+                 for i in range(self.channel.fluid.n_species)])
         else:
             raise ValueError('flux variable must be one- or '
                              'two-dimensional numpy array')

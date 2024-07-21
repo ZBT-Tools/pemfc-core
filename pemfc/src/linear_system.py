@@ -145,10 +145,11 @@ class RHSInput:
 
 class BasicLinearSystem(LinearSystem, ABC):
     def __init__(self, transport_layer: tl.TransportLayer, transport_type: str,
-                 init_value=0.0, shift_axis=None):
+                 init_value=0.0, shift_axis=None, previously_shifted_axis=None):
         self.shift_axis = shift_axis
         self.transport_layer = transport_layer
         self.type = transport_type
+        self.previously_shifted_axis = previously_shifted_axis
         conductance = self.transport_layer.conductance[self.type]
         self.conductance, shape = self.calculate_conductance(conductance)
         super().__init__(shape)
@@ -173,9 +174,12 @@ class BasicLinearSystem(LinearSystem, ABC):
 
         shape = conductance_array[0].shape
         if self.shift_axis is None:
+            previously_shifted = tuple(
+                True if i == self.previously_shifted_axis else False
+                for i in range(len(conductance_array)))
             conductance = [
                 tl.TransportLayer.calc_inter_node_conductance(
-                    conductance_array[i], axis=i)
+                    conductance_array[i], axis=i, shifted=previously_shifted[i])
                 for i in range(len(conductance_array))]
         else:
             # Shift conductance nodes along the provided axis to the outer edges
@@ -183,7 +187,7 @@ class BasicLinearSystem(LinearSystem, ABC):
             # due to the assumption the Dirichlet boundary conditions are set on
             # the outer planes in this implementation.
             conductance = mtx_func.shift_nodes(
-                conductance_array, axis=self.shift_axis)
+                conductance_array, axis=self.shift_axis, inverse=True)
             # With shifted nodes for axis=self.shift_axis, only the inter-nodal
             # conductance for the remaining axes must be recalculated
             conductance = [
@@ -198,14 +202,16 @@ class BasicLinearSystem(LinearSystem, ABC):
 
     @classmethod
     def create(cls, transport_layer: tl.TransportLayer, transport_type: str,
-               init_value=0.0, shift_axis=None):
+               init_value=0.0, shift_axis=None, previously_shifted_axis=None):
         if isinstance(transport_layer, tl.TransportLayer2D):
             raise NotImplementedError('class not implemented for pure'
                                       'two-dimensional yet, try to use the '
                                       'three-dimensional class')
         elif isinstance(transport_layer, tl.TransportLayer3D):
-            return BasicLinearSystem3D(transport_layer, transport_type,
-                                       init_value, shift_axis=shift_axis)
+            return BasicLinearSystem3D(
+                transport_layer, transport_type, init_value,
+                shift_axis=shift_axis,
+                previously_shifted_axis=previously_shifted_axis)
         else:
             raise NotImplementedError(
                 'argument "transport_layer" must be of '
@@ -321,6 +327,36 @@ class BasicLinearSystem(LinearSystem, ABC):
         Updates matrix coefficients
         """
         conductance = self.transport_layer.conductance[self.type]
+        rhs_input = kwargs.get('rhs_input', None)
+        if isinstance(rhs_input, RHSInput):
+            if rhs_input.dirichlet_bc is not None:
+                axes_patch = rhs_input.dirichlet_bc.axes
+                indices_patch = rhs_input.dirichlet_bc.indices
+                index_array_patch = mtx_func.get_axis_values(
+                    self.index_array, axes_patch, indices_patch)
+                axes_plane = tuple(
+                    axes_patch[i] for i in range(len(axes_patch)) if
+                    not isinstance(indices_patch[i], (tuple, list)))
+                indices_plane = tuple(indices_patch[i]
+                                      for i in range(len(axes_plane)))
+                index_array_plane = mtx_func.get_axis_values(
+                    self.index_array, axes_plane, indices_plane)
+                index_vector_plane = index_array_plane.ravel(order='F')
+                index_vector_patch = index_array_patch.ravel(order='F')
+
+                common_array, plane_ids, patch_ids = np.intersect1d(
+                    index_vector_plane, index_vector_patch,
+                    return_indices=True)
+                index_vector_remaining = np.delete(index_vector_plane,
+                                                   plane_ids)
+                modified_conductance = []
+                for cond in conductance:
+                    conductance_vector = cond.ravel(order='F')
+                    conductance_vector[index_vector_remaining] = 0.0
+                    modified_conductance.append(conductance_vector.reshape(
+                        cond.shape, order='F'))
+                conductance = np.asarray(modified_conductance)
+
         # Shift conductance nodes along first axis to the outer edges of layer
         self.conductance, shape = self.calculate_conductance(conductance)
         self.mtx[:] = mtx_func.build_cell_conductance_matrix(
@@ -330,15 +366,16 @@ class BasicLinearSystem(LinearSystem, ABC):
 
 class BasicLinearSystem3D(BasicLinearSystem):
     def __init__(self, transport_layer: tl.TransportLayer, transport_type: str,
-                 init_value=0.0, shift_axis=None):
+                 init_value=0.0, shift_axis=None, previously_shifted_axis=None):
         super().__init__(transport_layer, transport_type,
-                         init_value=init_value, shift_axis=shift_axis)
+                         init_value=init_value, shift_axis=shift_axis,
+                         previously_shifted_axis=previously_shifted_axis)
         if not isinstance(self.transport_layer.discretization,
                           dsct.Discretization3D):
             raise TypeError('attribute "transport_layer" and its attribute '
                             '"discretization" must be three-dimensional types')
         self.d_volume = mtx_func.shift_nodes(
-            self.transport_layer.discretization.d_volume, axis=0)
+            self.transport_layer.discretization.d_volume, axis=0, inverse=False)
 
     # def calculate_conductance(self, conductance_array):
     #     # Shift conductance nodes along first axis (x-axis) to the outer edges
@@ -423,7 +460,8 @@ class StackedLayerLinearSystem(LinearSystem):
         return self.stack_conductance_layers(conductance)
 
     def stack_conductance_layers(self, conductance_list: list, axis: int = 0):
-        return mtx_func.shift_nodes(conductance_list, axis=axis)
+        return mtx_func.shift_nodes(conductance_list, axis=axis,
+                                    inverse=True)
 
     @staticmethod
     def add_explicit_source(rhs_vector, source_term, index_array,
@@ -569,7 +607,8 @@ class CellLinearSystem(StackedLayerLinearSystem):
                 and modify_values):
             for i in range(len(conductance_list)):
                 conductance_list[i][[1, -2], :, 1] = 0.0
-        conductance_list = mtx_func.shift_nodes(conductance_list, axis=axis)
+        conductance_list = mtx_func.shift_nodes(conductance_list, axis=axis,
+                                                inverse=True)
         return conductance_list
 
     def add_ambient_convection(self):

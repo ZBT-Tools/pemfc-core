@@ -107,7 +107,8 @@ class DiscreteFluid(OutputObject1D, ABC):
         self.pressure = pressure
 
     @abstractmethod
-    def _calc_properties(self, temperature, pressure=101325.0, **kwargs):
+    def _calc_properties(self, temperature: (float, np.ndarray),
+                         pressure: (float, np.ndarray) = 101325.0, **kwargs):
         pass
 
     def _calc_fraction(self, composition, axis=0, recursion_count=0):
@@ -299,8 +300,9 @@ class IncompressibleFluid(DiscreteFluid):
 
     TYPE_NAME = 'Incompressible Fluid'
 
-    def __init__(self, array_shape, name, fluid_props, temperature=298.15,
-                 pressure=101325.0, **kwargs):
+    def __init__(self, array_shape, name, fluid_props,
+                 temperature: (float, np.ndarray) = 298.15,
+                 pressure: (float, np.ndarray) = 101325.0, **kwargs):
         # print("__init__ for IncompressibleFluid")
         if isinstance(fluid_props, species.IncompressibleProperties):
             self.properties = fluid_props
@@ -324,7 +326,8 @@ class IncompressibleFluid(DiscreteFluid):
         """
         return self.properties.calc_property(property_name, temperature)
 
-    def _calc_properties(self, temperature, pressure=101325.0, **kwargs):
+    def _calc_properties(self, temperature: (float, np.ndarray),
+                         pressure: (float, np.ndarray) = 101325.0, **kwargs):
         """
         Wrapper function to calculate the classes properties
         :param temperature: 1D temperature array
@@ -341,7 +344,8 @@ class GasMixture(DiscreteFluid):
     TYPE_NAME = 'Gas Mixture'
 
     def __init__(self, array_shape, name, species_dict, mole_fractions,
-                 temperature=298.15, pressure=101325.0, **kwargs):
+                 temperature: (float, np.ndarray) = 298.15,
+                 pressure: (float, np.ndarray) = 101325.0, **kwargs):
         # print("__init__ for Gas Mixture")
         print_variables = \
             {
@@ -395,7 +399,7 @@ class GasMixture(DiscreteFluid):
         print_data = kwargs.get('print_data', True)
         if print_data:
             self.add_print_data(self.mole_fraction, 'Mole Fraction',
-                                sub_names=self.species.names)
+                                sub_names=self.species.names, units='-')
             self.add_print_variables(self.print_variables)
 
     @property
@@ -593,7 +597,9 @@ class GasMixture(DiscreteFluid):
             raise ValueError('property_name '
                              '{} not valid'.format(property_name))
 
-    def _calc_properties(self, temperature, pressure=101325.0, method='ideal'):
+    def _calc_properties(self, temperature: (float, np.ndarray),
+                         pressure: (float, np.ndarray) = 101325.0,
+                         method='ideal'):
         """
         Wrapper function to calculate the classes properties
         :param temperature: 1D temperature array
@@ -611,7 +617,8 @@ class CanteraGasMixture(DiscreteFluid):
     Wrapper for discrete fluid properties calculated by Cantera library
     """
     def __init__(self, array_shape, name, species_dict, mole_fractions,
-                 temperature=298.15, pressure=101325.0, **kwargs):
+                 temperature: (float, np.ndarray) = 298.15,
+                 pressure: (float, np.ndarray) = 101325.0, **kwargs):
         super().__init__(array_shape, name, temperature, pressure, **kwargs)
 
         self.dict = kwargs.get('fluid_dict')
@@ -670,7 +677,8 @@ class CanteraGasMixture(DiscreteFluid):
         self.solution_array(self.solution, new_array_shape)
         self.update(self._temperature, self._pressure, self._mole_fraction)
 
-    def _calc_properties(self, temperature, pressure=101325.0, **kwargs):
+    def _calc_properties(self, temperature: (float, np.ndarray),
+                         pressure: (float, np.ndarray) = 101325.0, **kwargs):
         """
         Wrapper function to calculate the classes properties
         :param temperature: 1D temperature array
@@ -703,8 +711,8 @@ class TwoPhaseMixture(DiscreteFluid):
     TYPE_NAME = 'Two-Phase Mixture'
 
     def __init__(self, array_shape, name, species_dict, mole_fractions,
-                 liquid_props=None, temperature=298.15, pressure=101325.0,
-                 **kwargs):
+                 liquid_props=None, temperature: (float, np.ndarray) = 298.15,
+                 pressure: (float, np.ndarray) = 101325.0, **kwargs):
         # print("__init__ for TwoPhaseMixture")
 
         super().__init__(array_shape, name, temperature, pressure, **kwargs)
@@ -1039,7 +1047,8 @@ class CanteraTwoPhaseMixture(CanteraGasMixture):
     Wrapper for discrete fluid properties calculated by Cantera library
     """
     def __init__(self, array_shape, name, species_dict, mole_fractions,
-                 temperature=298.15, pressure=101325.0, **kwargs):
+                 temperature: (float, np.ndarray) = 298.15,
+                 pressure: (float, np.ndarray) = 101325.0, **kwargs):
 
         phase_change_species_names = \
             [key for key in species_dict

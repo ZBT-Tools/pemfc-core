@@ -31,7 +31,8 @@ class DiffusionTransport(ABC):
         self.transport_type = 'diffusion'
 
         self.linear_systems = [
-            ls.BasicLinearSystem.create(item, self.transport_type)
+            ls.BasicLinearSystem.create(item, self.transport_type,
+                                        previously_shifted_axis=item.shift_axis)
             for item in self.transport_layers]
         self.base_shape = self.linear_systems[0].solution_array.shape
         if len(self.linear_systems) == 1:
@@ -43,6 +44,7 @@ class DiffusionTransport(ABC):
         self.dirichlet_bc = self.create_boundary_condition('Dirichlet')
         self.flux_scaling_factors = np.zeros(self.neumann_bc.values.shape)
         self.diff_coeff_by_length = np.zeros(self.neumann_bc.values.shape)
+        self.discretization = self.transport_layers[0].discretization
 
     @classmethod
     def create(cls, input_dict: dict,
@@ -157,8 +159,8 @@ class DiffusionTransport(ABC):
         else:
             return mf.get_axis_values(self.solution_array, axes, indices).shape
 
-    def get_boundary_values(self, values: (list, np.ndarray), axes: tuple,
-                            indices: tuple) \
+    def get_values(self, values: (list, np.ndarray), axes: tuple,
+                   indices: tuple) \
             -> np.ndarray:
         if isinstance(values, list):
             return np.asarray([mf.get_axis_values(item, axes, indices)
@@ -175,7 +177,7 @@ class DiffusionTransport(ABC):
         else:
             raise TypeError('values must be of types (list, np.ndarray)')
 
-    def calc_boundary_flux(self, boundary_type: str):
+    def get_boundary_indices(self, boundary_type: str):
         if boundary_type == 'Neumann':
             axes = self.neumann_bc.axes
             indices = self.neumann_bc.indices
@@ -184,29 +186,15 @@ class DiffusionTransport(ABC):
             indices = self.dirichlet_bc.indices
         else:
             raise ValueError('"boundary_type" must be "Neumann" or "Dirichlet"')
-        index_next = 1 if axes[0] == 0 else -2
-        indices_next = list(indices)
-        indices_next[0] = index_next
-        indices_next = tuple(indices_next)
-        boundary_values = (self.get_boundary_values(self.solution_array, axes,
-                           indices))
-        adjacent_values = (self.get_boundary_values(self.solution_array, axes,
-                           indices_next))
-        # Calculate boundary flux: defined positive if going into domain,
-        # negative if going out of domain
-        d_volume = self.get_boundary_values(
-            self.transport_layers[0].d_volume, axes, indices)
-        d_area = self.get_boundary_values(
-            self.transport_layers[0].discretization.d_area, axes, indices)
-        diff_coeffs = [item.transport_properties[self.transport_type][axes[0]]
-                       for item in self.transport_layers]
-        diff_coeff = self.get_boundary_values(diff_coeffs, axes, indices)
-        # TODO: Include inert species diffusion coefficient
+        index_adjacent = 1 if indices[0] == 0 else -2
+        indices_adjacent = list(indices)
+        indices_adjacent[0] = index_adjacent
+        indices_adjacent = tuple(indices_adjacent)
+        return axes, indices, indices_adjacent
 
-        diff_coeff_by_length = diff_coeff * d_area[axes[0]] / d_volume
-        boundary_flux = - diff_coeff_by_length * (adjacent_values -
-                                                       boundary_values)
-        return boundary_flux
+    @abstractmethod
+    def calc_boundary_flux(self, boundary_type: str):
+        pass
 
     def calc_flux_scaling_factors(
             self, solution_values: (list, np.ndarray),
@@ -214,11 +202,11 @@ class DiffusionTransport(ABC):
             neumann_bc_flux: (list, np.ndarray)):
         axes, indices = self.neumann_bc.axes, self.neumann_bc.indices
 
-        flux_boundary_concentrations = self.get_boundary_values(
+        flux_boundary_concentrations = self.get_values(
             solution_values, axes, indices)
-        boundary_concentration = self.get_boundary_values(
+        boundary_concentration = self.get_values(
             dirichlet_bc_values, axes, indices)
-        flux_boundary_flux = self.get_boundary_values(
+        flux_boundary_flux = self.get_values(
             neumann_bc_flux, axes, indices)
 
         delta_conc = boundary_concentration - flux_boundary_concentrations
@@ -242,6 +230,9 @@ class ConstantDiffusionTransport(DiffusionTransport):
         super().__init__(input_dict, transport_layers, *args, **kwargs)
 
     def update(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def calc_boundary_flux(self, boundary_type: str):
         raise NotImplementedError
 
 
@@ -290,6 +281,9 @@ class DarcyFlowDiffusionTransport(DiffusionTransport):
         # show_solution = np.round(np.moveaxis(solution_array,
         #                          (0, 1, 2), (1, 0, 2)), 2)
 
+    def calc_boundary_flux(self, boundary_type: str):
+        raise NotImplementedError
+
 
 class GasMixtureDiffusionTransport(DiffusionTransport):
     """
@@ -303,6 +297,9 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
                  id_inert: int, **kwargs):
         super().__init__(input_dict, transport_layers)
         self.id_inert = id_inert
+
+        self.ids_active = tuple(i for i in range(fluid.n_species)
+                                if i != self.id_inert)
         self.initialize = True
         self.fluid = fluid.copy(self.base_shape, plot_axis=-2)
 
@@ -347,11 +344,11 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         boundary_flux = [flux[i] for i in range(len(flux)) if i !=
                          self.id_inert]
         self.gas_diff_coeff.update()
+
         for i, trans_layer in enumerate(self.transport_layers):
             trans_layer.update(
-                {self.transport_type: [self.gas_diff_coeff.d_eff[i],
-                                       self.gas_diff_coeff.d_eff[i],
-                                       self.gas_diff_coeff.d_eff[i]]})
+                {self.transport_type:
+                    self.gas_diff_coeff.d_eff[self.ids_active[i]]})
             # trans_layer.conductance['diffusion'][:, 0:5, :, 0:10] = 1e-16
 
         for i, lin_sys in enumerate(self.linear_systems):
@@ -368,8 +365,8 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         concentrations = [lin_sys.solution_array for
                           lin_sys in self.linear_systems]
         conc_array = np.array(concentrations)
-        show_concentrations = np.round(np.moveaxis(conc_array,
-                                       (0, 1, 2, 3), (0, 2, 1, 3)), 2)
+        show_concentrations = np.moveaxis(conc_array,
+                                          (0, 1, 2, 3), (0, 2, 1, 3))
         self.flux_scaling_factors, self.diff_coeff_by_length = (
             self.calc_flux_scaling_factors(
                 concentrations, boundary_composition, boundary_flux))
@@ -377,11 +374,57 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
                           concentrations]
         concentrations = self.calculate_inert_concentration(concentrations)
         self.solution_array = concentrations
-        show_concentrations = np.round(np.moveaxis(concentrations,
-                                       (0, 1, 2, 3), (0, 2, 1, 3)), 2)
+        show_concentrations = np.moveaxis(concentrations,
+                                          (0, 1, 2, 3), (0, 2, 1, 3))
         conductances = [lin_sys.conductance for lin_sys in self.linear_systems]
         # show_conductances = np.round(np.)
         self.initialize = False
+
+    def calc_boundary_flux(self, boundary_type: str):
+
+        # Calculate boundary flux: defined positive if going into domain,
+        # negative if going out of domain
+        axes, indices_boundary, indices_adjacent = self.get_boundary_indices(
+            boundary_type)
+        boundary_values = (self.get_values(self.solution_array, axes,
+                                           indices_boundary))
+        adjacent_values = (self.get_values(self.solution_array, axes,
+                                           indices_adjacent))
+        # Be careful to use the shifted node d_volume from one of the
+        # TransportLayer attributes instead of the original discrete volumes
+        # from the Discretization attributes
+        trans_layer = self.transport_layers[0]
+        dx = self.get_values(trans_layer.dx[axes[0]], axes, indices_adjacent)
+        # d_volume = self.get_values(
+        #     trans_layer.d_volume, axes, indices_boundary)
+        # d_area = self.get_values(
+        #     self.discretization.d_area, axes, indices_boundary)
+        # d_area = d_area[axes[0]]
+        # area_sum = np.sum(d_area)
+        diff_coeffs_boundary = self.get_diff_coeffs(axes, indices_boundary)
+        diff_coeffs_adjacent = self.get_diff_coeffs(axes, indices_adjacent)
+        diff_coeffs = np.stack([self.get_diff_coeffs(axes, indices_boundary),
+                                self.get_diff_coeffs(axes, indices_adjacent)],
+                               axis=diff_coeffs_boundary.ndim)
+        diff_coeffs = np.average(diff_coeffs, axis=-1)
+
+        diff_coeff_by_length = diff_coeffs / dx
+        diff_conc = boundary_values - adjacent_values
+        diff_conc_avg = np.average(np.average(diff_conc, axis=-1),
+                                   axis=-1)
+        diff_coeff_avg = np.average(np.average(diff_coeffs, axis=-1),
+                                    axis=-1)
+        boundary_flux = - diff_coeff_by_length * (boundary_values -
+                                                  adjacent_values)
+        return boundary_flux
+
+    def get_diff_coeffs(self, axes, indices):
+        diff_coeffs = self.get_values(self.gas_diff_coeff.d_eff, axes, indices)
+        trans_layer = self.transport_layers[0]
+        if trans_layer.effective:
+            diff_coeffs *= (trans_layer.volume_fraction
+                            ** trans_layer.bruggeman_exponent)
+        return diff_coeffs
 
     def calculate_inert_concentration(self, concentrations: list) -> np.ndarray:
         # Update species transport for inert species

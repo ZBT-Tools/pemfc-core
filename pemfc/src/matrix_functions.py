@@ -195,8 +195,9 @@ def build_cell_conductance_matrix(conductance_list: list[np.ndarray]):
     return np.sum(cond_mtx_list, axis=0)
 
 
-def shift_nodes(node_values: (list, np.ndarray), axis,
-                include_axis=False, **kwargs):
+def transform_nodes(node_values: (list, np.ndarray), axis,
+                    include_axis=False, inverse=False,
+                    mode='shift'):
     if len(node_values) == node_values[0].ndim:
         node_values = [np.asarray(item) for item in node_values]
         if include_axis:
@@ -207,22 +208,74 @@ def shift_nodes(node_values: (list, np.ndarray), axis,
         if axis == -1:
             axis = node_values[0].ndim - 1
         for i in transform_axes:
-            new_values = shift_array_nodes(node_values[i], axis)
+            if inverse and i == axis:
+                inverse = True
+            else:
+                inverse = False
+            if mode == 'shift':
+                new_values = shift_array_nodes(node_values[i], axis,
+                                               inverse=inverse)
+            elif mode == 'average':
+                new_values = average_array_nodes(node_values[i], axis)
+            else:
+                raise ValueError('only mode "shift" or "average" is allowed')
             node_values[i] = new_values
         return node_values
     else:
-        return shift_array_nodes(np.asarray(node_values), axis)
+        if mode == 'shift':
+            result = shift_array_nodes(np.asarray(node_values), axis,
+                                       inverse=inverse)
+        elif mode == 'average':
+            result = average_array_nodes(np.asarray(node_values), axis)
+        else:
+            raise ValueError('only mode "shift" or "average" is allowed')
+        return result
 
 
-def shift_array_nodes(array: np.ndarray, axis: int):
+def average_array_nodes(array: np.ndarray, axis: int):
+    old_shape = array.shape
+    new_shape = tuple(size - 1 if j == axis else size
+                      for j, size in enumerate(old_shape))
+    new_array = np.zeros(new_shape)
+    # factor = 2.0 if inverse_factor else 0.5
+    half_values = 0.5 * np.moveaxis(array, axis, 0)
+    np.moveaxis(new_array, axis, 0)[:] += half_values[:-1]
+    np.moveaxis(new_array, axis, 0)[:] += half_values[1:]
+    return new_array
+
+
+def shift_array_nodes(array: np.ndarray, axis: int, inverse=False):
     old_shape = array.shape
     new_shape = tuple(size + 1 if j == axis else size
                       for j, size in enumerate(old_shape))
     new_array = np.zeros(new_shape)
-    half_values = 0.5 * np.moveaxis(array, axis, 0)
-    np.moveaxis(new_array, axis, 0)[:-1] += half_values
-    np.moveaxis(new_array, axis, 0)[1:] += half_values
+    # factor = 2.0 if inverse_factor else 0.5
+    if inverse:
+        inf_array = np.ones(array.shape) * 1e16
+        inverse_array = np.divide(1.0, array, out=inf_array,
+                                  where=array != 0.0)
+        inverse_half_values = 0.5 * inverse_array
+
+        inverse_result = np.zeros(np.moveaxis(new_array, axis, 0).shape)
+        # inf_array = np.ones(half_values.shape) * 1e16
+        # inverse_half_values = np.divide(1.0, half_values, out=inf_array,
+        #                                 where=half_values != 0.0)
+        inverse_result[:-1] += inverse_half_values
+        inverse_result[1:] += inverse_half_values
+        result = 1.0 / inverse_result
+        np.moveaxis(new_array, axis, 0)[:] = result
+    else:
+        half_values = 0.5 * np.moveaxis(array, axis, 0)
+        np.moveaxis(new_array, axis, 0)[:-1] += half_values
+        np.moveaxis(new_array, axis, 0)[1:] += half_values
     return new_array
+
+
+def shift_nodes(node_values: (list, np.ndarray), axis,
+                include_axis=False, inverse=False, **kwargs):
+    return transform_nodes(node_values, axis,
+                           include_axis=include_axis, inverse=inverse,
+                           mode='shift', **kwargs)
 
 
 def connect_cells(matrix, cell_ids, layer_ids, values, mtx_ids,

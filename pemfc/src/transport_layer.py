@@ -39,6 +39,7 @@ class TransportLayer(oo.OutputObject2D, ABC):
         self.geometric_factors: np.ndarray = np.asarray([0.0, 0.0, 0.0])
         self.conductance: dict = {}
         self.d_volume = self.discretization.d_volume
+        self.dx = self.discretization.dx
 
     @classmethod
     def create(cls, input_dict: dict, transport_properties: dict,
@@ -59,9 +60,12 @@ class TransportLayer(oo.OutputObject2D, ABC):
             result *= self.volume_fraction ** self.bruggeman_exponent
         if self.shift_axis is not None:
             result = mf.shift_nodes(result, axis=self.shift_axis,
-                                    include_axis=True)
+                                    include_axis=True, inverse=True)
             self.d_volume = mf.shift_nodes(self.d_volume, axis=self.shift_axis,
-                                           include_axis=True)
+                                           include_axis=True,
+                                           inverse=False)
+            self.dx = mf.shift_nodes(self.dx, axis=self.shift_axis,
+                                     include_axis=True, inverse=False)
         return np.asarray(result)
 
     def calc_conductance(self, conductivity):
@@ -82,6 +86,10 @@ class TransportLayer(oo.OutputObject2D, ABC):
                                  'entries in first dimension')
         elif (np.ndim(conductivity) == np.ndim(self.geometric_factors) and
                 conductivity.shape == self.geometric_factors.shape):
+            conductance = conductivity * self.geometric_factors
+        elif conductivity.shape == self.geometric_factors[0].shape:
+            conductivity = np.asarray([conductivity for i in range(len(
+                self.geometric_factors))])
             conductance = conductivity * self.geometric_factors
         else:
             raise ValueError('conductivity must be either single scalar,'
@@ -104,8 +112,8 @@ class TransportLayer(oo.OutputObject2D, ABC):
             raise ValueError('only three-dimensional arrays supported')
 
     @classmethod
-    def connect(cls, conductance_a: Iterable[Self],
-                conductance_b: Iterable[Self], mode):
+    def connect(cls, conductance_a: (list, np.ndarray),
+                conductance_b: (list, np.ndarray), mode):
         conductance_a = np.asarray(conductance_a)
         conductance_b = np.asarray(conductance_b)
         if mode == 'serial':
@@ -126,9 +134,14 @@ class TransportLayer(oo.OutputObject2D, ABC):
                              "'serial' or 'parallel'")
 
     @classmethod
-    def calc_inter_node_conductance(cls, conductance: Iterable[Self],
-                                    axis=0, mode='serial'):
-        conductance_by_2 = 2.0 * np.asarray(conductance)
+    def calc_inter_node_conductance(
+            cls, conductance: (list, np.ndarray), axis,
+            mode='serial', shifted=False):
+        if shifted:
+            conductance_by_2 = np.copy(conductance)
+            np.moveaxis(conductance_by_2, axis, 0)[1:-1] *= 2.0
+        else:
+            conductance_by_2 = 2.0 * np.asarray(conductance)
         if axis == 0:
             return cls.connect(conductance_by_2[:-1, :, :],
                                conductance_by_2[1:, :, :],
@@ -143,6 +156,10 @@ class TransportLayer(oo.OutputObject2D, ABC):
                                mode)
         else:
             raise ValueError('axis argument must be either 0, 1, 2 (-1)')
+
+    @staticmethod
+    def calc_average_inter_node_value(values: (list, np.ndarray), axis):
+        return mf.transform_nodes(values, axis, mode='average')
 
     def update(self, transport_properties: dict, *args, **kwargs):
         for key in self.conductance:
