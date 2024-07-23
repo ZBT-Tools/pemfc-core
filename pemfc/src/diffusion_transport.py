@@ -265,7 +265,7 @@ class DarcyFlowDiffusionTransport(DiffusionTransport):
             volumetric_source = ls.SourceData(values=source_values)
             rhs_input = ls.RHSInput(neumann_bc=self.neumann_bc,
                                     dirichlet_bc=self.dirichlet_bc,
-                                    volumetric_sources=volumetric_source)
+                                    explicit_sources=volumetric_source)
             lin_sys.update(rhs_input=rhs_input)
 
         solution_list = [lin_sys.solution_array for lin_sys
@@ -302,7 +302,9 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
                                 if i != self.id_inert)
         self.initialize = True
         self.fluid = fluid.copy(self.base_shape, plot_axis=-2)
-
+        if self.id_inert is not None:
+            self.solution_array = np.zeros((len(self.linear_systems) + 1,
+                                            *self.base_shape))
         if isinstance(fluid, (fl.GasMixture, fl.CanteraGasMixture)):
             self.gas_diff_coeff = (
                 dc.MixtureAveragedDiffusionCoefficient(self.fluid))
@@ -316,7 +318,10 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
                 'TwoPhaseMixture, or CanteraTwoPhaseMixture)')
 
     def update(self, temperature: np.ndarray, pressure: np.ndarray,
-               molar_composition: np.ndarray, flux: np.ndarray,
+               dirichlet_molar_composition: np.ndarray,
+               neumann_flux: np.ndarray,
+               explicit_source: np.ndarray = None,
+               implicit_source: np.ndarray = None,
                *args, **kwargs):
         # temperature = gf.rescale(temperature, self.fluid.temperature.shape)
         # pressure = self.reshape_input(pressure)
@@ -329,20 +334,29 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         # flux = gf.rescale(flux, self.fluid.gas.mole_fraction.shape)
         temperature = self.rescale_input(temperature)
         pressure = self.rescale_input(pressure)
-        molar_composition = self.rescale_input(molar_composition,
-                                               except_first_axis=True)
-        flux = self.rescale_input(flux, except_first_axis=True)
+        dirichlet_molar_composition = self.rescale_input(
+            dirichlet_molar_composition, except_first_axis=True)
+        neumann_flux = self.rescale_input(neumann_flux, except_first_axis=True)
+        if explicit_source is not None:
+            explicit_source = self.rescale_input(explicit_source,
+                                                 except_first_axis=True)
+            explicit_source = [explicit_source[i] for i in range(len(
+                explicit_source)) if i != self.id_inert]
+        if implicit_source is not None:
+            implicit_source = self.rescale_input(implicit_source,
+                                                 except_first_axis=True)
+            implicit_source = [implicit_source[i] for i in range(len(
+                implicit_source)) if i != self.id_inert]
         if self.initialize:
-            self.fluid.update(temperature, pressure, molar_composition)
-        else:
-            self.fluid.update(temperature, pressure, self.solution_array)
+            self.fluid.update(temperature, pressure,
+                              dirichlet_molar_composition)
 
         # Update species transport for active species
         boundary_composition = [
-            mol_comp for i, mol_comp in enumerate(molar_composition)
-            if i != self.id_inert]
-        boundary_flux = [flux[i] for i in range(len(flux)) if i !=
-                         self.id_inert]
+            dirichlet_molar_composition[i] for i in
+            range(len(dirichlet_molar_composition)) if i != self.id_inert]
+        boundary_flux = [neumann_flux[i] for i in range(len(neumann_flux))
+                         if i != self.id_inert]
         self.gas_diff_coeff.update()
 
         for i, trans_layer in enumerate(self.transport_layers):
@@ -358,8 +372,12 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
                     indices=self.dirichlet_bc.indices)
             self.neumann_bc.values = boundary_flux[i]
             self.dirichlet_bc.values = boundary_concentration
+            explicit_source_data = ls.SourceData(values=explicit_source[i])
+            implicit_source_data = ls.SourceData(values=implicit_source[i])
             rhs_input = ls.RHSInput(neumann_bc=self.neumann_bc,
-                                    dirichlet_bc=self.dirichlet_bc)
+                                    dirichlet_bc=self.dirichlet_bc,
+                                    explicit_sources=explicit_source_data,
+                                    implicit_sources=implicit_source_data)
             lin_sys.update(rhs_input=rhs_input)
 
         concentrations = [lin_sys.solution_array for
@@ -370,14 +388,23 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         self.flux_scaling_factors, self.diff_coeff_by_length = (
             self.calc_flux_scaling_factors(
                 concentrations, boundary_composition, boundary_flux))
-        concentrations = [np.where(conc < 0.0, 0.0, conc) for conc in
-                          concentrations]
+        # concentrations = [np.where(conc < 0.0, 0.0, conc) for conc in
+        #                   concentrations]
         concentrations = self.calculate_inert_concentration(concentrations)
+        # concentrations = np.asarray([np.where(conc < 0.0, 0.0, conc)
+        #                              for conc in concentrations])
         self.solution_array = concentrations
         show_concentrations = np.moveaxis(concentrations,
                                           (0, 1, 2, 3), (0, 2, 1, 3))
-        conductances = [lin_sys.conductance for lin_sys in self.linear_systems]
-        # show_conductances = np.round(np.)
+        # conductances = [lin_sys.conductance for lin_sys in self.linear_systems]
+        if isinstance(self.fluid, (fl.GasMixture, fl.CanteraGasMixture)):
+            self.fluid.update(temperature, pressure,
+                              mole_composition=self.solution_array)
+        elif isinstance(self.fluid, (fl.TwoPhaseMixture,
+                        fl.CanteraTwoPhaseMixture)):
+            self.fluid.update(temperature, pressure,
+                              gas_mole_composition=self.solution_array)
+
         self.initialize = False
 
     def calc_boundary_flux(self, boundary_type: str):
@@ -402,7 +429,7 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         # d_area = d_area[axes[0]]
         # area_sum = np.sum(d_area)
         diff_coeffs_boundary = self.get_diff_coeffs(axes, indices_boundary)
-        diff_coeffs_adjacent = self.get_diff_coeffs(axes, indices_adjacent)
+        # diff_coeffs_adjacent = self.get_diff_coeffs(axes, indices_adjacent)
         diff_coeffs = np.stack([self.get_diff_coeffs(axes, indices_boundary),
                                 self.get_diff_coeffs(axes, indices_adjacent)],
                                axis=diff_coeffs_boundary.ndim)
@@ -410,10 +437,10 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
 
         diff_coeff_by_length = diff_coeffs / dx
         diff_conc = boundary_values - adjacent_values
-        diff_conc_avg = np.average(np.average(diff_conc, axis=-1),
-                                   axis=-1)
-        diff_coeff_avg = np.average(np.average(diff_coeffs, axis=-1),
-                                    axis=-1)
+        # diff_conc_avg = np.average(np.average(diff_conc, axis=-1),
+        #                            axis=-1)
+        # diff_coeff_avg = np.average(np.average(diff_coeffs, axis=-1),
+        #                             axis=-1)
         boundary_flux = - diff_coeff_by_length * (boundary_values -
                                                   adjacent_values)
         return boundary_flux

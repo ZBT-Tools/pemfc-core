@@ -59,11 +59,13 @@ class HertzKnudsenSchrageModel(EvaporationModel):
 
         k_b = constants.BOLTZMANN
         m = self.mw / constants.AVOGADRO_NUMBER
-        self.const_factor = np.sqrt(m / (2.0 * np.pi * k_b))
+        self.thermodynamics_factor = np.sqrt(m / (2.0 * np.pi * k_b))
+        self.const_factor = self.thermodynamics_factor * self.evap_coeff_factor
 
     def calc_evaporation_rate(self, temperature=None, pressure=None,
                               capillary_pressure=None,
-                              temperature_liquid=None, *args, **kwargs):
+                              temperature_liquid=None,
+                              *args, **kwargs):
         """
         :param temperature: temperature (K) (float or numpy array)
         :param pressure: pressure (Pa) (float or numpy array)
@@ -102,9 +104,17 @@ class HertzKnudsenSchrageModel(EvaporationModel):
                 np.exp(capillary_pressure * self.mw
                        / (gas_const * temperature * self.fluid.gas.density))
         p_vap = pressure * self.fluid.mole_fraction[self.fluid.id_pc]
-        return self.evap_coeff_factor * self.const_factor \
-            * (p_sat / np.sqrt(temperature_liq)
-               - p_vap / np.sqrt(temperature_vap))
+        const_by_sqrt_temp = self.const_factor / np.sqrt(temperature_vap)
+
+        implicit_condensation_coefficient = (
+                pressure / self.fluid.gas.total_gas_concentration)
+        implicit_condensation_coefficient *= const_by_sqrt_temp
+
+        condensation_rate = p_vap * const_by_sqrt_temp
+        evaporation_rate = self.const_factor * p_sat / np.sqrt(temperature_liq)
+        net_evaporation_rate = evaporation_rate - condensation_rate
+        return (net_evaporation_rate, evaporation_rate,
+                condensation_rate, implicit_condensation_coefficient)
 
     def update(self, temperature=None, pressure=None, *args, **kwargs):
         super().update(temperature, pressure, *args, **kwargs)

@@ -99,13 +99,40 @@ class LinearSystem(ABC):
         self.solution_array[:] = np.reshape(
             self.solution_vector, self.shape, order='F')
 
-    @abstractmethod
-    def add_explicit_source(self, *args, **kwargs):
-        pass
+    def add_implicit_source(self, matrix, coefficients,
+                            index_array=None, replace=False):
+        # matrix_size = matrix.shape[0]
+        diag_vector = np.diagonal(matrix).copy()
+        new_diag_vector, source_vector = LinearSystem.add_explicit_source(
+            diag_vector, -coefficients.flatten(order='F'),
+            index_array=index_array, replace=replace)
+        np.fill_diagonal(matrix, new_diag_vector)
+        return matrix, source_vector
 
-    @abstractmethod
-    def add_implicit_source(self, *args, **kwargs):
-        pass
+    @staticmethod
+    def add_explicit_source(
+            rhs_vector, source_term, index_array=None, replace=False):
+        if isinstance(source_term, np.ndarray):
+            if rhs_vector.ndim != source_term.ndim:
+                raise ValueError('source_term must have same dimensions as '
+                                 'rhs_vector')
+        if index_array is None:
+            if np.isscalar(source_term):
+                source_vector = np.full_like(rhs_vector, -source_term)
+            else:
+                source_vector = np.asarray(-source_term)
+        else:
+            if replace is True:
+                source_vector = np.copy(rhs_vector)
+                np.put(source_vector, index_array, -source_term)
+            else:
+                source_vector = np.zeros(rhs_vector.shape)
+                np.put(source_vector, index_array, -source_term)
+        if replace is True:
+            rhs_vector[:] = source_vector
+        else:
+            rhs_vector += source_vector
+        return rhs_vector, source_vector
 
     # @staticmethod
     # def shift_nodes(conductance_list: list, axis=0, **kwargs):
@@ -140,7 +167,8 @@ class SourceData:
 class RHSInput:
     neumann_bc: BoundaryData = None
     dirichlet_bc: BoundaryData = None
-    volumetric_sources: SourceData = None
+    explicit_sources: SourceData = None
+    implicit_sources: SourceData = None
 
 
 class BasicLinearSystem(LinearSystem, ABC):
@@ -187,7 +215,8 @@ class BasicLinearSystem(LinearSystem, ABC):
             # due to the assumption the Dirichlet boundary conditions are set on
             # the outer planes in this implementation.
             conductance = mtx_func.shift_nodes(
-                conductance_array, axis=self.shift_axis, inverse=True)
+                conductance_array, axis=self.shift_axis, inverse=True,
+                except_first_axis=True)
             # With shifted nodes for axis=self.shift_axis, only the inter-nodal
             # conductance for the remaining axes must be recalculated
             conductance = [
@@ -218,43 +247,8 @@ class BasicLinearSystem(LinearSystem, ABC):
                 'types (TransportLayer2D, TransportLayer3D)')
 
     @staticmethod
-    def add_explicit_source(
-            rhs_vector, source_term, index_array=None, replace=False):
-        if isinstance(source_term, np.ndarray):
-            if rhs_vector.ndim != source_term.ndim:
-                raise ValueError('source_term must have same dimensions as '
-                                 'rhs_vector')
-        if index_array is None:
-            if np.isscalar(source_term):
-                source_vector = np.full_like(rhs_vector, -source_term)
-            else:
-                source_vector = np.asarray(-source_term)
-        else:
-            if replace is True:
-                source_vector = np.copy(rhs_vector)
-                np.put(source_vector, index_array, -source_term)
-            else:
-                source_vector = np.zeros(rhs_vector.shape)
-                np.put(source_vector, index_array, -source_term)
-        if replace is True:
-            rhs_vector[:] = source_vector
-        else:
-            rhs_vector += source_vector
-        return rhs_vector, source_vector
-
-    def add_implicit_source(self, matrix, coefficients,
-                            index_array=None, replace=False):
-        # matrix_size = matrix.shape[0]
-        diag_vector = np.diagonal(matrix).copy()
-        new_diag_vector, source_vector = self.add_explicit_source(
-            diag_vector, -coefficients.flatten(order='F'), index_array,
-            replace=replace)
-        np.fill_diagonal(matrix, new_diag_vector)
-        return matrix, source_vector
-
-    @staticmethod
     def set_implicit_fixed(matrix, index_array):
-        index_array = index_array.flatten(order='F')
+        index_array = index_array.ravel(order='F')
         row_length = matrix.shape[0]
         for row_id in index_array:
             row = np.zeros(row_length)
@@ -275,12 +269,12 @@ class BasicLinearSystem(LinearSystem, ABC):
         index_vector = index_array.flatten(order='F')
         self.set_implicit_fixed(self.mtx, index_vector)
         self.add_explicit_source(
-            self.rhs, -values, index_vector, replace=True)
+            self.rhs, -values, index_array=index_vector, replace=True)
 
     @abstractmethod
-    def add_source_values(
+    def add_source_data(
             self, values: (float, np.ndarray), indices: (tuple, None) = None,
-            volumetric: bool = True):
+            volumetric: bool = True, explicit=True):
         pass
 
     def get_boundary_planes(self, axis):
@@ -302,23 +296,31 @@ class BasicLinearSystem(LinearSystem, ABC):
         Create vector with the right hand side entries,
         Sources from outside the src to the src must be defined negative.
         """
+        self.rhs[:] = 0.0
         rhs_input = kwargs.get('rhs_input', None)
         if isinstance(rhs_input, RHSInput):
-            if rhs_input.neumann_bc is not None:
+            if isinstance(rhs_input.neumann_bc, BoundaryData):
                 self.set_neumann_boundary_conditions(
                     rhs_input.neumann_bc.values,
                     rhs_input.neumann_bc.axes,
                     rhs_input.neumann_bc.indices)
-            if rhs_input.dirichlet_bc is not None:
+            if isinstance(rhs_input.dirichlet_bc, BoundaryData):
                 self.set_dirichlet_boundary_conditions(
                     rhs_input.dirichlet_bc.values,
                     rhs_input.dirichlet_bc.axes,
                     rhs_input.dirichlet_bc.indices)
-            if rhs_input.volumetric_sources is not None:
-                self.add_source_values(
-                    rhs_input.volumetric_sources.values,
-                    rhs_input.volumetric_sources.indices,
-                    rhs_input.volumetric_sources.volumetric
+            if isinstance(rhs_input.explicit_sources, SourceData):
+                sources = rhs_input.explicit_sources.values
+                source_vector = sources.ravel(order='F')
+                if rhs_input.dirichlet_bc is not None:
+                    index_vector_remaining = self.get_remaining_indices(
+                        rhs_input.dirichlet_bc.axes,
+                        rhs_input.dirichlet_bc.indices)
+                    source_vector[index_vector_remaining] = 0.0
+                self.add_source_data(
+                    source_vector,
+                    rhs_input.explicit_sources.indices,
+                    rhs_input.explicit_sources.volumetric
                 )
         # self.rhs[:] = self.rhs_const + self.rhs_dyn
 
@@ -328,27 +330,14 @@ class BasicLinearSystem(LinearSystem, ABC):
         """
         conductance = self.transport_layer.conductance[self.type]
         rhs_input = kwargs.get('rhs_input', None)
+        source_vector = np.zeros(self.rhs.shape)
         if isinstance(rhs_input, RHSInput):
-            if rhs_input.dirichlet_bc is not None:
-                axes_patch = rhs_input.dirichlet_bc.axes
-                indices_patch = rhs_input.dirichlet_bc.indices
-                index_array_patch = mtx_func.get_axis_values(
-                    self.index_array, axes_patch, indices_patch)
-                axes_plane = tuple(
-                    axes_patch[i] for i in range(len(axes_patch)) if
-                    not isinstance(indices_patch[i], (tuple, list)))
-                indices_plane = tuple(indices_patch[i]
-                                      for i in range(len(axes_plane)))
-                index_array_plane = mtx_func.get_axis_values(
-                    self.index_array, axes_plane, indices_plane)
-                index_vector_plane = index_array_plane.ravel(order='F')
-                index_vector_patch = index_array_patch.ravel(order='F')
-
-                common_array, plane_ids, patch_ids = np.intersect1d(
-                    index_vector_plane, index_vector_patch,
-                    return_indices=True)
-                index_vector_remaining = np.delete(index_vector_plane,
-                                                   plane_ids)
+            if isinstance(rhs_input.dirichlet_bc, BoundaryData):
+                # Assuming no-flux-boundaries at remaining surface area of
+                # Dirichlet-type patches, where no values were given.
+                # Achieved by setting conductance for these cells to zero
+                index_vector_remaining = self.get_remaining_indices(
+                    rhs_input.dirichlet_bc.axes, rhs_input.dirichlet_bc.indices)
                 modified_conductance = []
                 for cond in conductance:
                     conductance_vector = cond.ravel(order='F')
@@ -356,12 +345,43 @@ class BasicLinearSystem(LinearSystem, ABC):
                     modified_conductance.append(conductance_vector.reshape(
                         cond.shape, order='F'))
                 conductance = np.asarray(modified_conductance)
-
-        # Shift conductance nodes along first axis to the outer edges of layer
+                if isinstance(rhs_input.implicit_sources, SourceData):
+                    mtx_update, source_vector = self.add_source_data(
+                        rhs_input.implicit_sources.values,
+                        rhs_input.implicit_sources.indices,
+                        volumetric=True,
+                        explicit=False
+                    )
+        # Calculate inter-nodal conductance array and build conductance
+        # matrix accordingly
         self.conductance, shape = self.calculate_conductance(conductance)
+        mtx_dyn = np.diag(source_vector)
         self.mtx[:] = mtx_func.build_cell_conductance_matrix(
-                self.conductance)
-        # self.mtx[:] = self.mtx_const + self.mtx_dyn
+                self.conductance) + mtx_dyn
+
+    def get_remaining_indices(self, axes, indices):
+        axes_patch = axes
+        indices_patch = indices
+        index_array_patch = mtx_func.get_axis_values(
+            self.index_array, axes_patch, indices_patch)
+        axes_plane = tuple(
+            axes_patch[i] for i in range(len(axes_patch)) if
+            not isinstance(indices_patch[i], (tuple, list)))
+        indices_plane = tuple(indices_patch[i]
+                              for i in range(len(axes_plane)))
+        if indices_patch == indices_plane:
+            return []
+        else:
+            index_array_plane = mtx_func.get_axis_values(
+                self.index_array, axes_plane, indices_plane)
+            index_vector_plane = index_array_plane.ravel(order='F')
+            index_vector_patch = index_array_patch.ravel(order='F')
+            common_array, common_plane_ids, common_patch_ids = np.intersect1d(
+                index_vector_plane, index_vector_patch,
+                return_indices=True)
+            index_vector_remaining = np.delete(index_vector_plane,
+                                               common_plane_ids)
+            return index_vector_remaining
 
 
 class BasicLinearSystem3D(BasicLinearSystem):
@@ -374,8 +394,12 @@ class BasicLinearSystem3D(BasicLinearSystem):
                           dsct.Discretization3D):
             raise TypeError('attribute "transport_layer" and its attribute '
                             '"discretization" must be three-dimensional types')
-        self.d_volume = mtx_func.shift_nodes(
-            self.transport_layer.discretization.d_volume, axis=0, inverse=False)
+        if self.shift_axis is not None:
+            self.d_volume = mtx_func.shift_nodes(
+                self.transport_layer.discretization.d_volume,
+                axis=0, inverse=False, except_first_axis=False)
+        else:
+            self.d_volume = self.transport_layer.d_volume
 
     # def calculate_conductance(self, conductance_array):
     #     # Shift conductance nodes along first axis (x-axis) to the outer edges
@@ -402,21 +426,25 @@ class BasicLinearSystem3D(BasicLinearSystem):
             self.transport_layer.discretization.d_area[axes[0]], axes, indices)
         source = values * d_area
         self.add_explicit_source(
-            self.rhs, source.flatten(order='F'),
-            index_array.flatten(order='F'), replace=True)
+            self.rhs, source.ravel(order='F'),
+            index_array=index_array.ravel(order='F'), replace=True)
 
-    def add_source_values(
+    def add_source_data(
             self, values: (float, np.ndarray), indices: (tuple, None) = None,
-            volumetric: bool = True):
+            volumetric: bool = True, explicit=True):
         if indices is None:
             index_array = None
         else:
-            index_array = self.index_array[indices].flatten(order='F')
-        source = values
+            index_array = self.index_array[indices].ravel(order='F')
+        source = values.ravel(order='F')
         if volumetric:
-            source *= self.d_volume
-        self.add_explicit_source(self.rhs, source.flatten(order='F'),
-                                 index_array, replace=False)
+            source *= np.ravel(self.d_volume, order='F')
+        if explicit:
+            return self.add_explicit_source(
+                self.rhs, source, index_array=index_array, replace=False)
+        else:
+            return self.add_implicit_source(
+                self.mtx, source, index_array=index_array, replace=False)
 
 
 class StackedLayerLinearSystem(LinearSystem):
@@ -461,42 +489,26 @@ class StackedLayerLinearSystem(LinearSystem):
 
     def stack_conductance_layers(self, conductance_list: list, axis: int = 0):
         return mtx_func.shift_nodes(conductance_list, axis=axis,
-                                    inverse=True)
+                                    inverse=True, except_first_axis=True)
 
-    @staticmethod
-    def add_explicit_source(rhs_vector, source_term, index_array,
+    def add_explicit_source(self, rhs_vector, source_term, index_array=None,
                             layer_id=None, replace=False):
-        if isinstance(source_term, np.ndarray):
-            if rhs_vector.ndim != source_term.ndim:
-                raise ValueError('source_term must have same dimensions as '
-                                 'rhs_vector')
         if layer_id is None:
-            if np.isscalar(source_term):
-                source_vector = np.full_like(rhs_vector, -source_term)
-            else:
-                source_vector = np.asarray(-source_term)
+            index_array = None
         else:
-            if replace is True:
-                source_vector = np.copy(rhs_vector)
-                np.put(source_vector, index_array[layer_id], -source_term)
-            else:
-                source_vector = np.zeros(rhs_vector.shape)
-                np.put(source_vector, index_array[layer_id], -source_term)
-        if replace is True:
-            rhs_vector[:] = source_vector
-        else:
-            rhs_vector += source_vector
-        return rhs_vector, source_vector
+            index_array = index_array[layer_id]
+        return super().add_explicit_source(
+            rhs_vector, source_term, index_array=index_array, replace=replace)
 
-    def add_implicit_source(self, matrix, coefficients, index_array,
+    def add_implicit_source(self, matrix, coefficients, index_array=None,
                             layer_id=None, replace=False):
-        # matrix_size = matrix.shape[0]
-        diag_vector = np.diagonal(matrix).copy()
-        new_diag_vector, source_vector = self.add_explicit_source(
-            diag_vector, -coefficients.flatten(order='F'), index_array,
-            layer_id=layer_id, replace=replace)
-        np.fill_diagonal(matrix, new_diag_vector)
-        return matrix, source_vector
+        if layer_id is None:
+            index_array = None
+        else:
+            index_array = index_array[layer_id]
+        return super().add_implicit_source(
+             matrix, coefficients, index_array=index_array,
+             replace=replace)
 
     @staticmethod
     def set_implicit_layer_fixed(matrix, index_array, layer_id):
@@ -607,8 +619,8 @@ class CellLinearSystem(StackedLayerLinearSystem):
                 and modify_values):
             for i in range(len(conductance_list)):
                 conductance_list[i][[1, -2], :, 1] = 0.0
-        conductance_list = mtx_func.shift_nodes(conductance_list, axis=axis,
-                                                inverse=True)
+        conductance_list = mtx_func.shift_nodes(
+            conductance_list, axis=axis, inverse=True, except_first_axis=True)
         return conductance_list
 
     def add_ambient_convection(self):
@@ -692,17 +704,17 @@ class StackLinearSystem(LinearSystem, ABC):
         # if self.sparse_solve:
         #     self.mtx_const = sparse.csr_matrix(self.mtx_const)
 
-    def add_explicit_source(self, rhs_vector, source_term, index_array,
+    def add_explicit_source(self, rhs_vector, source_term, index_array=None,
                             layer_id=None, replace=False):
         return self.cell_systems[0].add_explicit_source(
-            rhs_vector, source_term, index_array, layer_id=layer_id,
-            replace=replace)
+            rhs_vector, source_term, index_array=index_array,
+            layer_id=layer_id, replace=replace)
 
-    def add_implicit_source(self, matrix, coefficients, index_array,
+    def add_implicit_source(self, matrix, coefficients, index_array=None,
                             layer_id=None, replace=False):
         # matrix_size = matrix.shape[0]
         return self.cell_systems[0].add_implicit_source(
-            matrix, coefficients, index_array,
+            matrix, coefficients, index_array=index_array,
             layer_id=layer_id, replace=replace)
 
     def connect_cells(self, transport_type: str):
@@ -964,7 +976,7 @@ class TemperatureSystem(StackLinearSystem):
                 cell_sys.rhs_dyn[:], _ = (
                     self.add_explicit_source(
                         cell_sys.rhs_dyn, source.flatten(order='F'),
-                        cell_sys.index_array, layer_id=idx))
+                        index_array=cell_sys.index_array, layer_id=idx))
 
                 # Anode bpp-gde
                 idx = self.cells[i].interface_id['anode_gde_bpp']
@@ -989,7 +1001,7 @@ class TemperatureSystem(StackLinearSystem):
                 cell_sys.rhs_dyn[:], _ = (
                     self.add_explicit_source(
                         cell_sys.rhs_dyn, source.flatten(order='F'),
-                        cell_sys.index_array, layer_id=idx))
+                        index_array=cell_sys.index_array, layer_id=idx))
 
             if electrochemical_heat:
                 # Cathode gde-mem source
@@ -1026,7 +1038,7 @@ class TemperatureSystem(StackLinearSystem):
                 cell_sys.rhs_dyn[:], _ = (
                     self.add_explicit_source(
                         cell_sys.rhs_dyn, source.flatten(order='F'),
-                        cell_sys.index_array, layer_id=idx))
+                        index_array=cell_sys.index_array, layer_id=idx))
 
                 # Anode gde-mem source
                 idx = self.cells[i].interface_id['anode_mem_gde']
@@ -1042,7 +1054,7 @@ class TemperatureSystem(StackLinearSystem):
                 source *= 1.0
                 cell_sys.rhs_dyn[:], _ = self.add_explicit_source(
                     cell_sys.rhs_dyn, source.flatten(order='F'),
-                    cell_sys.index_array, layer_id=idx)
+                    index_array=cell_sys.index_array, layer_id=idx)
 
             # Coolant source coefficients
             if self.cool_flow:
@@ -1083,7 +1095,8 @@ class TemperatureSystem(StackLinearSystem):
                     cell_sys.rhs_dyn[:], _ = (
                         self.add_explicit_source(
                             cell_sys.rhs_dyn, source.flatten(order='F'),
-                            cell_sys.index_array, layer_id=layer_ids[j]))
+                            index_array=cell_sys.index_array,
+                            layer_id=layer_ids[j]))
 
         rhs_dyn = np.hstack([cell_sys.rhs_dyn for cell_sys in
                              self.cell_systems])
@@ -1179,7 +1192,7 @@ class ElectricalSystem(StackLinearSystem):
             rhs_bc_values = self.v_loss_tar
         self.add_explicit_source(
             cell_rhs, rhs_bc_values.flatten(order='F'),
-            cell_sys.index_array, layer_id=0)
+            index_array=cell_sys.index_array, layer_id=0)
         cell_rhs_list.append(cell_rhs)
         for i in range(1, len(self.cells)):
             cell_rhs_list.append(

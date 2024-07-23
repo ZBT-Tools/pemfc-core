@@ -140,9 +140,9 @@ class HalfCell:
             #     electrochemistry_dict['diff_coeff_gdl'])
             if self.channel_land_discretization:
                 # Initialize diffusion transport model
-                nx = 4
+                nx = 2
                 ny = self.discretization.shape[0]
-                nz = 8
+                nz = 2
                 gdl_diffusion_dict['boundary_patches']['Dirichlet'] = {
                     'axes': (0, 2), 'indices': (0, list(range(int(nz/2), nz)))}
             else:
@@ -162,7 +162,10 @@ class HalfCell:
             self.gdl_diffusion = diff.DiffusionTransport.create(
                 gdl_diffusion_dict, gdl_discretization,
                 self.channel.fluid, self.id_inert)
-
+            self.explicit_source_terms = np.zeros(
+                self.gdl_diffusion.solution_array.shape)
+            self.implicit_source_terms = np.zeros(
+                self.gdl_diffusion.solution_array.shape)
             if self.calc_two_phase_flow:
                 gdl_two_phase_flow_dict = gdl_diffusion_dict.copy()
                 gdl_two_phase_flow_dict['type'] = 'DarcyFlow'
@@ -207,18 +210,76 @@ class HalfCell:
                 # concentrations at CL-GDL-Interface for the electrochemistry
                 # model, therefore the electrochemistry model does not need
                 # to account for GDL losses anymore
-                self.gdl_diffusion.update(temperature, self.channel.pressure,
-                                          channel_concentration, mole_flux)
+                if not self.calc_two_phase_flow:
+                    self.gdl_diffusion.update(
+                        temperature, self.channel.pressure,
+                        channel_concentration, mole_flux,
+                        self.explicit_source_terms)
                 if self.calc_two_phase_flow:
-                    temp = self.gdl_diffusion.fluid.temperature
-                    press = self.gdl_diffusion.fluid.pressure
-                    mol_comp = self.gdl_diffusion.solution_array
-                    ch_gdl_sat = (np.ones(temp.shape)
-                                  * self.two_phase_flow.saturation_min)
-                    liquid_water_flux = mass_flux[self.id_h2o] * 0.0
-                    self.two_phase_flow.update(
-                        temp, press, mol_comp, ch_gdl_sat, liquid_water_flux,
-                        update_fluid=True)
+                    # Adjust two-phase flow boundary conditions
+                    liquid_flux_ratio = 0.5
+                    ch_gdl_sat = (np.ones(self.two_phase_flow.saturation.shape)
+                                  * 0.01)
+                    liquid_water_flux = (mass_flux[self.id_h2o]
+                                         * liquid_flux_ratio)
+                    mole_flux[self.id_h2o] *= (1.0 - liquid_flux_ratio)
+                    iteration = 0
+                    molar_evap_rate = np.zeros(
+                        self.two_phase_flow.evaporation_rate.shape)
+                    molar_cond_coeff = np.zeros(
+                        self.two_phase_flow.implicit_condensation_coeff.shape)
+
+                    # Adjust numerical settings
+                    error = np.inf
+                    max_iterations = 10
+                    min_iterations = 1
+                    urf = 0.5
+                    error_tolerance = 1e-5
+                    while (all((error > error_tolerance,
+                                iteration < max_iterations))
+                           or iteration < min_iterations):
+                        # Update gas diffusion in GDL
+                        self.gdl_diffusion.update(
+                            temperature, self.channel.pressure,
+                            channel_concentration, mole_flux,
+                            self.explicit_source_terms,
+                            self.implicit_source_terms)
+
+                        # Update two-phase flow in GDL
+                        temp = self.gdl_diffusion.fluid.temperature
+                        press = self.gdl_diffusion.fluid.pressure
+                        mol_comp = self.gdl_diffusion.solution_array
+                        self.two_phase_flow.update(
+                            temp, press, mol_comp, ch_gdl_sat,
+                            liquid_water_flux, update_fluid=True)
+                        fluid = self.two_phase_flow.fluid
+                        molar_mass = fluid.species_mw[fluid.id_pc]
+                        molar_evap_rate_old = np.copy(molar_evap_rate)
+                        molar_cond_coeff_old = np.copy(molar_cond_coeff)
+                        molar_evap_rate[:] = (
+                                self.two_phase_flow.evaporation_rate /
+                                molar_mass)
+                        molar_evap_rate = (urf * molar_evap_rate
+                                           + (1.0 - urf) * molar_evap_rate_old)
+                        molar_cond_coeff[:] = (
+                                self.two_phase_flow.implicit_condensation_coeff
+                                / molar_mass)
+                        molar_cond_coeff = (
+                            urf * molar_cond_coeff
+                            + (1.0 - urf) * molar_cond_coeff_old)
+                        self.explicit_source_terms[fluid.id_pc] = (
+                            1.0 * molar_evap_rate
+                                )
+                        self.implicit_source_terms[fluid.id_pc] = (
+                            -1.0 * molar_cond_coeff)
+                        # Error calculation
+                        diff_e = molar_evap_rate - molar_evap_rate_old
+                        diff_e[:] = np.divide(diff_e, molar_evap_rate,
+                                              where=molar_evap_rate != 0.0)
+                        diff_e = diff_e.ravel()
+                        error = (np.dot(diff_e.transpose(), diff_e)
+                                 / (2.0 * len(diff_e)))
+                        iteration += 1
                 # Reshape 3D-concentration fields from the GDL-Diffusion
                 # sub-model to the reduced discretization in this model
                 # Take only the concentration at the CL-Interface
@@ -257,8 +318,8 @@ class HalfCell:
 
                 mass_flux_old = np.copy(mass_flux)
                 mole_flux_old = np.copy(mole_flux)
-                mole_flux_avg_old = np.average(np.average(mole_flux, axis=-1),
-                                               axis=-1)
+                # mole_flux_avg_old = np.average(np.average(mole_flux, axis=-1),
+                #                                axis=-1)
                 # Recalculate mass flux at GDL/Channel interface
                 bc_type = 'Dirichlet'
                 mole_flux = - self.gdl_diffusion.calc_boundary_flux(bc_type)
@@ -307,8 +368,8 @@ class HalfCell:
                 # Calculate mole and mass source from fluxes
                 mass_source = self.surface_flux_to_channel_source(
                     -mass_flux, area=flux_interface_area)
-                # mass_source_old = self.surface_flux_to_channel_source(
-                #     mass_flux_old)
+                mass_source_old = self.surface_flux_to_channel_source(
+                    mass_flux_old)
                 mole_source = self.surface_flux_to_channel_source(
                     -mole_flux, flux_interface_area)
                 self.channel.mass_source[:], self.channel.mole_source[:] = (

@@ -130,10 +130,10 @@ class Discretization2D(Discretization):
         super().__init__(discretization_dict, **kwargs)
 
     def _calc_area(self) -> np.ndarray:
-        return self.dx[0] * self.dx[1]
+        return np.prod(self.dx, axis=0)
 
     def _calc_volume(self) -> np.ndarray:
-        return self.dx[0] * self.dx[1] * 1.0
+        return np.prod(self.dx, axis=0) * 1.0
 
     def _calc_discretization(self) -> (np.ndarray,
                                        np.ndarray):
@@ -177,7 +177,7 @@ class Discretization3D(Discretization):
                            self.dx[0] * self.dx[1]])
 
     def _calc_volume(self) -> np.ndarray:
-        return self.dx[0] * self.dx[1] * self.dx[2]
+        return np.prod(self.dx, axis=0)
 
     def _calc_discretization(self) -> (np.ndarray, np.ndarray):
         x = self._calc_x()

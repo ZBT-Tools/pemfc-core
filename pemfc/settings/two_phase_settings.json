@@ -15,7 +15,7 @@
             "type": "leverett",
             "leverett": {
                 "type": "leverett",
-                "contact_angle": 120.0,
+                "contact_angle": 80.0,
                 "precalculate_pressure": false,
                 "precalculate_gradient": false
             },

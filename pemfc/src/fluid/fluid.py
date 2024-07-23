@@ -359,6 +359,7 @@ class GasMixture(DiscreteFluid):
         species_names = list(species_dict.keys())
         # self.n_species = len(species_names)
         self.gas_constant = constants.GAS_CONSTANT
+        self.total_gas_concentration = np.zeros(array_shape)
         self.species = species.GasProperties(species_names)
         self.n_species = len(self.species.names)
         self.species_id = \
@@ -475,6 +476,7 @@ class GasMixture(DiscreteFluid):
         """
         total_mol_conc = self._pressure \
             / (self.gas_constant * self._temperature)
+        self.total_gas_concentration[:] = total_mol_conc
         return self._mole_fraction * total_mol_conc
 
     def calc_mole_fraction(self, mole_composition):
@@ -1034,7 +1036,7 @@ class TwoPhaseMixture(DiscreteFluid):
             self._mole_fraction[self.id_pc] * self._pressure / p_sat
 
         # Simplification of limiting humidity to 100%
-        self.humidity[self.humidity > 1.0] = 1.0
+        # self.humidity[self.humidity > 1.0] = 1.0
 
     def calc_vaporization_enthalpy(self, temperature=None):
         if temperature is None:
