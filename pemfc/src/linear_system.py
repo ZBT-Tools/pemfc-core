@@ -7,7 +7,7 @@ import numpy as np
 # from numpy import linalg
 from scipy import linalg as sp_la
 from scipy import sparse
-from scipy.sparse.linalg import spsolve
+from scipy.sparse.linalg import spsolve, cg, gmres
 from dataclasses import dataclass
 
 # Local module imports
@@ -91,13 +91,20 @@ class LinearSystem(ABC):
         Solves for the solution vector.
         """
         if self.sparse_solve:
-            # cond_number = np.linalg.cond(self.mtx)
-            mtx = sparse.csr_matrix(self.mtx)
-            self.solution_vector[:] = spsolve(mtx, self.rhs)
+            cond_number = np.linalg.cond(self.mtx)
+            mtx = sparse.csr_matrix(self.mtx, dtype=np.longdouble)
+            mtx = np.array(self.mtx, dtype=np.longdouble)
+            precond_mtx = mtx_func.spai(self.mtx, 10)
+            cond_number_precond = np.linalg.cond(self.mtx @
+                                                 precond_mtx)
+            rhs = np.array(self.rhs, dtype=np.longdouble)
+            self.solution_vector[:], _ = cg(mtx, rhs, M=precond_mtx, rtol=1e-12)
         else:
-            self.solution_vector[:] = np.linalg.tensorsolve(self.mtx, self.rhs)
+            cond_number = np.linalg.cond(self.mtx)
+            self.solution_vector[:] = np.linalg.solve(self.mtx, self.rhs)
         self.solution_array[:] = np.reshape(
             self.solution_vector, self.shape, order='F')
+        print('test')
 
     def add_implicit_source(self, matrix, coefficients,
                             index_array=None, replace=False):
@@ -291,39 +298,6 @@ class BasicLinearSystem(LinearSystem, ABC):
         ids_flat = np.arange(self.solution_vector.shape[0])
         return np.reshape(ids_flat, self.solution_array.shape, order='F')
 
-    def update_rhs(self, *args, **kwargs):
-        """
-        Create vector with the right hand side entries,
-        Sources from outside the src to the src must be defined negative.
-        """
-        self.rhs[:] = 0.0
-        rhs_input = kwargs.get('rhs_input', None)
-        if isinstance(rhs_input, RHSInput):
-            if isinstance(rhs_input.neumann_bc, BoundaryData):
-                self.set_neumann_boundary_conditions(
-                    rhs_input.neumann_bc.values,
-                    rhs_input.neumann_bc.axes,
-                    rhs_input.neumann_bc.indices)
-            if isinstance(rhs_input.dirichlet_bc, BoundaryData):
-                self.set_dirichlet_boundary_conditions(
-                    rhs_input.dirichlet_bc.values,
-                    rhs_input.dirichlet_bc.axes,
-                    rhs_input.dirichlet_bc.indices)
-            if isinstance(rhs_input.explicit_sources, SourceData):
-                sources = rhs_input.explicit_sources.values
-                source_vector = sources.ravel(order='F')
-                if rhs_input.dirichlet_bc is not None:
-                    index_vector_remaining = self.get_remaining_indices(
-                        rhs_input.dirichlet_bc.axes,
-                        rhs_input.dirichlet_bc.indices)
-                    source_vector[index_vector_remaining] = 0.0
-                self.add_source_data(
-                    source_vector,
-                    rhs_input.explicit_sources.indices,
-                    rhs_input.explicit_sources.volumetric
-                )
-        # self.rhs[:] = self.rhs_const + self.rhs_dyn
-
     def update_matrix(self, *args, **kwargs):
         """
         Updates matrix coefficients
@@ -358,6 +332,40 @@ class BasicLinearSystem(LinearSystem, ABC):
         mtx_dyn = np.diag(source_vector)
         self.mtx[:] = mtx_func.build_cell_conductance_matrix(
                 self.conductance) + mtx_dyn
+
+    def update_rhs(self, *args, **kwargs):
+        """
+        Create vector with the right hand side entries,
+        Sources from outside the src to the src must be defined negative.
+        """
+        self.rhs[:] = 0.0
+        rhs_input = kwargs.get('rhs_input', None)
+        if isinstance(rhs_input, RHSInput):
+            if isinstance(rhs_input.neumann_bc, BoundaryData):
+                self.set_neumann_boundary_conditions(
+                    rhs_input.neumann_bc.values,
+                    rhs_input.neumann_bc.axes,
+                    rhs_input.neumann_bc.indices)
+            if isinstance(rhs_input.dirichlet_bc, BoundaryData):
+                self.set_dirichlet_boundary_conditions(
+                    rhs_input.dirichlet_bc.values,
+                    rhs_input.dirichlet_bc.axes,
+                    rhs_input.dirichlet_bc.indices)
+            if isinstance(rhs_input.explicit_sources, SourceData):
+                sources = rhs_input.explicit_sources.values
+                source_vector = sources.ravel(order='F')
+                if rhs_input.dirichlet_bc is not None:
+                    index_vector_remaining = self.get_remaining_indices(
+                        rhs_input.dirichlet_bc.axes,
+                        rhs_input.dirichlet_bc.indices)
+                    source_vector[index_vector_remaining] = 0.0
+                self.add_source_data(
+                    source_vector,
+                    rhs_input.explicit_sources.indices,
+                    rhs_input.explicit_sources.volumetric
+                )
+        print('test')
+        # self.rhs[:] = self.rhs_const + self.rhs_dyn
 
     def get_remaining_indices(self, axes, indices):
         axes_patch = axes

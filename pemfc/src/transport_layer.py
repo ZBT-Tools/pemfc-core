@@ -233,6 +233,7 @@ class TransportLayer3D(TransportLayer):
             effective=self.effective)
         self.conductance = {key: self.calc_conductance(value) for key, value
                             in transport_properties.items()}
+        print('test')
 
     def calc_geometric_factors(self, effective=True, *args, **kwargs):
         result = np.asarray([

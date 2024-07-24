@@ -125,7 +125,7 @@ class HalfCell:
                                        self.discretization)
 
         self.calc_gdl_diffusion = True
-        self.calc_two_phase_flow = True
+        self.calc_two_phase_flow = False
 
         if self.calc_gdl_diffusion:
             gdl_diffusion_dict = gde_dict.copy()
@@ -140,15 +140,15 @@ class HalfCell:
             #     electrochemistry_dict['diff_coeff_gdl'])
             if self.channel_land_discretization:
                 # Initialize diffusion transport model
-                nx = 4
+                nx = 2
                 ny = self.discretization.shape[0]
-                nz = 8
+                nz = 2
                 gdl_diffusion_dict['boundary_patches']['Dirichlet'] = {
                     'axes': (0, 2), 'indices': (0, list(range(int(nz/2), nz)))}
             else:
-                nx = 2
+                nx = 4
                 ny = self.discretization.shape[0]
-                nz = 1
+                nz = 8
                 gdl_diffusion_dict['boundary_patches']['Dirichlet'] = {
                     'axes': (0,), 'indices': (0,)}
             discretization_dict = {
@@ -317,11 +317,13 @@ class HalfCell:
 
                 mass_flux_old = np.copy(mass_flux)
                 mole_flux_old = np.copy(mole_flux)
+                mole_flux_avg_cl_old = np.average(
+                    np.average(mole_flux_old, axis=-1), axis=-1)
                 # mole_flux_avg_old = np.average(np.average(mole_flux, axis=-1),
                 #                                axis=-1)
                 # Recalculate mass flux at GDL/Channel interface
                 bc_type = 'Dirichlet'
-                mole_flux = - self.gdl_diffusion.calc_boundary_flux(bc_type)
+                mole_flux = self.gdl_diffusion.calc_boundary_flux(bc_type)
                 mole_flux_avg = np.average(np.average(mole_flux, axis=-1),
                                            axis=-1)
                 mass_flux = (mole_flux.transpose() *
@@ -333,23 +335,27 @@ class HalfCell:
                         self.gdl_diffusion.discretization.d_area[axes[0]],
                         axes,
                         indices))
+                mole_source_chl = np.sum(np.sum(flux_interface_area * mole_flux,
+                                                axis=-1), axis=-1)
+                # Recalculate mass flux at GDL/Channel interface
+                bc_type = 'Neumann'
+                mole_flux_cl = - self.gdl_diffusion.calc_boundary_flux(
+                    bc_type)
+                mole_flux_avg_cl = np.average(np.average(mole_flux_cl, axis=-1),
+                                              axis=-1)
 
-                # # Recalculate mass flux at GDL/Channel interface
-                # bc_type = 'Neumann'
-                # mole_flux_cl = - self.gdl_diffusion.calc_boundary_flux(
-                #     bc_type)
-                # mole_flux_avg_cl = np.average(np.average(mole_flux_cl, axis=-1),
-                #                               axis=-1)
-                #
-                # mass_flux_cl = (mole_flux_cl.transpose() *
-                #                 self.channel.fluid.species_mw).transpose()
-                # axes, indices, _ = self.gdl_diffusion.get_boundary_indices(
-                #     bc_type)
-                # flux_interface_area_cl = (
-                #     self.gdl_diffusion.get_values(
-                #         self.gdl_diffusion.discretization.d_area[axes[0]],
-                #         axes,
-                #         indices))
+                mass_flux_cl = (mole_flux_cl.transpose() *
+                                self.channel.fluid.species_mw).transpose()
+                axes, indices, _ = self.gdl_diffusion.get_boundary_indices(
+                    bc_type)
+                flux_interface_area_cl = (
+                    self.gdl_diffusion.get_values(
+                        self.gdl_diffusion.discretization.d_area[axes[0]],
+                        axes,
+                        indices))
+                mole_source_cl = np.sum(np.sum(mole_flux_cl *
+                                        flux_interface_area_cl,
+                                        axis=-1), axis=-1)
                 # Factor 2 due to symmetry in gdl_diffusion model
                 flux_interface_area *= 2.0
 
@@ -366,25 +372,36 @@ class HalfCell:
             if update_channel:
                 # Calculate mole and mass source from fluxes
                 mass_source = self.surface_flux_to_channel_source(
-                    -mass_flux, area=flux_interface_area)
+                    mass_flux, area=flux_interface_area)
                 # mass_source_old = self.surface_flux_to_channel_source(
                 #     mass_flux_old)
                 mole_source = self.surface_flux_to_channel_source(
-                    -mole_flux, flux_interface_area)
+                    mole_flux, flux_interface_area)
+                mole_source_sum = np.sum(mole_source, axis=-1)
                 self.channel.mass_source[:], self.channel.mole_source[:] = (
                     mass_source, mole_source)
-                self.channel.update(update_mass=True, update_flow=False,
-                                    update_heat=False, update_fluid=True)
+                # Only updating mass and mole sources here, because channel
+                # mass flow is updated in ParallelFlowCircuit calculations
+                # even for single cell, so be careful to modify this here
+                # self.channel.update(update_mass=True, update_flow=False,
+                #                     update_heat=False, update_fluid=True)
             # if gs.global_state.iteration == 50:
             #     print('test')
             self.update_voltage_loss(current_density)
 
             # Calculate stoichiometry
             current = self.surface_flux_to_channel_source(current_density)
+            current_sum = np.sum(current)
+            mole_sum = self.faraday_conversion(current_sum, self.n_stoi[
+                self.id_fuel])
+            stoi_test = mole_source_sum / mole_sum
+            inlet_mole_source = self.channel.mole_flow[self.id_fuel, self.channel.id_in]
             self.inlet_stoi = (
                 self.channel.mole_flow[self.id_fuel, self.channel.id_in]
                 * self.faraday * self.n_charge
                 / (np.sum(current) * abs(self.n_stoi[self.id_fuel])))
+            if gs.global_state.iteration == 50:
+                print('test')
             if current_control and self.inlet_stoi < 1.0:
                 raise ValueError('stoichiometry of cell {0} '
                                  'becomes smaller than one: {1:0.3f}'
@@ -408,6 +425,10 @@ class HalfCell:
                     * inlet_composition[i] / inlet_composition[self.id_fuel]
         mass_flow_in = mole_flow_in * self.channel.fluid.species_mw
         return mass_flow_in, mole_flow_in
+
+    def faraday_conversion(self, electrical_current, stoich_factor):
+        return (electrical_current * abs(stoich_factor) /
+                (self.n_charge * self.faraday))
 
     def calc_species_flux(self, current_density: np.ndarray):
         if not isinstance(current_density, np.ndarray):

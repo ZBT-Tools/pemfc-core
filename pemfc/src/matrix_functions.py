@@ -322,3 +322,26 @@ def get_axis_values(array, axes: tuple, indices: tuple):
     for i in reversed(range(len(axes))):
         array = get_single_axis_values(array, axes[i], indices[i])
     return array
+
+
+def spai(matrix: np.ndarray, m: int):
+    """Perform m step of the SPAI iteration."""
+    from scipy.sparse import identity
+    from scipy.sparse import diags
+    from scipy.sparse.linalg import onenormest
+
+    n = matrix.shape[0]
+
+    ident = identity(n, format='csr')
+    alpha = 2 / onenormest(matrix @ matrix.T)
+    M = alpha * matrix
+
+    for index in range(m):
+        C = matrix @ M
+        G = ident - C
+        AG = matrix @ G
+        trace = (G.T @ AG).diagonal().sum()
+        alpha = trace / np.linalg.norm(AG.data) ** 2
+        M = M + alpha * G
+
+    return M

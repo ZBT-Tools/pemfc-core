@@ -75,9 +75,9 @@ class Stack(OutputObject1D):
         self.cells = []
         if temperature_dict.get('bc_endplate') == 'fixed':
             try:
-                cell_dict['temp_endplate'] = temperature_dict['temp_endplate']
+                cell_dict['value_endplate'] = temperature_dict['value_endplate']
             except KeyError:
-                raise KeyError('value for "temp_endplate" must be provided, '
+                raise KeyError('value for "value_endplate" must be provided, '
                                'when using "fixed" end-plate boundary '
                                'conditions')
         else:

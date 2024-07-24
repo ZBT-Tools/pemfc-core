@@ -34,6 +34,8 @@ class DiffusionTransport(ABC):
             ls.BasicLinearSystem.create(item, self.transport_type,
                                         previously_shifted_axis=item.shift_axis)
             for item in self.transport_layers]
+        # for lin_sys in self.linear_systems:
+        #     lin_sys.sparse_solve = False
         self.base_shape = self.linear_systems[0].solution_array.shape
         if len(self.linear_systems) == 1:
             solution_shape = self.base_shape
@@ -70,7 +72,7 @@ class DiffusionTransport(ABC):
                 raise ValueError('for type GasMixtureDiffusionTransport the '
                                  'integer value "id_inert" must be specified')
             input_dict['volume_fraction'] = input_dict['porosity']
-            input_dict['effective'] = True
+            input_dict['effective'] = False
             species_names = fluid.species_names
             transport_layers = [
                 tl.TransportLayer.create(
@@ -364,7 +366,9 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         for i, trans_layer in enumerate(self.transport_layers):
             trans_layer.update(
                 {self.transport_type:
-                    self.gas_diff_coeff.d_eff[self.ids_active[i]]},
+                    [self.gas_diff_coeff.d_eff[self.ids_active[i]],
+                     self.gas_diff_coeff.d_eff[self.ids_active[i]] * 0.0,
+                     self.gas_diff_coeff.d_eff[self.ids_active[i]] * 0.0]},
                 volume_fraction=volume_fraction)
             # trans_layer.conductance['diffusion'][:, 0:5, :, 0:10] = 1e-16
 
@@ -405,15 +409,15 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         self.solution_array = concentrations
         show_concentrations = np.moveaxis(concentrations,
                                           (0, 1, 2, 3), (0, 2, 1, 3))
-        # conductances = [lin_sys.conductance for lin_sys in self.linear_systems]
-        if isinstance(self.fluid, (fl.GasMixture, fl.CanteraGasMixture)):
-            self.fluid.update(temperature, pressure,
-                              mole_composition=self.solution_array)
-        elif isinstance(self.fluid, (fl.TwoPhaseMixture,
-                        fl.CanteraTwoPhaseMixture)):
-            self.fluid.update(temperature, pressure,
-                              gas_mole_composition=self.solution_array)
-
+        conductances = [lin_sys.conductance for lin_sys in self.linear_systems]
+        # if isinstance(self.fluid, (fl.GasMixture, fl.CanteraGasMixture)):
+        #     self.fluid.update(temperature, pressure,
+        #                       mole_composition=self.solution_array)
+        # elif isinstance(self.fluid, (fl.TwoPhaseMixture,
+        #                 fl.CanteraTwoPhaseMixture)):
+        #     self.fluid.update(temperature, pressure,
+        #                       gas_mole_composition=self.solution_array)
+        diff_conc = np.diff(conc_array, axis=1)
         self.initialize = False
 
     def calc_boundary_flux(self, boundary_type: str):
