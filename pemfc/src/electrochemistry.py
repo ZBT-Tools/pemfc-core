@@ -148,8 +148,6 @@ class ElectrochemistryModel(ABC):
         #  iteration when approaching limiting currents
         id_lin = np.nonzero(current_density > i_crit)
         id_reg = np.nonzero(current_density <= i_crit)
-        if gs.global_state.iteration == 50:
-            print('test')
         if id_lin[0].size:
             i_crit_lin = np.copy(i_crit[id_lin])
             conc_crit = concentration[id_lin]

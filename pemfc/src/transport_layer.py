@@ -34,12 +34,14 @@ class TransportLayer(oo.OutputObject2D, ABC):
         self.thickness: float = 0.0
         self.transport_properties = transport_properties
         self.volume_fraction = input_dict.get('volume_fraction', 1.0)
+        self.initial_volume_fraction = np.copy(self.volume_fraction)
         self.bruggeman_exponent = input_dict.get('bruggeman_exponent', 1.5)
         self.effective = input_dict.get('effective', False)
         self.geometric_factors: np.ndarray = np.asarray([0.0, 0.0, 0.0])
         self.conductance: dict = {}
         self.d_volume = self.discretization.d_volume
         self.dx = self.discretization.dx
+        self.first_update = True
 
     @classmethod
     def create(cls, input_dict: dict, transport_properties: dict,
@@ -55,20 +57,24 @@ class TransportLayer(oo.OutputObject2D, ABC):
                                       "type 'Discretization'")
 
     @abstractmethod
-    def calc_geometric_factors(self, result, *args, **kwargs):
-        if self.effective:
+    def calc_geometric_factors(self, effective=True, *args, **kwargs):
+        pass
+
+    def modify_geometric_factors(self, result, effective=True, *args, **kwargs):
+        if effective:
             result *= self.volume_fraction ** self.bruggeman_exponent
         if self.shift_axis is not None:
             result = mf.shift_nodes(result, axis=self.shift_axis,
                                     include_axis=True, inverse=True)
             self.d_volume = mf.shift_nodes(self.d_volume, axis=self.shift_axis,
                                            include_axis=True,
-                                           inverse=False)
+                                           inverse=False,
+                                           except_first_axis=False)
             self.dx = mf.shift_nodes(self.dx, axis=self.shift_axis,
                                      include_axis=True, inverse=False)
         return np.asarray(result)
 
-    def calc_conductance(self, conductivity):
+    def calc_conductance(self, conductivity, effective=False):
         conductivity = np.asarray(conductivity)
         if np.ndim(conductivity) == 0:
             conductance = self.geometric_factors * conductivity
@@ -96,6 +102,8 @@ class TransportLayer(oo.OutputObject2D, ABC):
                              'an iterable with two (tp, ip) or three (x, '
                              'y, z) entries, or a full array with the same '
                              'shape as the attribute "geometric_factors"')
+        if effective:
+            conductance *= self.volume_fraction ** self.bruggeman_exponent
         return conductance
 
     def reduce_conductance(self, factor, indices, axis=0):
@@ -161,11 +169,17 @@ class TransportLayer(oo.OutputObject2D, ABC):
     def calc_average_inter_node_value(values: (list, np.ndarray), axis):
         return mf.transform_nodes(values, axis, mode='average')
 
-    def update(self, transport_properties: dict, *args, **kwargs):
+    def update(self, transport_properties: dict,
+               volume_fraction: np.ndarray = None, *args, **kwargs):
+        if volume_fraction is not None and self.first_update:
+            self.geometric_factors = self.calc_geometric_factors(
+                effective=False)
+            self.effective = True
+            self.first_update = False
         for key in self.conductance:
             self.transport_properties.update(transport_properties)
             self.conductance[key][:] = self.calc_conductance(
-                transport_properties[key])
+                transport_properties[key], effective=self.effective)
 
 
 class TransportLayer2D(TransportLayer):
@@ -185,17 +199,18 @@ class TransportLayer2D(TransportLayer):
         super().__init__(input_dict, transport_properties, discretization,
                          *args, **kwargs)
         self.thickness = input_dict['thickness']
-        self.geometric_factors = self.calc_geometric_factors()
+        self.geometric_factors = self.calc_geometric_factors(
+            effective=self.effective)
         self.conductance = {key: self.calc_conductance(value) for key, value
                             in transport_properties.items()}
 
-    def calc_geometric_factors(self, *args, **kwargs):
+    def calc_geometric_factors(self, effective=True, *args, **kwargs):
         result = np.asarray([
             self.discretization.d_area / self.thickness,
             self.discretization.dx[1] / self.discretization.dx[0] * self.thickness,
             self.discretization.dx[0] / self.discretization.dx[1] * self.thickness
             ])
-        return super().calc_geometric_factors(result)
+        return self.modify_geometric_factors(result, effective=effective)
 
 
 class TransportLayer3D(TransportLayer):
@@ -214,17 +229,19 @@ class TransportLayer3D(TransportLayer):
         # Initialize super class
         super().__init__(input_dict, transport_properties, discretization,
                          *args, **kwargs)
-        self.geometric_factors = self.calc_geometric_factors()
+        self.geometric_factors = self.calc_geometric_factors(
+            effective=self.effective)
         self.conductance = {key: self.calc_conductance(value) for key, value
                             in transport_properties.items()}
 
-    def calc_geometric_factors(self, *args, **kwargs):
+    def calc_geometric_factors(self, effective=True, *args, **kwargs):
         result = np.asarray([
             self.discretization.d_area[0] / self.discretization.dx[0],
             self.discretization.d_area[1] / self.discretization.dx[1],
             self.discretization.d_area[2] / self.discretization.dx[2]
             ])
-        return super().calc_geometric_factors(result)
+        return self.modify_geometric_factors(result, effective=effective,
+                                             *args, **kwargs)
 
 
 

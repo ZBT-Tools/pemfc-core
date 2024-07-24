@@ -71,7 +71,7 @@ class TwoPhaseMixtureDiffusionTransport:
             self.transport.base_shape)
 
         self.specific_liquid_surface_area = np.zeros(self.transport.base_shape)
-
+        self.gas_volume_fraction = np.zeros(self.transport.base_shape)
         # Inner looping numerical settings
         self.error = np.inf
         self.max_iterations = 1
@@ -228,6 +228,7 @@ class TwoPhaseMixtureDiffusionTransport:
 
         show_concentration = np.moveaxis(self.fluid.gas.concentration,
                                          (0, 1, 2, 3), (0, 2, 1, 3))
+
         self.net_evaporation_rate[:] = vol_net_evap_rate
         self.condensation_rate[:] = vol_cond_rate
         self.evaporation_rate[:] = vol_evap_rate
@@ -235,4 +236,7 @@ class TwoPhaseMixtureDiffusionTransport:
         self.specific_liquid_surface_area[:] = specific_area
         self.capillary_pressure[:] = capillary_pressure
         self.saturation[:] = saturation
+        self.gas_volume_fraction = (
+                self.transport.transport_layers[0].initial_volume_fraction
+                * (1.0 - self.saturation))
 

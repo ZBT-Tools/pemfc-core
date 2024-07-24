@@ -13,7 +13,7 @@
         "current_control": true,
         "operation_control": "Current",
         "elements": 10,
-        "current_density": 30000.0,
+        "current_density": 10000.0,
         "average_cell_voltage": 0.5,
         "channel_land_discretization": true
     },

@@ -136,6 +136,7 @@ class Simulation:
                 if ((current_error < self.it_crit and temp_error < self.it_crit)
                         and counter > self.min_it) or counter > self.max_it:
                     break
+                print
             if counter > self.max_it:
                 convergence_flag = False
             else:

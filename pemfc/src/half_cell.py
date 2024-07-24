@@ -140,9 +140,9 @@ class HalfCell:
             #     electrochemistry_dict['diff_coeff_gdl'])
             if self.channel_land_discretization:
                 # Initialize diffusion transport model
-                nx = 2
+                nx = 4
                 ny = self.discretization.shape[0]
-                nz = 2
+                nz = 8
                 gdl_diffusion_dict['boundary_patches']['Dirichlet'] = {
                     'axes': (0, 2), 'indices': (0, list(range(int(nz/2), nz)))}
             else:
@@ -213,8 +213,7 @@ class HalfCell:
                 if not self.calc_two_phase_flow:
                     self.gdl_diffusion.update(
                         temperature, self.channel.pressure,
-                        channel_concentration, mole_flux,
-                        self.explicit_source_terms)
+                        channel_concentration, mole_flux)
                 if self.calc_two_phase_flow:
                     # Adjust two-phase flow boundary conditions
                     liquid_flux_ratio = 0.5
@@ -228,12 +227,11 @@ class HalfCell:
                         self.two_phase_flow.evaporation_rate.shape)
                     molar_cond_coeff = np.zeros(
                         self.two_phase_flow.implicit_condensation_coeff.shape)
-
                     # Adjust numerical settings
                     error = np.inf
-                    max_iterations = 10
+                    max_iterations = 20
                     min_iterations = 1
-                    urf = 0.5
+                    urf = 0.2
                     error_tolerance = 1e-5
                     while (all((error > error_tolerance,
                                 iteration < max_iterations))
@@ -244,6 +242,7 @@ class HalfCell:
                             channel_concentration, mole_flux,
                             self.explicit_source_terms,
                             self.implicit_source_terms)
+                            # self.two_phase_flow.gas_volume_fraction)
 
                         # Update two-phase flow in GDL
                         temp = self.gdl_diffusion.fluid.temperature
@@ -368,8 +367,8 @@ class HalfCell:
                 # Calculate mole and mass source from fluxes
                 mass_source = self.surface_flux_to_channel_source(
                     -mass_flux, area=flux_interface_area)
-                mass_source_old = self.surface_flux_to_channel_source(
-                    mass_flux_old)
+                # mass_source_old = self.surface_flux_to_channel_source(
+                #     mass_flux_old)
                 mole_source = self.surface_flux_to_channel_source(
                     -mole_flux, flux_interface_area)
                 self.channel.mass_source[:], self.channel.mole_source[:] = (

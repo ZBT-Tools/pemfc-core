@@ -248,7 +248,8 @@ class DarcyFlowDiffusionTransport(DiffusionTransport):
     def update(self, dirichlet_values: np.ndarray,
                neumann_values: np.ndarray,
                source_values: np.ndarray,
-               transport_property: (list, np.ndarray), *args, **kwargs):
+               transport_property: (list, np.ndarray),
+               *args, **kwargs):
         dirichlet_values = self.rescale_input(dirichlet_values)
         neumann_values = self.rescale_input(neumann_values)
         for i, trans_layer in enumerate(self.transport_layers):
@@ -322,6 +323,7 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
                neumann_flux: np.ndarray,
                explicit_source: np.ndarray = None,
                implicit_source: np.ndarray = None,
+               volume_fraction: np.ndarray = None,
                *args, **kwargs):
         # temperature = gf.rescale(temperature, self.fluid.temperature.shape)
         # pressure = self.reshape_input(pressure)
@@ -362,7 +364,8 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         for i, trans_layer in enumerate(self.transport_layers):
             trans_layer.update(
                 {self.transport_type:
-                    self.gas_diff_coeff.d_eff[self.ids_active[i]]})
+                    self.gas_diff_coeff.d_eff[self.ids_active[i]]},
+                volume_fraction=volume_fraction)
             # trans_layer.conductance['diffusion'][:, 0:5, :, 0:10] = 1e-16
 
         for i, lin_sys in enumerate(self.linear_systems):
@@ -372,8 +375,14 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
                     indices=self.dirichlet_bc.indices)
             self.neumann_bc.values = boundary_flux[i]
             self.dirichlet_bc.values = boundary_concentration
-            explicit_source_data = ls.SourceData(values=explicit_source[i])
-            implicit_source_data = ls.SourceData(values=implicit_source[i])
+            if explicit_source is not None:
+                explicit_source_data = ls.SourceData(values=explicit_source[i])
+            else:
+                explicit_source_data = None
+            if implicit_source is not None:
+                implicit_source_data = ls.SourceData(values=implicit_source[i])
+            else:
+                implicit_source_data = None
             rhs_input = ls.RHSInput(neumann_bc=self.neumann_bc,
                                     dirichlet_bc=self.dirichlet_bc,
                                     explicit_sources=explicit_source_data,

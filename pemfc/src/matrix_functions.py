@@ -197,8 +197,8 @@ def build_cell_conductance_matrix(conductance_list: list[np.ndarray]):
 
 def transform_nodes(node_values: (list, np.ndarray), axis,
                     include_axis=False, inverse=False,
-                    mode='shift'):
-    if len(node_values) == node_values[0].ndim:
+                    mode='shift', except_first_axis=True, **kwargs):
+    if len(node_values) == node_values[0].ndim and except_first_axis:
         node_values = [np.asarray(item) for item in node_values]
         if include_axis:
             transform_axes = tuple(range(len(node_values)))
@@ -272,10 +272,11 @@ def shift_array_nodes(array: np.ndarray, axis: int, inverse=False):
 
 
 def shift_nodes(node_values: (list, np.ndarray), axis,
-                include_axis=False, inverse=False, **kwargs):
-    return transform_nodes(node_values, axis,
-                           include_axis=include_axis, inverse=inverse,
-                           mode='shift', **kwargs)
+                include_axis=False, inverse=False,
+                except_first_axis=True, **kwargs):
+    return transform_nodes(node_values, axis, include_axis=include_axis,
+                           inverse=inverse, mode='shift',
+                           except_first_axis=except_first_axis, **kwargs)
 
 
 def connect_cells(matrix, cell_ids, layer_ids, values, mtx_ids,
