@@ -27,9 +27,6 @@ class TwoPhaseMixtureDiffusionTransport:
         if not isinstance(fluid, fl.TwoPhaseMixture):
             raise TypeError('fluid must be of type TwoPhaseMixture')
 
-        with open(os.path.join(gs.global_state.base_directory, 'settings',
-                               'two_phase_settings.json')) as file:
-            input_dict.update(json.load(file))
         input_dict['volume_fraction'] = (
             input_dict['porosity_model']['porosity'])
         input_dict['effective'] = True
@@ -48,6 +45,9 @@ class TwoPhaseMixtureDiffusionTransport:
             self.fluid_reference = True
 
         self.dict = input_dict
+        self.saturation_min = 1e-6
+        self.dict['porosity_model']['saturation_model']['minimum_saturation'] =\
+            self.saturation_min
         # Create porosity model
         self.porosity_model = pl.PorousLayer(self.dict['porosity_model'],
                                              fluid)
@@ -60,7 +60,6 @@ class TwoPhaseMixtureDiffusionTransport:
             input_dict['evaporation_model'], fluid)
 
         # Setup variables
-        self.saturation_min = 1e-6
         self.saturation = (np.ones(self.transport.base_shape) *
                            self.saturation_min)
         self.capillary_pressure = np.zeros(self.transport.base_shape)
@@ -74,7 +73,7 @@ class TwoPhaseMixtureDiffusionTransport:
         self.gas_volume_fraction = np.zeros(self.transport.base_shape)
         # Inner looping numerical settings
         self.error = np.inf
-        self.max_iterations = 1
+        self.max_iterations = 10
         self.min_iterations = 1
         self.urf = 0.5
         self.error_tolerance = 1e-5
@@ -105,8 +104,10 @@ class TwoPhaseMixtureDiffusionTransport:
 
         # Boundary conditions for liquid pressure
         sigma_liquid = \
-            self.fluid.phase_change_species.calc_surface_tension(temperature)[0]
-        humidity = self.fluid.humidity
+            self.fluid.phase_change_species.calc_surface_tension(
+                temperature)[0, :, -1]
+        sigma_liquid = self.transport.rescale_input(sigma_liquid)
+        humidity = self.transport.rescale_input(self.fluid.humidity[0, :, -1])
         # humidity[humidity < 0.5] = 0.5
         # humidity[humidity > 1.2] = 1.2
         show_humidity = np.moveaxis(humidity, (0, 1, 2), (1, 0, 2))
@@ -144,6 +145,7 @@ class TwoPhaseMixtureDiffusionTransport:
             # Calculate relative permeability from saturation
             relative_permeability = (
                 self.porosity_model.calc_relative_permeability(saturation))
+            relative_permeability[relative_permeability < 1e-3] = 1e-3
             transport_property = (constant_transport_property
                                   * relative_permeability)
 
@@ -167,11 +169,10 @@ class TwoPhaseMixtureDiffusionTransport:
             vol_cond_coeff = specific_area * cond_coeffs
             show_volumetric_evap_rate = np.moveaxis(vol_net_evap_rate,
                                                     (0, 1, 2), (1, 0, 2))
-
             self.transport.update(
                 liquid_pressure_boundary,
                 liquid_mass_flux,
-                -vol_net_evap_rate,
+                -vol_net_evap_rate * 1.0,
                 transport_property)
 
             # Save old capillary pressure
@@ -224,6 +225,12 @@ class TwoPhaseMixtureDiffusionTransport:
             error_s = np.dot(s_diff.transpose(), s_diff) / (2.0 * len(s_diff))
             error_p = np.dot(p_diff.transpose(), p_diff) / (2.0 * len(p_diff))
             self.error = error_s + error_p
+            show_liquid_pressure = np.moveaxis(liquid_pressure,
+                                               (0, 1, 2), (1, 0, 2))
+            show_capillary_pressure = np.moveaxis(capillary_pressure,
+                                                  (0, 1, 2), (1, 0, 2))
+            show_temperature = np.moveaxis(temperature,
+                                           (0, 1, 2), (1, 0, 2))
             iteration += 1
 
         show_concentration = np.moveaxis(self.fluid.gas.concentration,

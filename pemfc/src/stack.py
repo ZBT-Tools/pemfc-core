@@ -14,18 +14,16 @@ class Stack(OutputObject1D):
         super().__init__('Stack')
         # Read settings dictionaries
         stack_dict = settings['stack']
-
+        # Number of cells of the stack
         self.n_cells = stack_dict['cell_number']
-        # number of cells of the stack
-        # node points/elements along the x-axis
+        # Switch to calculate the temperature distribution
         self.calc_temp = stack_dict['calc_temperature']
-        # switch to calculate the temperature distribution
+        # Switch to calculate the current density distribution
         self.calc_electric = stack_dict['calc_current_density']
-        # switch to calculate the current density distribution
+        # Switch to calculate the flow distribution
         # self.calc_flow_dis = stack_dict['calc_flow_distribution']
-        # switch to calculate the flow distribution
 
-        # decompose input dict the individual objects
+        # Decompose input dict the individual objects
         cell_dict = settings['cell']
         membrane_dict = settings['membrane']
         anode_dict = settings['anode']
@@ -49,10 +47,19 @@ class Stack(OutputObject1D):
         manifold_out_dicts = [cat_out_manifold_dict, ano_out_manifold_dict]
         flow_circuit_dicts = [cat_flow_circuit_dict, ano_flow_circuit_dict]
 
-        # switch for cell discretizsation
+        # Add evaporation model settings to channel dictionary
+        keys = ('two_phase_flow', 'evaporation_model')
+        for i in range(len(half_cell_dicts)):
+            two_phase_settings = half_cell_dicts[i].get(keys[0], None)
+            if two_phase_settings is not None:
+                evaporation_settings = two_phase_settings.get(keys[1], None)
+                if evaporation_settings is not None :
+                    channel_dicts[i][keys[1]] = evaporation_settings
+
+        # Switch for cell discretizsation
         cell_dict['channel_land_discretization'] = \
             settings['simulation']['channel_land_discretization']
-        # add underrelaxation factor to cell settings
+        # Add underrelaxation factor to cell settings
         cell_dict['underrelaxation_factor'] = \
             settings['simulation']['underrelaxation_factor']
 

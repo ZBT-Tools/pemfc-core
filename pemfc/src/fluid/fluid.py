@@ -111,7 +111,7 @@ class DiscreteFluid(OutputObject1D, ABC):
                          pressure: (float, np.ndarray) = 101325.0, **kwargs):
         pass
 
-    def _calc_fraction(self, composition, axis=0, recursion_count=0):
+    def calc_fraction(self, composition, axis=0, recursion_count=0):
         """
         Calculates mass or mole fractions based on a multi-dimensional
         array with different species along the provided axis.
@@ -132,7 +132,7 @@ class DiscreteFluid(OutputObject1D, ABC):
             if recursion_count > 1:
                 raise ValueError('Something wrong in '
                                  '{}.calc_fraction()'.format(self))
-            return self._calc_fraction(composition, axis, recursion_count)
+            return self.calc_fraction(composition, axis, recursion_count)
 
     @property
     def temperature(self):
@@ -359,7 +359,7 @@ class GasMixture(DiscreteFluid):
         species_names = list(species_dict.keys())
         # self.n_species = len(species_names)
         self.gas_constant = constants.GAS_CONSTANT
-        self.total_gas_concentration = np.zeros(array_shape)
+        self.total_concentration = np.zeros(array_shape)
         self.species = species.GasProperties(species_names)
         self.n_species = len(self.species.names)
         self.species_id = \
@@ -468,21 +468,21 @@ class GasMixture(DiscreteFluid):
         self._mass_fraction[:] = \
             self.calc_mass_fraction(self._mole_fraction)
         self._calc_properties(self._temperature, self._pressure, method)
-        self._concentration[:] = self._calc_concentration()
+        self._concentration[:] = self.calc_concentration(self._mole_fraction)
 
-    def _calc_concentration(self):
+    def calc_concentration(self, mole_fraction: np.ndarray):
         """
         Calculates the gas phase molar concentrations.
         """
         total_mol_conc = self._pressure \
             / (self.gas_constant * self._temperature)
-        self.total_gas_concentration[:] = total_mol_conc
-        return self._mole_fraction * total_mol_conc
+        self.total_concentration[:] = total_mol_conc
+        return mole_fraction * total_mol_conc
 
     def calc_mole_fraction(self, mole_composition):
         if np.min(mole_composition) < 0.0:
             raise ValueError('mole_composition must not be smaller zero')
-        mole_fraction = self._calc_fraction(mole_composition)
+        mole_fraction = self.calc_fraction(mole_composition)
         return mole_fraction
 
     def calc_molar_mass(self, mole_fraction=None):
@@ -817,7 +817,8 @@ class TwoPhaseMixture(DiscreteFluid):
             self.phase_change_species.calc_saturation_pressure(self._temperature)
         if gas_mole_composition is None \
                 or np.max(gas_mole_composition) < constants.SMALL:
-            gas_mole_composition = self._calc_concentration()
+            gas_mole_composition = self.gas.calc_concentration(
+                self._mole_fraction)
         if mole_composition is None:
             mole_composition = gas_mole_composition
         self.gas.update(self._temperature,
@@ -839,7 +840,7 @@ class TwoPhaseMixture(DiscreteFluid):
         # total_conc[self.id_pc] = np.sum(dry_conc, axis=0) \
         #     * self.mole_fraction[self.id_pc] \
         #     / (1.0 - self.mole_fraction[self.id_pc])
-
+        #
         # try:
         #     self.liquid_mole_fraction[:] = \
         #         1.0 - np.sum(gas_conc, axis=0) / np.sum(total_conc, axis=0)
@@ -976,20 +977,20 @@ class TwoPhaseMixture(DiscreteFluid):
             * self.liquid.specific_heat \
             + (1.0 - self.liquid_mass_fraction) * self.gas.specific_heat
 
-    def _calc_concentration(self):
+    def calc_concentration(self):
         """
         Calculates the gas phase molar concentrations.
         :return: gas phase concentration
         (n_species x n_nodes)
         """
         r_t = self.gas.gas_constant * self._temperature
-        total_gas_conc = self._pressure / r_t
+        total_gas_conc = self.gas.total_concentration
         conc = self._mole_fraction * total_gas_conc
         # all_conc = np.copy(conc)
         sat_conc = self.saturation_pressure / r_t
         dry_mole_fraction = np.copy(self.mole_fraction)
         dry_mole_fraction[self.id_pc] = 0.0
-        dry_mole_fraction = self._calc_fraction(dry_mole_fraction)
+        dry_mole_fraction = self.calc_fraction(dry_mole_fraction)
         for i in range(self.n_species):
             if i == self.id_pc:
                 conc[self.id_pc] = np.where(conc[self.id_pc] > sat_conc,
@@ -1034,9 +1035,18 @@ class TwoPhaseMixture(DiscreteFluid):
         p_sat = self.saturation_pressure
         self.humidity[:] = \
             self._mole_fraction[self.id_pc] * self._pressure / p_sat
-
-        # Simplification of limiting humidity to 100%
-        # self.humidity[self.humidity > 1.0] = 1.0
+        # # TODO: Should be handled more elaborately with an evaporation model
+        # #  such as provided in the evaporation_model.py file
+        #
+        # # Simplification of limiting humidity to 100%
+        # if np.any(self.humidity > 1.01):
+        #     self.humidity[self.humidity > 1.0] = 1.0
+        #
+        #     # Quick fix to limit total composition to humidity 100%
+        #     mole_fraction = self._mole_fraction
+        #     mole_fraction[self.id_pc] = self.humidity * p_sat / self._pressure
+        #     self.update(self._temperature, self._pressure, mole_fraction)
+        # # self.humidity[:] = self.humidity
 
     def calc_vaporization_enthalpy(self, temperature=None):
         if temperature is None:

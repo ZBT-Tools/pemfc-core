@@ -40,19 +40,19 @@ class LinearSystem(ABC):
 
         # Use SciPy sparse solver, efficient for larger sparse matrices
         self.sparse_solve = True
-
+        self.dtype = np.float64
         # Instead of solving the completely coupled temperature src at once
         # solve the decoupled cell-wise temperature systems and iterate
         # however not working yet!!!
         self.solve_individual_cells = False
 
         # Conductance Matrix as ndarray
-        self.mtx = np.zeros((self.n, self.n))
+        self.mtx = np.zeros((self.n, self.n), dtype=self.dtype)
         # Solution vector
-        self.solution_vector = np.zeros(self.n)
+        self.solution_vector = np.zeros(self.n, dtype=self.dtype)
         # Right side of the matrix src: mtx * solution_vector = rhs,
         # contains the power sources and explicit coupled terms
-        self.rhs = np.zeros(self.solution_vector.shape)
+        self.rhs = np.zeros(self.solution_vector.shape, dtype=self.dtype)
 
         self.solution_array = np.reshape(
             self.solution_vector, self.shape, order='F')
@@ -91,20 +91,22 @@ class LinearSystem(ABC):
         Solves for the solution vector.
         """
         if self.sparse_solve:
-            cond_number = np.linalg.cond(self.mtx)
-            mtx = sparse.csr_matrix(self.mtx, dtype=np.longdouble)
-            mtx = np.array(self.mtx, dtype=np.longdouble)
-            precond_mtx = mtx_func.spai(self.mtx, 10)
-            cond_number_precond = np.linalg.cond(self.mtx @
-                                                 precond_mtx)
-            rhs = np.array(self.rhs, dtype=np.longdouble)
-            self.solution_vector[:], _ = cg(mtx, rhs, M=precond_mtx, rtol=1e-12)
+            # cond_number = np.linalg.cond(self.mtx)
+            mtx = sparse.csr_matrix(self.mtx, dtype=self.dtype)
+            # mtx = np.array(self.mtx, dtype=self.dtype)
+            # precond_mtx = mtx_func.spai(self.mtx, 5)
+            # cond_number_precond = np.linalg.cond(self.mtx @
+            #                                      precond_mtx)
+            rhs = np.array(self.rhs, dtype=self.dtype)
+            x = spsolve(mtx, rhs)
+            # self.solution_vector[:], _ = cg(mtx, rhs, M=precond_mtx, rtol=1e-12)
+            self.solution_vector[:] = x
+
         else:
             cond_number = np.linalg.cond(self.mtx)
             self.solution_vector[:] = np.linalg.solve(self.mtx, self.rhs)
         self.solution_array[:] = np.reshape(
             self.solution_vector, self.shape, order='F')
-        print('test')
 
     def add_implicit_source(self, matrix, coefficients,
                             index_array=None, replace=False):
@@ -123,12 +125,19 @@ class LinearSystem(ABC):
             if rhs_vector.ndim != source_term.ndim:
                 raise ValueError('source_term must have same dimensions as '
                                  'rhs_vector')
+
         if index_array is None:
             if np.isscalar(source_term):
                 source_vector = np.full_like(rhs_vector, -source_term)
             else:
                 source_vector = np.asarray(-source_term)
         else:
+            source_term = np.asarray(source_term)
+            index_array = np.asarray(index_array)
+            if source_term.ndim > 0:
+                if source_term.shape != index_array.shape:
+                    raise ValueError("shapes of 'source_term' and 'index_array' "
+                                     "must be equal")
             if replace is True:
                 source_vector = np.copy(rhs_vector)
                 np.put(source_vector, index_array, -source_term)
@@ -185,6 +194,7 @@ class BasicLinearSystem(LinearSystem, ABC):
         self.transport_layer = transport_layer
         self.type = transport_type
         self.previously_shifted_axis = previously_shifted_axis
+        self.scaling_factor = None
         conductance = self.transport_layer.conductance[self.type]
         self.conductance, shape = self.calculate_conductance(conductance)
         super().__init__(shape)
@@ -206,7 +216,8 @@ class BasicLinearSystem(LinearSystem, ABC):
         self.solution_array[:] = init_value
 
     def calculate_conductance(self, conductance_array):
-
+        if self.scaling_factor is not None:
+            conductance_array *= self.scaling_factor
         shape = conductance_array[0].shape
         if self.shift_axis is None:
             previously_shifted = tuple(
@@ -306,26 +317,26 @@ class BasicLinearSystem(LinearSystem, ABC):
         rhs_input = kwargs.get('rhs_input', None)
         source_vector = np.zeros(self.rhs.shape)
         if isinstance(rhs_input, RHSInput):
-            if isinstance(rhs_input.dirichlet_bc, BoundaryData):
-                # Assuming no-flux-boundaries at remaining surface area of
-                # Dirichlet-type patches, where no values were given.
-                # Achieved by setting conductance for these cells to zero
-                index_vector_remaining = self.get_remaining_indices(
-                    rhs_input.dirichlet_bc.axes, rhs_input.dirichlet_bc.indices)
-                modified_conductance = []
-                for cond in conductance:
-                    conductance_vector = cond.ravel(order='F')
-                    conductance_vector[index_vector_remaining] = 0.0
-                    modified_conductance.append(conductance_vector.reshape(
-                        cond.shape, order='F'))
-                conductance = np.asarray(modified_conductance)
-                if isinstance(rhs_input.implicit_sources, SourceData):
-                    mtx_update, source_vector = self.add_source_data(
-                        rhs_input.implicit_sources.values,
-                        rhs_input.implicit_sources.indices,
-                        volumetric=True,
-                        explicit=False
-                    )
+            # if isinstance(rhs_input.dirichlet_bc, BoundaryData):
+            #     # Assuming no-flux-boundaries at remaining surface area of
+            #     # Dirichlet-type patches, where no values were given.
+            #     # Achieved by setting conductance for these cells to zero
+            #     index_vector_remaining = self.get_remaining_indices(
+            #         rhs_input.dirichlet_bc.axes, rhs_input.dirichlet_bc.indices)
+            #     modified_conductance = []
+            #     for cond in conductance:
+            #         conductance_vector = cond.ravel(order='F')
+            #         conductance_vector[index_vector_remaining] = 0.0
+            #         modified_conductance.append(conductance_vector.reshape(
+            #             cond.shape, order='F'))
+            #     conductance = np.asarray(modified_conductance)
+            if isinstance(rhs_input.implicit_sources, SourceData):
+                mtx_update, source_vector = self.add_source_data(
+                    rhs_input.implicit_sources.values,
+                    rhs_input.implicit_sources.indices,
+                    volumetric=True,
+                    explicit=False
+                )
         # Calculate inter-nodal conductance array and build conductance
         # matrix accordingly
         self.conductance, shape = self.calculate_conductance(conductance)
@@ -364,7 +375,6 @@ class BasicLinearSystem(LinearSystem, ABC):
                     rhs_input.explicit_sources.indices,
                     rhs_input.explicit_sources.volumetric
                 )
-        print('test')
         # self.rhs[:] = self.rhs_const + self.rhs_dyn
 
     def get_remaining_indices(self, axes, indices):
@@ -432,7 +442,9 @@ class BasicLinearSystem3D(BasicLinearSystem):
         index_array = mtx_func.get_axis_values(self.index_array, axes, indices)
         d_area = mtx_func.get_axis_values(
             self.transport_layer.discretization.d_area[axes[0]], axes, indices)
-        source = values * d_area
+        source = np.asarray(values * d_area, dtype=self.dtype)
+        if self.scaling_factor is not None:
+            source *= self.scaling_factor
         self.add_explicit_source(
             self.rhs, source.ravel(order='F'),
             index_array=index_array.ravel(order='F'), replace=True)
@@ -446,7 +458,10 @@ class BasicLinearSystem3D(BasicLinearSystem):
             index_array = self.index_array[indices].ravel(order='F')
         source = values.ravel(order='F')
         if volumetric:
-            source *= np.ravel(self.d_volume, order='F')
+            source *= np.asarray(self.d_volume.ravel(order='F'),
+                                 dtype=self.dtype)
+        if self.scaling_factor is not None:
+            source *= self.scaling_factor
         if explicit:
             return self.add_explicit_source(
                 self.rhs, source, index_array=index_array, replace=False)

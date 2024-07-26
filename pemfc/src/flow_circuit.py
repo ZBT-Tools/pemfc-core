@@ -289,7 +289,7 @@ class KohFlowCircuit(ParallelFlowCircuit):
                           - channel.pressure[channel.id_out]
                           for channel in self.channels])
             self.channel_vol_flow[:] = \
-                np.array([np.average(channel.vol_flow)
+                np.array([np.average(channel.volume_flow)
                           for channel in self.channels])
         # if np.min(np.abs(vol_flow_channel)) > g_par.SMALL:
             self.visc_channel[:] = \
@@ -350,7 +350,7 @@ class ModifiedKohFlowCircuit(KohFlowCircuit):
                           - channel.pressure[channel.id_out]
                           for channel in self.channels])
             self.channel_vol_flow[:] = self.n_subchannels \
-                * np.array([np.average(channel.vol_flow)
+                * np.array([np.average(channel.volume_flow)
                             for channel in self.channels])
         # if np.min(np.abs(vol_flow_channel)) > g_par.SMALL:
             self.visc_channel[:] = \
@@ -690,7 +690,7 @@ class VariableResistanceFlowCircuit(ParallelFlowCircuit):
         if update_channels:
             self.update_channels(update_fluid=False)
         self.channel_vol_flow[:] = \
-            np.array([np.average(channel.vol_flow)
+            np.array([np.average(channel.volume_flow)
                       for channel in self.channels])
         if np.any(self.channel_vol_flow == 0.0):
             raise ValueError('zero flow rates in channels detected, '

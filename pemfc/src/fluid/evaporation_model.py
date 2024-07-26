@@ -107,7 +107,7 @@ class HertzKnudsenSchrageModel(EvaporationModel):
         const_by_sqrt_temp = self.const_factor / np.sqrt(temperature_vap)
 
         implicit_condensation_coefficient = (
-                pressure / self.fluid.gas.total_gas_concentration)
+                pressure / self.fluid.gas.total_concentration)
         implicit_condensation_coefficient *= const_by_sqrt_temp
 
         condensation_rate = p_vap * const_by_sqrt_temp

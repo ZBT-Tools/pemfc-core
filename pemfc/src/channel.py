@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 # local modul imports
 from . import interpolation as ip, global_functions as g_func, \
     flow_resistance as fr, output_object as oo
-from .fluid import fluid as fluids
+from .fluid import fluid as fluids, evaporation_model as evap
 try:
     import pemfc.src.cython.channel_heat_transfer as cht
     CHT_FOUND = True
@@ -100,7 +100,7 @@ class Channel(oo.OutputObject1D, ABC):
         self.velocity = np.zeros(self.n_nodes)
         self.reynolds = np.zeros(self.n_nodes)
         self.mass_flow_total = np.zeros(self.n_nodes)
-        self.vol_flow = np.zeros(self.n_nodes)
+        self.volume_flow = np.zeros(self.n_nodes)
         self.g_fluid = np.zeros(self.n_nodes)
 
         # Heat Transfer
@@ -277,8 +277,8 @@ class Channel(oo.OutputObject1D, ABC):
         """
         Calculates the gas phase velocity.
         """
-        self.vol_flow[:] = self.mass_flow_total / self.fluid.density
-        self.velocity[:] = np.maximum(self.vol_flow / self.cross_area, 0.0)
+        self.volume_flow[:] = self.mass_flow_total / self.fluid.density
+        self.velocity[:] = np.maximum(self.volume_flow / self.cross_area, 0.0)
         self.reynolds[:] = self.velocity * self.d_h * self.fluid.density \
             / self.fluid.viscosity
 
@@ -655,20 +655,30 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         super().__init__(channel_dict, fluid, number)
         self.mole_flow_gas_total = np.zeros(self.n_nodes)
         self.mass_flow_gas_total = np.zeros(self.n_nodes)
-        self.vol_flow_gas = np.zeros(self.n_nodes)
+        self.volume_flow_gas = np.zeros(self.n_nodes)
         arr_shape = (self.fluid.n_species, self.n_nodes)
         self.mole_flow_liq = np.zeros(arr_shape)
         self.mole_flow_gas = np.zeros(arr_shape)
         self.mass_flow_gas = np.zeros(arr_shape)
         self.mass_flow_liq = np.zeros(arr_shape)
-        self.cond_rate_ele = np.zeros(self.n_ele)
+        self.condensation_rate = np.zeros(self.n_ele)
         self.condensation_heat = np.zeros(self.n_ele)
-        self.cond_rate_time_const = 5.0
+        if 'evaporation_model' in channel_dict:
+            evaporation_dict = channel_dict['evaporation_model']
 
+        else:
+            evaporation_dict = {"type": "HertzKnudsenSchrage",
+                                "evaporation_coefficient": 0.37}
+        self.evaporation_model = evap.EvaporationModel(evaporation_dict,
+                                                       self.fluid)
+        self.droplet_to_slug_transition = 0.1
+        self.saturation = np.ones(self.condensation_rate.shape) * 1e-6
+        self.urf = 0.5
         self.add_print_data(self.mole_flow_gas, 'Gas Mole Flow', 'mol/s',
                             self.fluid.species_names)
         self.add_print_data(self.mole_flow_liq, 'Liquid Mole Flow',
                             'mol/s', self.fluid.species_names)
+        self.add_print_data(self.saturation, 'Liquid Channel Saturation', '-')
 
     def update_mass(self, mass_flow_in=None, liquid_mass_flow_in=None,
                     mass_source=None, update_fluid=True):
@@ -677,16 +687,23 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         self.calc_two_phase_flow(liquid_mass_flow_in)
 
     def update_fluid(self):
-        self.fluid.update(self.temperature, self.pressure, self.mole_flow,
-                          self.mole_flow_gas)
+        if np.all(self.mole_flow_gas_total > 0.0):
+            mole_composition = self.mole_flow
+            gas_mole_composition = self.mole_flow_gas
+        else:
+            mole_composition = None
+            gas_mole_composition = None
+        self.fluid.update(self.temperature, self.pressure,
+                          mole_composition, gas_mole_composition)
+        # print('test')
 
     def calc_flow_velocity(self):
         """
         Calculates the gas phase velocity.
         """
-        self.vol_flow_gas[:] = self.mass_flow_gas_total / self.fluid.density
-        self.vol_flow[:] = self.vol_flow_gas
-        self.velocity[:] = np.maximum(self.vol_flow_gas / self.cross_area, 0.0)
+        self.volume_flow_gas[:] = self.mass_flow_gas_total / self.fluid.density
+        self.volume_flow[:] = self.volume_flow_gas
+        self.velocity[:] = np.maximum(self.volume_flow_gas / self.cross_area, 0.0)
         self.reynolds[:] = self.velocity * self.d_h * self.fluid.density \
             / self.fluid.viscosity
 
@@ -695,22 +712,54 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         Calculates the condensed phase flow and updates mole and mass fractions
         """
         id_pc = self.fluid.id_pc
+        mw_pc = self.fluid.gas.species_mw[id_pc]
         if liquid_mass_flow_in is not None:
             self.mass_flow_liq[id_pc][:] = liquid_mass_flow_in
+            self.mole_flow_liq[id_pc][:] = liquid_mass_flow_in / mw_pc
+        # else:
+        # Assuming all liquid flow is removed instantly for simplification now
+        self.mass_flow_liq[id_pc][:] = 0.0
+        self.mole_flow_liq[id_pc][:] = 0.0
+        self.mole_flow_gas[:] = self.mole_flow
+        self.mass_flow_gas[:] = self.mass_flow
         # mole_fraction_water = self.fluid.gas.mole_fraction[id_pc]
-        # dp_cond = ip.interpolate_1d(mole_fraction_water * self.pressure \
-        #                             - self.fluid.saturation_pressure)
-        # mole_source_liquid = \
-        #     self.cross_area * self.dx * self.cond_rate_time_const * dp_cond
-        # mw_water = self.fluid.gas.species_mw[id_pc]
-        # mass_source_liquid = mole_source_liquid * mw_water
+        # evaporation_rate = self.evaporation_model.calc_evaporation_rate(
+        #     self.temperature, self.pressure)[0]
+        # condensation_rate = -ip.interpolate_1d(evaporation_rate)
+        # liquid_surface_area = self.calc_liquid_surface_area(self.saturation)
+        # mass_source_liquid = condensation_rate * liquid_surface_area
+        # mole_source_liquid = (mass_source_liquid / mw_liquid)
+        # liquid_factor = self.fluid.humidity - 1.0
+        # liquid_factor[liquid_factor < 0.0] = 0.0
+        mole_flow_gas = np.copy(self.mole_flow_gas)
+        mole_flow_pc_gas = np.copy(mole_flow_gas[id_pc])
+        mole_fraction_pc_gas_max = (self.fluid.saturation_pressure /
+                                    self.pressure * 1.0)
+        mole_flow_non_pc = np.sum(np.delete(mole_flow_gas, id_pc, axis=0),
+                                  axis=0)
+        mole_flow_pc_gas_max = (
+                mole_fraction_pc_gas_max / (1.0 - mole_fraction_pc_gas_max)
+                * mole_flow_non_pc)
+        mole_flow_pc_gas = np.where(mole_flow_pc_gas < mole_flow_pc_gas_max,
+                                    mole_flow_pc_gas, mole_flow_pc_gas_max)
+
+        mole_flow_gas[id_pc] = mole_flow_pc_gas
+        mole_fraction = self.fluid.gas.calc_fraction(mole_flow_gas)
+        # humidity = (mole_fraction[id_pc] * self.pressure /
+        #             self.fluid.saturation_pressure)
+
+        self.mole_flow_gas = mole_flow_gas
+        self.mass_flow_gas[id_pc] = mole_flow_pc_gas * mw_pc
         # g_func.add_source(self.mass_flow_liq[id_pc], mass_source_liquid,
         #                   self.flow_direction, self.tri_mtx)
+        # self.mass_flow_liq[id_pc][:] = self.mole_flow_liq[id_pc] * mw_pc
+
         # self.mass_flow_liq[self.mass_flow_liq < 0.0] = 0.0
-        # self.mole_flow_liq[id_pc][:] = self.mass_flow_liq[id_pc] / mw_water
         # self.mole_flow_liq[self.mole_flow_liq < 0.0] = 0.0
-        self.mole_flow_gas[:] = self.mole_flow - self.mole_flow_liq
-        self.mass_flow_gas[:] = self.mass_flow - self.mass_flow_liq
+        self.mole_flow[:] = self.mole_flow_gas + self.mole_flow_liq
+        self.mass_flow[:] = self.mass_flow_gas + self.mass_flow_liq
+        self.mass_flow_gas_total[:] = np.sum(self.mass_flow_gas, axis=0)
+        self.mole_flow_gas_total[:] = np.sum(self.mole_flow_gas, axis=0)
         self.mole_flow_gas[self.mole_flow_gas < 0.0] = 0.0
         self.mass_flow_gas[self.mass_flow_gas < 0.0] = 0.0
 
@@ -718,28 +767,53 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         #     * self.fluid.liquid_mole_fraction
         # mass_flow_liq_total = self.mass_flow_total \
         #     * self.fluid.liquid_mass_fraction
-        self.mole_flow_gas_total[:] = \
-            self.mole_flow_total - np.sum(self.mole_flow_liq, axis=0)
-        self.mass_flow_gas_total[:] = \
-            self.mass_flow_total - np.sum(self.mass_flow_liq, axis=0)
+
         # self.mole_flow_gas[:] = \
         #     self.mole_flow_gas_total * self.fluid.gas.mole_fraction
         # self.mass_flow_gas[:] = \
         #     self.mass_flow_gas_total * self.fluid.gas.mass_fraction
         # self.mole_flow_liq[:] = self.mole_flow - self.mole_flow_gas
         # self.mass_flow_liq[:] = self.mass_flow - self.mass_flow_gas
+        # self.mole_flow[:] = self.mole_flow_liq + self.mole_flow_gas
+        self.mole_flow_total[:] = np.sum(self.mole_flow, axis=0)
+        self.mass_flow_total[:] = np.sum(self.mass_flow, axis=0)
+        # self.mole_flow_gas_total[:] = \
+        #     self.mole_flow_total - np.sum(self.mole_flow_liq, axis=0)
+        # self.mass_flow_gas_total[:] = \
+        #     self.mass_flow_total - np.sum(self.mass_flow_liq, axis=0)
+
         self.calc_condensation_rate()
         self.calc_condensation_heat()
         # self.fluid.update(self.temperature, self.pressure, self.mole_flow,
         #                   self.mole_flow_gas)
+        # print('test')
+
+    def calc_liquid_surface_area(self, saturation):
+        # diameter_max = 0.5 * self.height
+        # volume_max_sphere = 4.0 / 3.0 * (diameter_max / 2.0) ** 3.0 * math.pi
+        # surface_max_sphere = 4.0 * (diameter_max / 2.0) ** 2.0 * math.pi
+        # volume_liquid = self.cross_area * self.dx * saturation
+        # number_of_max_spheres = np.mod(volume_liquid / volume_max_sphere, 1)
+        # volume_max_spheres = number_of_max_spheres * volume_max_sphere
+        # volume_remaining = volume_liquid - volume_max_spheres
+        # diameter_remaining = (2.0 * (3.0 * volume_remaining / (4.0 * np.pi))
+        #                       ** (1.0 / 3.0))
+        # surface_remaining = 4.0 * (diameter_remaining / 2.0) ** 2.0 * math.pi
+        # surface_spheres = (number_of_max_spheres * surface_max_sphere
+        #                    + surface_remaining)
+        # surface_film = self.dx * self.height
+        # surface = np.where(surface_spheres < surface_film, surface_spheres,
+        #                    surface_film)
+        surface_film = self.dx * self.height
+        return surface_film * 10.0
 
     def calc_condensation_rate(self):
         """
         Calculates the molar condensation rate of the phase change species in
         the channel.
         """
-        self.cond_rate_ele[:] = self.flow_direction \
-            * np.ediff1d(self.mole_flow_liq[self.fluid.id_pc])
+        self.condensation_rate[:] = (self.flow_direction
+                                     * np.ediff1d(self.mole_flow_liq[self.fluid.id_pc]))
 
     def calc_condensation_heat(self):
         """

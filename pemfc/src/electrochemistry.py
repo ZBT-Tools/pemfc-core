@@ -231,19 +231,19 @@ class ElectrochemistryModel(ABC):
         according to (Kulikovsky, 2013).
         """
         np.seterr(divide='ignore')
-        # try:
-        v_loss_act = \
-            np.where(np.logical_and(current_density > constants.SMALL,
-                                    conc > constants.SMALL),
-                     self.tafel_slope
-                     * np.arcsinh((current_density / self.i_sigma) ** 2.
-                                  / (2. * conc
-                                     * (1. - np.exp(-current_density /
-                                                    (2. * self.i_star))))),
-                     0.0)
-        np.seterr(divide='raise')
-        # except FloatingPointError:
-        #     raise
+        try:
+            v_loss_act = \
+                np.where(np.logical_and(current_density > constants.SMALL,
+                                        conc > constants.SMALL),
+                         self.tafel_slope
+                         * np.arcsinh((current_density / self.i_sigma) ** 2.
+                                      / (2. * conc
+                                         * (1. - np.exp(-current_density /
+                                                        (2. * self.i_star))))),
+                         0.0)
+            np.seterr(divide='raise')
+        except FloatingPointError:
+            raise
         return v_loss_act
 
     def calc_transport_loss_catalyst_layer(self, current_density: np.ndarray,

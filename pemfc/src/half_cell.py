@@ -20,6 +20,7 @@ warnings.filterwarnings("ignore")
 class HalfCell:
 
     def __init__(self, halfcell_dict, cell_dict, channel, number=None):
+        self.dict = halfcell_dict
         self.number = number
         self.name = halfcell_dict['name']
         # Discretization in elements and nodes along the x-axis (flow axis)
@@ -125,7 +126,7 @@ class HalfCell:
                                        self.discretization)
 
         self.calc_gdl_diffusion = True
-        self.calc_two_phase_flow = False
+        self.calc_two_phase_flow = True
 
         if self.calc_gdl_diffusion:
             gdl_diffusion_dict = gde_dict.copy()
@@ -140,15 +141,15 @@ class HalfCell:
             #     electrochemistry_dict['diff_coeff_gdl'])
             if self.channel_land_discretization:
                 # Initialize diffusion transport model
-                nx = 2
-                ny = self.discretization.shape[0]
-                nz = 2
-                gdl_diffusion_dict['boundary_patches']['Dirichlet'] = {
-                    'axes': (0, 2), 'indices': (0, list(range(int(nz/2), nz)))}
-            else:
                 nx = 4
                 ny = self.discretization.shape[0]
                 nz = 8
+                gdl_diffusion_dict['boundary_patches']['Dirichlet'] = {
+                    'axes': (0, 2), 'indices': (0, list(range(int(nz/2), nz)))}
+            else:
+                nx = 2
+                ny = self.discretization.shape[0]
+                nz = 2
                 gdl_diffusion_dict['boundary_patches']['Dirichlet'] = {
                     'axes': (0,), 'indices': (0,)}
             discretization_dict = {
@@ -169,9 +170,12 @@ class HalfCell:
             if self.calc_two_phase_flow:
                 gdl_two_phase_flow_dict = gdl_diffusion_dict.copy()
                 gdl_two_phase_flow_dict['type'] = 'DarcyFlow'
+                gdl_two_phase_flow_dict.update(halfcell_dict['two_phase_flow'])
                 self.two_phase_flow = p2pf.TwoPhaseMixtureDiffusionTransport(
                     gdl_two_phase_flow_dict, gdl_discretization,
                     self.gdl_diffusion.fluid)
+                self.gdl_channel_saturation = (
+                    self.dict)['two_phase_flow']['gdl_channel_saturation']
 
         self.thickness = self.bpp.thickness + self.gde.thickness
 
@@ -218,7 +222,7 @@ class HalfCell:
                     # Adjust two-phase flow boundary conditions
                     liquid_flux_ratio = 0.5
                     ch_gdl_sat = (np.ones(self.two_phase_flow.saturation.shape)
-                                  * 0.01)
+                                  * self.gdl_channel_saturation)
                     liquid_water_flux = (mass_flux[self.id_h2o]
                                          * liquid_flux_ratio)
                     mole_flux[self.id_h2o] *= (1.0 - liquid_flux_ratio)
@@ -229,9 +233,9 @@ class HalfCell:
                         self.two_phase_flow.implicit_condensation_coeff.shape)
                     # Adjust numerical settings
                     error = np.inf
-                    max_iterations = 20
+                    max_iterations = 5
                     min_iterations = 1
-                    urf = 0.2
+                    urf = 0.5
                     error_tolerance = 1e-5
                     while (all((error > error_tolerance,
                                 iteration < max_iterations))
@@ -241,7 +245,8 @@ class HalfCell:
                             temperature, self.channel.pressure,
                             channel_concentration, mole_flux,
                             self.explicit_source_terms,
-                            self.implicit_source_terms)
+                            self.implicit_source_terms
+                        )
                             # self.two_phase_flow.gas_volume_fraction)
 
                         # Update two-phase flow in GDL
@@ -290,7 +295,8 @@ class HalfCell:
                 filter_size = (
                     int(fuel_cl_concentration.shape[-1] / reduced_shape[-1]))
                 fuel_cl_concentration = ndimage.uniform_filter(
-                    fuel_cl_concentration, size=filter_size, axes=(-1,))
+                    np.asarray(fuel_cl_concentration, dtype=np.float64),
+                    size=filter_size, axes=(-1,))
                 flux_scaling_factors = ndimage.uniform_filter(
                     self.gdl_diffusion.flux_scaling_factors[self.id_fuel],
                     size=filter_size, axes=(-1,))
@@ -377,6 +383,8 @@ class HalfCell:
                 #     mass_flux_old)
                 mole_source = self.surface_flux_to_channel_source(
                     mole_flux, flux_interface_area)
+                mole_source[self.id_inert] *= 0.0
+                mass_source[self.id_inert] *= 0.0
                 mole_source_sum = np.sum(mole_source, axis=-1)
                 self.channel.mass_source[:], self.channel.mole_source[:] = (
                     mass_source, mole_source)
@@ -400,7 +408,7 @@ class HalfCell:
                 self.channel.mole_flow[self.id_fuel, self.channel.id_in]
                 * self.faraday * self.n_charge
                 / (np.sum(current) * abs(self.n_stoi[self.id_fuel])))
-            if gs.global_state.iteration == 50:
+            if gs.global_state.iteration == 18:
                 print('test')
             if current_control and self.inlet_stoi < 1.0:
                 raise ValueError('stoichiometry of cell {0} '

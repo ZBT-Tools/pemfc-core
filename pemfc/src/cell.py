@@ -263,13 +263,16 @@ class Cell(OutputObject2D):
         membrane voltage losses.If the cell voltage loss is larger
         than the open circuit cell voltage, the cell voltage is set to zero.
 
-        WARNING: For now this function is deprecated since cell voltage losses
+        WARNING: For now this function is only used for electrochemical
+        resistance calculation. Global cell voltage losses
         are calculated via the voltage difference between BPP in the
         ElectricSystem class.
         """
-        self.voltage_loss[:] = \
-            self.membrane.voltage_loss + self.cathode.voltage_loss + self.anode.voltage_loss
-        self.voltage_alarm = self.voltage_loss >= self.e_0
+        voltage_loss = (self.membrane.voltage_loss
+                        + self.cathode.voltage_loss
+                        + self.anode.voltage_loss)
+        self.voltage_alarm = voltage_loss >= self.e_0
+        return voltage_loss
         # self.v_loss[:] = np.minimum(self.v_loss, self.e_0)
 
     def update_voltage_loss(self, v_loss):
@@ -298,10 +301,8 @@ class Cell(OutputObject2D):
         of the conductance array layout assuming an uneven number of layers.
         """
         current = current_density * self.membrane.discretization.d_area
+        cell_voltage_loss = self.calc_voltage_loss()
         electrochemical_resistance = (
-            (self.cathode.voltage_loss
-             + self.membrane.voltage_loss
-             + self.anode.voltage_loss)
-            / current)
+            cell_voltage_loss / current)
         self.electrochemical_conductance[:] = (
                 1.0 / electrochemical_resistance)

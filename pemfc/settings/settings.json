@@ -2,12 +2,12 @@
     "stack": {
         "cell_number": 1,
         "cool_flow": false,
-        "calc_temperature": false,
+        "calc_temperature": true,
         "calc_current_density": true
     },
     "simulation": {
-        "maximum_iteration": 300,
-        "minimum_iteration": 20,
+        "maximum_iteration": 21,
+        "minimum_iteration": 10,
         "convergence_criteria": 1e-09,
         "underrelaxation_factor": 0.7,
         "current_control": true,
@@ -15,7 +15,7 @@
         "elements": 10,
         "current_density": 10000.0,
         "average_cell_voltage": 0.5,
-        "channel_land_discretization": false
+        "channel_land_discretization": true
     },
     "cell": {
         "width": 0.1,
@@ -85,6 +85,151 @@
             "calc_gdl_diff_loss": true,
             "c_eps": 0.02,
             "delta_i": 1e-3
+        },
+        "two_phase_flow": {
+            "porosity_model": {
+                "name": "Cathode GDL",
+                "type": "CarbonPaper",
+                "porosity": 0.8,
+                "bruggemann_coefficient": 1.5,
+                "permeability": [
+                    1.0e-12,
+                    1.0e-12,
+                    1.0e-12
+                ],
+                "pore_radius": 1e-5,
+                "relative_permeability_exponent": 3.0,
+                "saturation_model": {
+                    "type": "leverett",
+                    "leverett": {
+                        "type": "leverett",
+                        "contact_angle": 80.0,
+                        "precalculate_pressure": false,
+                        "precalculate_gradient": false
+                    },
+                    "data_table": {
+                        "type": "data_table",
+                        "data_format": "file",
+                        "file_path": "C:\\Users\\lukas\\Desktop\\test.csv"
+                    },
+                    "psd": {
+                        "type": "psd",
+                        "r": [
+                            [
+                                14.20e-6,
+                                34.00e-6
+                            ],
+                            [
+                                14.20e-6,
+                                34.00e-6
+                            ]
+                        ],
+                        "F": [
+                            0.08,
+                            0.92
+                        ],
+                        "f": [
+                            [
+                                0.28,
+                                0.72
+                            ],
+                            [
+                                0.28,
+                                0.72
+                            ]
+                        ],
+                        "s": [
+                            [
+                                0.35,
+                                1.0
+                            ],
+                            [
+                                0.35,
+                                1.0
+                            ]
+                        ],
+                        "contact_angle": [
+                            80.0,
+                            120.0
+                        ]
+                    },
+                    "imbibition_drainage": {
+                        "type": "imbibition_drainage",
+                        "imbibition_model": {
+                            "type": "gostick_correlation",
+                            "maximum_water_saturation": 0.99,
+                            "residual_water_saturation": 0.1,
+                            "f": [
+                                0.25,
+                                0.75
+                            ],
+                            "m": [
+                                250,
+                                200
+                            ],
+                            "n": [
+                                0.4,
+                                0.5
+                            ],
+                            "P_C_b": [
+                                101500.0,
+                                107500.0
+                            ],
+                            "precalculate_pressure": true,
+                            "precalculate_gradient": true
+                        },
+                        "drainage_model": {
+                            "type": "gostick_correlation",
+                            "maximum_water_saturation": 0.99,
+                            "residual_water_saturation": 0.1,
+                            "f": [
+                                1.0
+                            ],
+                            "m": [
+                                150
+                            ],
+                            "n": [
+                                1.0
+                            ],
+                            "P_C_b": [
+                                105000.0
+                            ],
+                            "precalculate_pressure": true,
+                            "precalculate_gradient": true
+                        }
+                    },
+                    "gostick_correlation": {
+                        "type": "gostick_correlation",
+                        "maximum_saturation": 1.0,
+                        "residual_saturation": 0.0,
+                        "f": [
+                            0.25,
+                            0.75
+                        ],
+                        "m": [
+                            250,
+                            200
+                        ],
+                        "n": [
+                            0.3,
+                            0.5
+                        ],
+                        "P_C_b": [
+                            101500.0,
+                            108000.0
+                        ],
+                        "precalculate_pressure": true,
+                        "precalculate_gradient": true
+                    }
+                }
+            },
+            "evaporation_model": {
+            "name": "Evaporation Model",
+            "type": "HertzKnudsenSchrage",
+            "evaporation_coefficient": 0.37,
+            "condensation_coefficient": 5000
+            },
+            "gdl_channel_saturation":  0.01
         },
         "channel": {
             "name": "Cathode Channel",
@@ -211,6 +356,151 @@
             "calc_gdl_diff_loss": true,
             "c_eps": 0.02,
             "delta_i": 1e-3
+        },
+        "two_phase_flow": {
+            "porosity_model": {
+                "name": "Cathode GDL",
+                "type": "CarbonPaper",
+                "porosity": 0.8,
+                "bruggemann_coefficient": 1.5,
+                "permeability": [
+                    1.0e-12,
+                    1.0e-12,
+                    1.0e-12
+                ],
+                "pore_radius": 1e-5,
+                "relative_permeability_exponent": 3.0,
+                "saturation_model": {
+                    "type": "leverett",
+                    "leverett": {
+                        "type": "leverett",
+                        "contact_angle": 120.0,
+                        "precalculate_pressure": false,
+                        "precalculate_gradient": false
+                    },
+                    "data_table": {
+                        "type": "data_table",
+                        "data_format": "file",
+                        "file_path": "C:\\Users\\lukas\\Desktop\\test.csv"
+                    },
+                    "psd": {
+                        "type": "psd",
+                        "r": [
+                            [
+                                14.20e-6,
+                                34.00e-6
+                            ],
+                            [
+                                14.20e-6,
+                                34.00e-6
+                            ]
+                        ],
+                        "F": [
+                            0.08,
+                            0.92
+                        ],
+                        "f": [
+                            [
+                                0.28,
+                                0.72
+                            ],
+                            [
+                                0.28,
+                                0.72
+                            ]
+                        ],
+                        "s": [
+                            [
+                                0.35,
+                                1.0
+                            ],
+                            [
+                                0.35,
+                                1.0
+                            ]
+                        ],
+                        "contact_angle": [
+                            80.0,
+                            120.0
+                        ]
+                    },
+                    "imbibition_drainage": {
+                        "type": "imbibition_drainage",
+                        "imbibition_model": {
+                            "type": "gostick_correlation",
+                            "maximum_water_saturation": 0.99,
+                            "residual_water_saturation": 0.1,
+                            "f": [
+                                0.25,
+                                0.75
+                            ],
+                            "m": [
+                                250,
+                                200
+                            ],
+                            "n": [
+                                0.4,
+                                0.5
+                            ],
+                            "P_C_b": [
+                                101500.0,
+                                107500.0
+                            ],
+                            "precalculate_pressure": true,
+                            "precalculate_gradient": true
+                        },
+                        "drainage_model": {
+                            "type": "gostick_correlation",
+                            "maximum_water_saturation": 0.99,
+                            "residual_water_saturation": 0.1,
+                            "f": [
+                                1.0
+                            ],
+                            "m": [
+                                150
+                            ],
+                            "n": [
+                                1.0
+                            ],
+                            "P_C_b": [
+                                105000.0
+                            ],
+                            "precalculate_pressure": true,
+                            "precalculate_gradient": true
+                        }
+                    },
+                    "gostick_correlation": {
+                        "type": "gostick_correlation",
+                        "maximum_saturation": 1.0,
+                        "residual_saturation": 0.0,
+                        "f": [
+                            0.25,
+                            0.75
+                        ],
+                        "m": [
+                            250,
+                            200
+                        ],
+                        "n": [
+                            0.3,
+                            0.5
+                        ],
+                        "P_C_b": [
+                            101500.0,
+                            108000.0
+                        ],
+                        "precalculate_pressure": true,
+                        "precalculate_gradient": true
+                    }
+                }
+            },
+            "evaporation_model": {
+            "name": "Evaporation Model",
+            "type": "HertzKnudsenSchrage",
+            "evaporation_coefficient": 0.37,
+            "condensation_coefficient": 5000
+            },
+            "gdl_channel_saturation":  1e-6
         },
         "channel": {
             "name": "Anode Channel",
@@ -354,7 +644,7 @@
         "temp_amb": 293.15,
         "alpha_amb": 0.0,
         "flux_endplate": 0.0,
-        "value_endplate": 343.15,
+        "value_endplate": 303.15,
         "bc_endplate": "fixed",
         "cool_ch_bc": true,
         "cool_ch_numb": 20,

@@ -179,7 +179,7 @@ class TransportLayer(oo.OutputObject2D, ABC):
         for key in self.conductance:
             self.transport_properties.update(transport_properties)
             self.conductance[key][:] = self.calc_conductance(
-                transport_properties[key], effective=self.effective)
+                transport_properties[key])
 
 
 class TransportLayer2D(TransportLayer):
@@ -233,7 +233,6 @@ class TransportLayer3D(TransportLayer):
             effective=self.effective)
         self.conductance = {key: self.calc_conductance(value) for key, value
                             in transport_properties.items()}
-        print('test')
 
     def calc_geometric_factors(self, effective=True, *args, **kwargs):
         result = np.asarray([

@@ -72,7 +72,7 @@ class DiffusionTransport(ABC):
                 raise ValueError('for type GasMixtureDiffusionTransport the '
                                  'integer value "id_inert" must be specified')
             input_dict['volume_fraction'] = input_dict['porosity']
-            input_dict['effective'] = False
+            input_dict['effective'] = True
             species_names = fluid.species_names
             transport_layers = [
                 tl.TransportLayer.create(
@@ -246,6 +246,8 @@ class DarcyFlowDiffusionTransport(DiffusionTransport):
     def __init__(self, input_dict: dict,
                  transport_layers: list[tl.TransportLayer], *args, **kwargs):
         super().__init__(input_dict, transport_layers, *args, **kwargs)
+        # for lin_sys in self.linear_systems:
+        #     lin_sys.scaling_factor = 1e12
 
     def update(self, dirichlet_values: np.ndarray,
                neumann_values: np.ndarray,
@@ -259,12 +261,14 @@ class DarcyFlowDiffusionTransport(DiffusionTransport):
             # trans_layer.conductance['diffusion'][:, 0:5, :, 0:10] = 1e-16
 
         for i, lin_sys in enumerate(self.linear_systems):
-            boundary_values = mf.get_axis_values(
+            self.neumann_bc.values = mf.get_axis_values(
+                    neumann_values,
+                    axes=self.neumann_bc.axes,
+                    indices=self.neumann_bc.indices)
+            self.dirichlet_bc.values = mf.get_axis_values(
                     dirichlet_values,
                     axes=self.dirichlet_bc.axes,
                     indices=self.dirichlet_bc.indices)
-            self.neumann_bc.values = neumann_values
-            self.dirichlet_bc.values = boundary_values
             volumetric_source = ls.SourceData(values=source_values)
             rhs_input = ls.RHSInput(neumann_bc=self.neumann_bc,
                                     dirichlet_bc=self.dirichlet_bc,
@@ -367,18 +371,20 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
             trans_layer.update(
                 {self.transport_type:
                     [self.gas_diff_coeff.d_eff[self.ids_active[i]],
-                     self.gas_diff_coeff.d_eff[self.ids_active[i]] * 0.0,
-                     self.gas_diff_coeff.d_eff[self.ids_active[i]] * 0.0]},
+                     self.gas_diff_coeff.d_eff[self.ids_active[i]] * 1.0,
+                     self.gas_diff_coeff.d_eff[self.ids_active[i]] * 1.0]},
                 volume_fraction=volume_fraction)
             # trans_layer.conductance['diffusion'][:, 0:5, :, 0:10] = 1e-16
 
         for i, lin_sys in enumerate(self.linear_systems):
-            boundary_concentration = mf.get_axis_values(
+            self.neumann_bc.values = mf.get_axis_values(
+                    boundary_flux[i],
+                    axes=self.neumann_bc.axes,
+                    indices=self.neumann_bc.indices)
+            self.dirichlet_bc.values = mf.get_axis_values(
                     boundary_composition[i],
                     axes=self.dirichlet_bc.axes,
                     indices=self.dirichlet_bc.indices)
-            self.neumann_bc.values = boundary_flux[i]
-            self.dirichlet_bc.values = boundary_concentration
             if explicit_source is not None:
                 explicit_source_data = ls.SourceData(values=explicit_source[i])
             else:
@@ -401,8 +407,8 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         self.flux_scaling_factors, self.diff_coeff_by_length = (
             self.calc_flux_scaling_factors(
                 concentrations, boundary_composition, boundary_flux))
-        # concentrations = [np.where(conc < 0.0, 0.0, conc) for conc in
-        #                   concentrations]
+        concentrations = [np.where(conc < 0.0, 0.0, conc) for conc in
+                          concentrations]
         concentrations = self.calculate_inert_concentration(concentrations)
         # concentrations = np.asarray([np.where(conc < 0.0, 0.0, conc)
         #                              for conc in concentrations])
@@ -411,8 +417,8 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
                                           (0, 1, 2, 3), (0, 2, 1, 3))
         conductances = [lin_sys.conductance for lin_sys in self.linear_systems]
         # if isinstance(self.fluid, (fl.GasMixture, fl.CanteraGasMixture)):
-        #     self.fluid.update(temperature, pressure,
-        #                       mole_composition=self.solution_array)
+        self.fluid.update(temperature, pressure,
+                          mole_composition=self.solution_array)
         # elif isinstance(self.fluid, (fl.TwoPhaseMixture,
         #                 fl.CanteraTwoPhaseMixture)):
         #     self.fluid.update(temperature, pressure,
@@ -421,42 +427,45 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         self.initialize = False
 
     def calc_boundary_flux(self, boundary_type: str):
-
         # Calculate boundary flux: defined positive if going into domain,
         # negative if going out of domain
         axes, indices_boundary, indices_adjacent = self.get_boundary_indices(
             boundary_type)
-        boundary_values = (self.get_values(self.solution_array, axes,
-                                           indices_boundary))
-        adjacent_values = (self.get_values(self.solution_array, axes,
-                                           indices_adjacent))
+        boundary_flux = self.calc_flux(axes, indices_boundary, indices_adjacent)
+        return boundary_flux
+
+    def calc_flux(self, axes, indices, indices_neighbour):
+        # Calculate flux between cell located at indices and neighbouring
+        # cell located at indices_neighbour
+        values = (self.get_values(self.solution_array, axes, indices))
+        values_neighbour = (self.get_values(self.solution_array, axes,
+                                            indices_neighbour))
         # Be careful to use the shifted node d_volume from one of the
         # TransportLayer attributes instead of the original discrete volumes
         # from the Discretization attributes
         trans_layer = self.transport_layers[0]
-        dx = self.get_values(trans_layer.dx[axes[0]], axes, indices_adjacent)
+        dx = self.get_values(trans_layer.dx[axes[0]], axes, indices_neighbour)
         # d_volume = self.get_values(
         #     trans_layer.d_volume, axes, indices_boundary)
         # d_area = self.get_values(
         #     self.discretization.d_area, axes, indices_boundary)
         # d_area = d_area[axes[0]]
         # area_sum = np.sum(d_area)
-        diff_coeffs_boundary = self.get_diff_coeffs(axes, indices_boundary)
+        diff_coeffs_boundary = self.get_diff_coeffs(axes, indices)
         # diff_coeffs_adjacent = self.get_diff_coeffs(axes, indices_adjacent)
-        diff_coeffs = np.stack([self.get_diff_coeffs(axes, indices_boundary),
-                                self.get_diff_coeffs(axes, indices_adjacent)],
+        diff_coeffs = np.stack([self.get_diff_coeffs(axes, indices),
+                                self.get_diff_coeffs(axes, indices_neighbour)],
                                axis=diff_coeffs_boundary.ndim)
         diff_coeffs = np.average(diff_coeffs, axis=-1)
 
         diff_coeff_by_length = diff_coeffs / dx
-        diff_conc = boundary_values - adjacent_values
+        diff_conc = values - values_neighbour
         # diff_conc_avg = np.average(np.average(diff_conc, axis=-1),
         #                            axis=-1)
         # diff_coeff_avg = np.average(np.average(diff_coeffs, axis=-1),
         #                             axis=-1)
-        boundary_flux = - diff_coeff_by_length * (boundary_values -
-                                                  adjacent_values)
-        return boundary_flux
+        flux = - diff_coeff_by_length * (values - values_neighbour)
+        return flux
 
     def get_diff_coeffs(self, axes, indices):
         diff_coeffs = self.get_values(self.gas_diff_coeff.d_eff, axes, indices)

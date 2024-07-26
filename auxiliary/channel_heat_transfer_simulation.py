@@ -127,8 +127,8 @@ plt.show()
 print('Pumping Power:')
 for i, channel in enumerate(channels):
     print(channel.fluid.name + ': ',
-          np.average(channel.vol_flow) * (channel.pressure[channel.id_in]
-                                          - channel.pressure[channel.id_out]))
+          np.average(channel.volume_flow) * (channel.pressure[channel.id_in]
+                                             - channel.pressure[channel.id_out]))
 print('Mass Flows:')
 for i, channel in enumerate(channels):
     print(channel.fluid.name + ': ', np.average(channel.mass_flow_total))
