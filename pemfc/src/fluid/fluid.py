@@ -748,6 +748,7 @@ class TwoPhaseMixture(DiscreteFluid):
             species_dict=gas_species_dict, mole_fractions=mole_fractions,
             temperature=self._temperature, pressure=self._pressure,
             print_data=False)
+        self.gas_constant = self.gas.gas_constant
         ids_pc = [self.species.names.index(name) for name in
                   phase_change_species_names]
         if len(ids_pc) > 1:
@@ -977,34 +978,34 @@ class TwoPhaseMixture(DiscreteFluid):
             * self.liquid.specific_heat \
             + (1.0 - self.liquid_mass_fraction) * self.gas.specific_heat
 
-    def calc_concentration(self):
-        """
-        Calculates the gas phase molar concentrations.
-        :return: gas phase concentration
-        (n_species x n_nodes)
-        """
-        r_t = self.gas.gas_constant * self._temperature
-        total_gas_conc = self.gas.total_concentration
-        conc = self._mole_fraction * total_gas_conc
-        # all_conc = np.copy(conc)
-        sat_conc = self.saturation_pressure / r_t
-        dry_mole_fraction = np.copy(self.mole_fraction)
-        dry_mole_fraction[self.id_pc] = 0.0
-        dry_mole_fraction = self.calc_fraction(dry_mole_fraction)
-        for i in range(self.n_species):
-            if i == self.id_pc:
-                conc[self.id_pc] = np.where(conc[self.id_pc] > sat_conc,
-                                            sat_conc, conc[self.id_pc])
-            else:
-                try:
-                    conc[i] = \
-                        np.where(conc[self.id_pc] > sat_conc,
-                                 (total_gas_conc - sat_conc)
-                                 * dry_mole_fraction[i],
-                                 conc[i])
-                except FloatingPointError:
-                    raise FloatingPointError
-        return np.maximum(conc, 0.0)
+    # def calc_concentration(self):
+    #     """
+    #     Calculates the gas phase molar concentrations.
+    #     :return: gas phase concentration
+    #     (n_species x n_nodes)
+    #     """
+    #     r_t = self.gas.gas_constant * self._temperature
+    #     total_gas_conc = self.gas.total_concentration
+    #     conc = self._mole_fraction * total_gas_conc
+    #     # all_conc = np.copy(conc)
+    #     sat_conc = self.saturation_pressure / r_t
+    #     dry_mole_fraction = np.copy(self.mole_fraction)
+    #     dry_mole_fraction[self.id_pc] = 0.0
+    #     dry_mole_fraction = self.calc_fraction(dry_mole_fraction)
+    #     for i in range(self.n_species):
+    #         if i == self.id_pc:
+    #             conc[self.id_pc] = np.where(conc[self.id_pc] > sat_conc,
+    #                                         sat_conc, conc[self.id_pc])
+    #         else:
+    #             try:
+    #                 conc[i] = \
+    #                     np.where(conc[self.id_pc] > sat_conc,
+    #                              (total_gas_conc - sat_conc)
+    #                              * dry_mole_fraction[i],
+    #                              conc[i])
+    #             except FloatingPointError:
+    #                 raise FloatingPointError
+    #     return np.maximum(conc, 0.0)
 
     # def calc_concentration(self):
     #     """

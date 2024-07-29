@@ -324,6 +324,23 @@ def get_axis_values(array, axes: tuple, indices: tuple):
     return array
 
 
+def set_axis_values(array: np.ndarray, values: np.ndarray,
+                    axes: tuple, indices: tuple):
+    if isinstance(axes, int):
+        axes = (axes,)
+    if isinstance(indices, int):
+        indices = (indices,)
+    shape = array.shape
+    ids_flat = np.arange(int(np.prod(shape)))
+    indices = get_axis_values(np.reshape(ids_flat, shape, order='F'), axes,
+                              indices).ravel(order='F')
+    array = array.ravel(order='F')
+    values = values.ravel(order='F')
+    np.put(array, indices, values)
+    result = array.reshape(shape, order='F')
+    return result
+
+
 def spai(matrix: np.ndarray, m: int):
     """Perform m step of the SPAI iteration."""
     from scipy.sparse import identity

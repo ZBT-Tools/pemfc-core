@@ -212,7 +212,9 @@ class DiffusionTransport(ABC):
             neumann_bc_flux, axes, indices)
 
         delta_conc = boundary_concentration - flux_boundary_concentrations
-        flux_scaling_factors = (delta_conc / boundary_concentration)
+        flux_scaling_factors = np.divide(delta_conc, boundary_concentration,
+                                         out=np.zeros(delta_conc.shape),
+                                         where=boundary_concentration != 0)
 
         diff_coeff_by_length = np.abs(
             np.divide(flux_boundary_flux, delta_conc,
@@ -409,13 +411,29 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
                 concentrations, boundary_composition, boundary_flux))
         concentrations = [np.where(conc < 0.0, 0.0, conc) for conc in
                           concentrations]
-        concentrations = self.calculate_inert_concentration(concentrations)
-        # concentrations = np.asarray([np.where(conc < 0.0, 0.0, conc)
-        #                              for conc in concentrations])
+        # Calculate inert concentrations
+        if np.sum(boundary_composition[self.id_inert]) > 0.0:
+            inert_concentration = self.calculate_inert_concentration(
+                concentrations)
+            # Set inert boundary values
+            inert_boundary_concentration = mf.get_axis_values(
+                dirichlet_molar_composition[self.id_inert],
+                self.dirichlet_bc.axes,
+                self.dirichlet_bc.indices)
+            inert_concentration = (
+                mf.set_axis_values(inert_concentration,
+                                   inert_boundary_concentration,
+                                   self.dirichlet_bc.axes,
+                                   self.dirichlet_bc.indices))
+        else:
+            inert_concentration = np.zeros(concentrations[0].shape)
+        concentrations.insert(self.id_inert, inert_concentration)
+        concentrations = np.asarray(concentrations)
+        concentrations[concentrations < 1e-6] = 1e-6
         self.solution_array = concentrations
         show_concentrations = np.moveaxis(concentrations,
                                           (0, 1, 2, 3), (0, 2, 1, 3))
-        conductances = [lin_sys.conductance for lin_sys in self.linear_systems]
+        # conductances = [lin_sys.conductance for lin_sys in self.linear_systems]
         # if isinstance(self.fluid, (fl.GasMixture, fl.CanteraGasMixture)):
         self.fluid.update(temperature, pressure,
                           mole_composition=self.solution_array)
@@ -471,8 +489,13 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         diff_coeffs = self.get_values(self.gas_diff_coeff.d_eff, axes, indices)
         trans_layer = self.transport_layers[0]
         if trans_layer.effective:
-            diff_coeffs *= (trans_layer.volume_fraction
-                            ** trans_layer.bruggeman_exponent)
+            if (isinstance(trans_layer.volume_fraction, np.ndarray) and
+                    trans_layer.volume_fraction.shape == self.base_shape):
+                volume_fraction = self.get_values(trans_layer.volume_fraction,
+                                                  axes, indices)
+            else:
+                volume_fraction = trans_layer.volume_fraction
+            diff_coeffs *= volume_fraction ** trans_layer.bruggeman_exponent
         return diff_coeffs
 
     def calculate_inert_concentration(self, concentrations: list) -> np.ndarray:
@@ -487,5 +510,5 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         total_gas_concentration = gf.rescale(total_gas_concentration,
                                              active_concentrations.shape)
         inert_concentration = total_gas_concentration - active_concentrations
-        concentrations.insert(self.id_inert, inert_concentration)
-        return np.asarray(concentrations)
+        # concentrations.insert(self.id_inert, inert_concentration)
+        return inert_concentration

@@ -113,7 +113,7 @@ class LinearSystem(ABC):
         # matrix_size = matrix.shape[0]
         diag_vector = np.diagonal(matrix).copy()
         new_diag_vector, source_vector = LinearSystem.add_explicit_source(
-            diag_vector, -coefficients.flatten(order='F'),
+            diag_vector, -coefficients.ravel(order='F'),
             index_array=index_array, replace=replace)
         np.fill_diagonal(matrix, new_diag_vector)
         return matrix, source_vector
@@ -282,9 +282,9 @@ class BasicLinearSystem(LinearSystem, ABC):
     def set_dirichlet_boundary_conditions(
             self, values: (float, np.ndarray), axes: tuple, indices: tuple):
         if isinstance(values, np.ndarray):
-            values = values.flatten(order='F')
+            values = values.ravel(order='F')
         index_array = mtx_func.get_axis_values(self.index_array, axes, indices)
-        index_vector = index_array.flatten(order='F')
+        index_vector = index_array.ravel(order='F')
         self.set_implicit_fixed(self.mtx, index_vector)
         self.add_explicit_source(
             self.rhs, -values, index_array=index_vector, replace=True)
@@ -365,11 +365,11 @@ class BasicLinearSystem(LinearSystem, ABC):
             if isinstance(rhs_input.explicit_sources, SourceData):
                 sources = rhs_input.explicit_sources.values
                 source_vector = sources.ravel(order='F')
-                if rhs_input.dirichlet_bc is not None:
-                    index_vector_remaining = self.get_remaining_indices(
-                        rhs_input.dirichlet_bc.axes,
-                        rhs_input.dirichlet_bc.indices)
-                    source_vector[index_vector_remaining] = 0.0
+                # if rhs_input.dirichlet_bc is not None:
+                #     index_vector_remaining = self.get_remaining_indices(
+                #         rhs_input.dirichlet_bc.axes,
+                #         rhs_input.dirichlet_bc.indices)
+                #     source_vector[index_vector_remaining] = 0.0
                 self.add_source_data(
                     source_vector,
                     rhs_input.explicit_sources.indices,
@@ -545,7 +545,7 @@ class StackedLayerLinearSystem(LinearSystem):
     def set_neumann_boundary_conditions(self, flux_value, layer_id):
         source = flux_value * self.layers[layer_id].discretization.d_area
         self.add_explicit_source(
-            self.rhs_const, source.flatten(order='F'),
+            self.rhs_const, source.ravel(order='F'),
             self.index_array, layer_id)
 
     def set_dirichlet_boundary_conditions(self, fixed_value, layer_id):
@@ -660,7 +660,7 @@ class CellLinearSystem(StackedLayerLinearSystem):
                 modify_values=False,
                 exponents=(1.0, ))
             k_amb = self.cell.calc_ambient_conductance(alpha_amb, th_layer_amb)
-            k_amb_vector = k_amb.flatten(order='F')
+            k_amb_vector = k_amb.ravel(order='F')
 
             self.add_implicit_source(
                 self.mtx_const, -k_amb_vector, self.index_array)
@@ -948,13 +948,12 @@ class TemperatureSystem(StackLinearSystem):
                     source *= self.n_cell_cool_channels / n_gas_channels[j]
                     source *= factors[j]
 
-                    # if cell.channel_land_discretization:
-                    #     source = np.asarray(
-                    #         [np.zeros(source.shape), source]).transpose()
+                    if self.cells[i].channel_land_discretization:
+                        source = np.asarray([source, source]).transpose()
                     source /= cell_sys.conductance[0].shape[-1]
 
                     matrix, source_vec = self.add_implicit_source(
-                        cell_sys.mtx_dyn, source.flatten(order='F'),
+                        cell_sys.mtx_dyn, source.ravel(order='F'),
                         cell_sys.index_array, layer_id=layer_ids[j])
                     source_vec_3[:] += source_vec
                 source_vectors[i][:] += source_vec_3
@@ -987,7 +986,8 @@ class TemperatureSystem(StackLinearSystem):
                 # # k_test[:] = 0.5  # channel.k_coeff[0]
                 # source = k_test * temp_test
 
-                source += getattr(channel, 'condensation_heat', 0.0)
+                # evap_heat = getattr(channel, 'evaporation_heat', 0.0)
+                # source = evap_heat
 
                 # Heat transport to reactant gas only in the part of layer at
                 # channel (index 1 of z-direction)
@@ -998,7 +998,7 @@ class TemperatureSystem(StackLinearSystem):
 
                 cell_sys.rhs_dyn[:], _ = (
                     self.add_explicit_source(
-                        cell_sys.rhs_dyn, source.flatten(order='F'),
+                        cell_sys.rhs_dyn, source.ravel(order='F'),
                         index_array=cell_sys.index_array, layer_id=idx))
 
                 # Anode bpp-gde
@@ -1014,7 +1014,8 @@ class TemperatureSystem(StackLinearSystem):
                 # # k_test[:] += np.linspace(0, 0.1, k_test.shape[0])
                 # source = k_test * temp_test
 
-                source += getattr(channel, 'condensation_heat', 0.0)  # * 0.0
+                # evap_heat = getattr(channel, 'evaporation_heat', 0.0)  # * 0.0
+                # source -= evap_heat
 
                 if self.cells[i].channel_land_discretization:
                     source = np.asarray(
@@ -1023,7 +1024,37 @@ class TemperatureSystem(StackLinearSystem):
 
                 cell_sys.rhs_dyn[:], _ = (
                     self.add_explicit_source(
-                        cell_sys.rhs_dyn, source.flatten(order='F'),
+                        cell_sys.rhs_dyn, source.ravel(order='F'),
+                        index_array=cell_sys.index_array, layer_id=idx))
+
+            if self.cells[i].cathode.calc_two_phase_flow:
+                # Add evaporation heat in cathode gas diffusion layer,
+                # split evenly towards bpp-gde and gde-mem interfaces
+                source = - self.cells[i].cathode.evaporation_heat * 0.5
+                idx = self.cells[i].interface_id['cathode_bpp_gde']
+                cell_sys.rhs_dyn[:], _ = (
+                    self.add_explicit_source(
+                        cell_sys.rhs_dyn, source.ravel(order='F'),
+                        index_array=cell_sys.index_array, layer_id=idx))
+                idx = self.cells[i].interface_id['cathode_gde_mem']
+                cell_sys.rhs_dyn[:], _ = (
+                    self.add_explicit_source(
+                        cell_sys.rhs_dyn, source.ravel(order='F'),
+                        index_array=cell_sys.index_array, layer_id=idx))
+
+            if self.cells[i].anode.calc_two_phase_flow:
+                # Add evaporation heat in anode gas diffusion layer,
+                # split evenly towards bpp-gde and gde-mem interfaces
+                source = - self.cells[i].anode.evaporation_heat * 0.5
+                idx = self.cells[i].interface_id['anode_gde_bpp']
+                cell_sys.rhs_dyn[:], _ = (
+                    self.add_explicit_source(
+                        cell_sys.rhs_dyn, source.ravel(order='F'),
+                        index_array=cell_sys.index_array, layer_id=idx))
+                idx = self.cells[i].interface_id['anode_mem_gde']
+                cell_sys.rhs_dyn[:], _ = (
+                    self.add_explicit_source(
+                        cell_sys.rhs_dyn, source.ravel(order='F'),
                         index_array=cell_sys.index_array, layer_id=idx))
 
             if electrochemical_heat:
@@ -1060,7 +1091,7 @@ class TemperatureSystem(StackLinearSystem):
                 # source *= 1.0
                 cell_sys.rhs_dyn[:], _ = (
                     self.add_explicit_source(
-                        cell_sys.rhs_dyn, source.flatten(order='F'),
+                        cell_sys.rhs_dyn, source.ravel(order='F'),
                         index_array=cell_sys.index_array, layer_id=idx))
 
                 # Anode gde-mem source
@@ -1076,7 +1107,7 @@ class TemperatureSystem(StackLinearSystem):
                 source += reaction_heat
                 source *= 1.0
                 cell_sys.rhs_dyn[:], _ = self.add_explicit_source(
-                    cell_sys.rhs_dyn, source.flatten(order='F'),
+                    cell_sys.rhs_dyn, source.ravel(order='F'),
                     index_array=cell_sys.index_array, layer_id=idx)
 
             # Coolant source coefficients
@@ -1110,14 +1141,13 @@ class TemperatureSystem(StackLinearSystem):
                 for j, cool_chl in enumerate(cell_cool_channels):
                     source = cool_chl.k_coeff * cool_chl.temp_ele
                     source *= self.n_cell_cool_channels / n_gas_channels[j]
-                    # if cell.channel_land_discretization:
-                    #     source = np.asarray(
-                    #         [np.zeros(source.shape), source]).transpose()
+                    if self.cells[i].channel_land_discretization:
+                        source = np.asarray([source, source]).transpose()
                     source /= cell_sys.conductance[0].shape[-1]
                     source *= factors[j]
                     cell_sys.rhs_dyn[:], _ = (
                         self.add_explicit_source(
-                            cell_sys.rhs_dyn, source.flatten(order='F'),
+                            cell_sys.rhs_dyn, source.ravel(order='F'),
                             index_array=cell_sys.index_array,
                             layer_id=layer_ids[j]))
 
@@ -1198,7 +1228,7 @@ class ElectricalSystem(StackLinearSystem):
         index = 0
         cell = self.cells[index]
         cell_sys = self.cell_systems[index]
-        cell_rhs = np.zeros(cell.voltage_layer.flatten().shape)
+        cell_rhs = np.zeros(cell.voltage_layer.ravel().shape)
         if self.current_control:
             bc_current = self.current_density_target * cell.d_area
             if np.sum(cell_sys.solution_array[0]) == 0.0:
@@ -1214,12 +1244,12 @@ class ElectricalSystem(StackLinearSystem):
         else:
             rhs_bc_values = self.v_loss_tar
         self.add_explicit_source(
-            cell_rhs, rhs_bc_values.flatten(order='F'),
+            cell_rhs, rhs_bc_values.ravel(order='F'),
             index_array=cell_sys.index_array, layer_id=0)
         cell_rhs_list.append(cell_rhs)
         for i in range(1, len(self.cells)):
             cell_rhs_list.append(
-                np.zeros(cell_sys.solution_array.flatten().shape))
+                np.zeros(cell_sys.solution_array.ravel().shape))
         self.rhs[:] = np.hstack(cell_rhs_list)
 
     def update_matrix(self, electrochemical_conductance, *args, **kwargs):

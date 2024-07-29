@@ -448,6 +448,13 @@ class Output:
                 'Cells':
                     {'value': [list(range(len(cells)))], 'units': '-'}}
         data = get_oo_collection_data(cells, data_dict=data, xkey=xlabel)
+
+        # Save half cell values
+        cathodes = [cell.cathode for cell in fc_stack.cells]
+        data = get_oo_collection_data(cathodes, data_dict=data, xkey=xlabel)
+        anodes = [cell.anode for cell in fc_stack.cells]
+        data = get_oo_collection_data(anodes, data_dict=data, xkey=xlabel)
+
         # Save channel values
         cathode_channels = [cell.cathode.channel for cell in fc_stack.cells]
         data = get_oo_collection_data(cathode_channels, data_dict=data,
@@ -468,6 +475,7 @@ class Output:
         membranes = [cell.membrane for cell in fc_stack.cells]
         data = get_oo_collection_data(membranes, data_dict=data,
                                       xkey=xlabel)
+
         # Save fuel circuit values
         if fc_stack.n_cells > 1:
             fuel_circuits = fc_stack.fuel_circuits
@@ -566,7 +574,13 @@ class Output:
         # anodes = [cell.anode for cell in fc_stack.cells]
         # save_oo_collection(cathodes, xvalues, xlabel)
         data = {'channel_location':
-                    {'value': xvalues, 'units': 'm', 'label': xlabel}}
+                {'value': xvalues, 'units': 'm', 'label': xlabel}}
+
+        # Save half cell values
+        cathodes = [cell.cathode for cell in fc_stack.cells]
+        save_oo_collection(cathodes, xvalues, xlabel)
+        anodes = [cell.anode for cell in fc_stack.cells]
+        save_oo_collection(anodes, xvalues, xlabel)
 
         # Save channel values
         cathode_channels = [cell.cathode.channel for cell in fc_stack.cells]

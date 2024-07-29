@@ -1,23 +1,37 @@
 import numpy as np
 
 
-def interpolate_1d(array, add_edge_points=False):
+def interpolate_1d(array, add_edge_points=False, weights=None):
     """
     Linear interpolation in between the given array data. If
     add_edge_points is True, the neighbouring value from the settings array is
     used at the edges and the returned array will larger than the settings array.
     """
     array = np.asarray(array)
-    interpolated = (array[:-1] + array[1:]) * .5
+    if weights is not None:
+        weights = np.asarray(weights)
+        if len(weights) != 2 or weights.ndim != array.ndim + 1:
+            raise ValueError('weights must have one dimension more than array '
+                             'and the highest dimension must equal 2')
+        if array.ndim > 1:
+            raise ValueError('only 1d array supported for interpolation with '
+                             'weights provided')
+        interpolated = (array[:-1] * weights[0] + array[1:] * weights[1])
+
+    else:
+        interpolated = (array[:-1] + array[1:]) * 0.5
+
+        weights = np.ones((2, len(array) - 1)) * 0.5
+
     if add_edge_points:
-        first = np.asarray([array[0]])
-        last = np.asarray([array[-1]])
+        first = np.asarray([array[0] * weights[0, 0]])
+        last = np.asarray([array[-1] * weights[1, -1]])
         return np.concatenate((first, interpolated, last), axis=0)
     else:
         return interpolated
 
 
-def interpolate_along_axis(array, axis, add_edge_points=False):
+def interpolate_along_axis(array, axis, add_edge_points=False, weights=None):
     """
     Linear interpolation in between the given array data along the given
     axis.
@@ -26,9 +40,10 @@ def interpolate_along_axis(array, axis, add_edge_points=False):
     array.
     """
     if axis == 0:
-        return interpolate_1d(array, add_edge_points)
+        return interpolate_1d(array, add_edge_points, weights=weights)
     else:
-        a = interpolate_1d(np.moveaxis(array, axis, 0), add_edge_points)
+        a = interpolate_1d(np.moveaxis(array, axis, 0), add_edge_points,
+                           weights=weights)
         return np.moveaxis(a, 0, axis)
 
 

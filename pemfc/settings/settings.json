@@ -1,19 +1,19 @@
 {
     "stack": {
         "cell_number": 1,
-        "cool_flow": false,
+        "cool_flow": true,
         "calc_temperature": true,
         "calc_current_density": true
     },
     "simulation": {
-        "maximum_iteration": 21,
+        "maximum_iteration": 100,
         "minimum_iteration": 10,
-        "convergence_criteria": 1e-09,
-        "underrelaxation_factor": 0.7,
+        "convergence_criteria": 1e-07,
+        "underrelaxation_factor": 0.9,
         "current_control": true,
         "operation_control": "Current",
         "elements": 10,
-        "current_density": 10000.0,
+        "current_density": 30000.0,
         "average_cell_voltage": 0.5,
         "channel_land_discretization": true
     },
@@ -63,8 +63,8 @@
             "porosity":
                     0.8,
             "electrical_conductivity": [
-                5000.0,
-                5000.0
+                50000.0,
+                50000.0
             ],
             "thermal_conductivity": [
                 1.0,
@@ -100,10 +100,10 @@
                 "pore_radius": 1e-5,
                 "relative_permeability_exponent": 3.0,
                 "saturation_model": {
-                    "type": "leverett",
+                    "type": "imbibition_drainage",
                     "leverett": {
                         "type": "leverett",
-                        "contact_angle": 80.0,
+                        "contact_angle": 70.0,
                         "precalculate_pressure": false,
                         "precalculate_gradient": false
                     },
@@ -156,46 +156,20 @@
                     "imbibition_drainage": {
                         "type": "imbibition_drainage",
                         "imbibition_model": {
-                            "type": "gostick_correlation",
-                            "maximum_water_saturation": 0.99,
-                            "residual_water_saturation": 0.1,
-                            "f": [
-                                0.25,
-                                0.75
-                            ],
-                            "m": [
-                                250,
-                                200
-                            ],
-                            "n": [
-                                0.4,
-                                0.5
-                            ],
-                            "P_C_b": [
-                                101500.0,
-                                107500.0
-                            ],
-                            "precalculate_pressure": true,
-                            "precalculate_gradient": true
+                            "type": "leverett",
+                            "leverett": {
+                                "contact_angle": 120.0,
+                                "precalculate_pressure": false,
+                                "precalculate_gradient": false
+                            }
                         },
                         "drainage_model": {
-                            "type": "gostick_correlation",
-                            "maximum_water_saturation": 0.99,
-                            "residual_water_saturation": 0.1,
-                            "f": [
-                                1.0
-                            ],
-                            "m": [
-                                150
-                            ],
-                            "n": [
-                                1.0
-                            ],
-                            "P_C_b": [
-                                105000.0
-                            ],
-                            "precalculate_pressure": true,
-                            "precalculate_gradient": true
+                            "type": "leverett",
+                            "leverett": {
+                                "contact_angle": 80.0,
+                                "precalculate_pressure": false,
+                                "precalculate_gradient": false
+                            }
                         }
                     },
                     "gostick_correlation": {
@@ -249,7 +223,7 @@
                         "molar_fraction": 0.0
                     }
                 },
-                "humidity": 0.5
+                "humidity": 0.0
             },
             "cross_sectional_shape": "rectangular",
             "base_width": 0.0008,
@@ -334,8 +308,8 @@
             "porosity":
                     0.8,
             "electrical_conductivity": [
-                5000.0,
-                5000.0
+                50000.0,
+                50000.0
             ],
             "thermal_conductivity": [
                 1.0,
@@ -644,8 +618,8 @@
         "temp_amb": 293.15,
         "alpha_amb": 0.0,
         "flux_endplate": 0.0,
-        "value_endplate": 303.15,
-        "bc_endplate": "fixed",
+        "value_endplate": 343.15,
+        "bc_endplate": "gradient",
         "cool_ch_bc": true,
         "cool_ch_numb": 20,
         "cool_temp_diff": 10.0,

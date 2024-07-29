@@ -68,14 +68,17 @@ class TwoPhaseMixtureDiffusionTransport:
         self.evaporation_rate = np.zeros(self.transport.base_shape)
         self.implicit_condensation_coeff = np.zeros(
             self.transport.base_shape)
+        self.evaporation_heat = np.zeros(self.transport.base_shape)
 
         self.specific_liquid_surface_area = np.zeros(self.transport.base_shape)
-        self.gas_volume_fraction = np.zeros(self.transport.base_shape)
+        self.gas_volume_fraction = (
+                np.ones(self.transport.base_shape) *
+                self.transport.transport_layers[0].initial_volume_fraction)
         # Inner looping numerical settings
         self.error = np.inf
-        self.max_iterations = 10
+        self.max_iterations = 1
         self.min_iterations = 1
-        self.urf = 0.5
+        self.urf = 0.9
         self.error_tolerance = 1e-5
 
     def update(self, temperature: np.ndarray,
@@ -110,7 +113,7 @@ class TwoPhaseMixtureDiffusionTransport:
         humidity = self.transport.rescale_input(self.fluid.humidity[0, :, -1])
         # humidity[humidity < 0.5] = 0.5
         # humidity[humidity > 1.2] = 1.2
-        show_humidity = np.moveaxis(humidity, (0, 1, 2), (1, 0, 2))
+        # show_humidity = np.moveaxis(humidity, (0, 1, 2), (1, 0, 2))
         capillary_pressure_boundary = \
             self.saturation_model.calc_capillary_pressure(
                 liquid_saturation_value, surface_tension=sigma_liquid,
@@ -129,14 +132,15 @@ class TwoPhaseMixtureDiffusionTransport:
         iteration = 0
 
         # Setup variable containers for previous iteration
-        saturation_old = np.copy(self.saturation)
-        capillary_pressure_old = np.copy(self.capillary_pressure)
-        capillary_pressure = np.copy(self.capillary_pressure)
-        vol_net_evap_rate = np.zeros(self.net_evaporation_rate.shape)
+        # saturation_old = np.copy(self.saturation)
         saturation = np.copy(self.saturation)
-        vol_cond_rate = np.zeros(self.condensation_rate.shape)
-        vol_evap_rate = np.zeros(self.evaporation_rate.shape)
-        vol_cond_coeff = np.zeros(self.implicit_condensation_coeff.shape)
+        # capillary_pressure_old = np.copy(self.capillary_pressure)
+        capillary_pressure = np.copy(self.capillary_pressure)
+
+        vol_net_evap_rate = np.copy(self.net_evaporation_rate)
+        vol_evap_rate = np.copy(self.evaporation_rate)
+        vol_cond_rate = np.copy(self.condensation_rate)
+        vol_cond_coeff = np.copy(self.implicit_condensation_coeff)
 
         specific_area = np.zeros(self.specific_liquid_surface_area.shape)
         while (all((self.error > self.error_tolerance,
@@ -153,20 +157,46 @@ class TwoPhaseMixtureDiffusionTransport:
             specific_area = (
                 self.porosity_model.calc_specific_interfacial_area(saturation)
                 * 1.0)
+            specific_area[specific_area > 5000.0] = 5000.0
             # specific_area = 1000.0
             # evaporation_rate = evap_model.calc_evaporation_rate(
             #     temperature=t, pressure=p, capillary_pressure=p_cap)
-            net_evap_rate, evap_rate, cond_rate, cond_coeffs = (
+            specific_evap_arrays = (
                 self.evaporation_model.calc_evaporation_rate(
                     saturation=saturation, temperature=temperature,
                     pressure=gas_pressure,
                     capillary_pressure=None,
                     porosity=self.porosity_model.porosity))
-            # specific_area = 1.0
-            vol_net_evap_rate = specific_area * net_evap_rate
-            vol_evap_rate = specific_area * evap_rate
-            vol_cond_rate = specific_area * cond_rate
-            vol_cond_coeff = specific_area * cond_coeffs
+            evap_test_factor = 1.0
+
+            vol_evap_arrays = [
+                item * specific_area * evap_test_factor
+                for item in specific_evap_arrays]
+
+            # Underrelaxation of volumetric evaporation rates
+            vol_evap_old_arrays = [
+                np.copy(vol_net_evap_rate),
+                np.copy(vol_evap_rate),
+                np.copy(vol_cond_rate),
+                np.copy(vol_cond_coeff)]
+            vol_evap_arrays = [
+                (1.0 - self.urf) * vol_evap_arrays[i]
+                + self.urf * vol_evap_old_arrays[i]
+                for i in range(len(vol_evap_arrays))]
+
+            vol_net_evap_rate, vol_evap_rate, vol_cond_rate, vol_cond_coeff = \
+                vol_evap_arrays
+
+            # Limit maximum evaporation rate
+            max_rate = 10000.0
+            vol_net_evap_rate_unlimited = np.copy(vol_net_evap_rate)
+            vol_net_evap_rate[vol_net_evap_rate > max_rate] = max_rate
+            vol_net_evap_rate[vol_net_evap_rate < -max_rate] = -max_rate
+            limiting_factor = vol_net_evap_rate / vol_net_evap_rate_unlimited
+            # Scale other rates accordingly
+            vol_evap_rate *= limiting_factor
+            vol_net_evap_rate *= limiting_factor
+            vol_cond_coeff *= limiting_factor
             show_volumetric_evap_rate = np.moveaxis(vol_net_evap_rate,
                                                     (0, 1, 2), (1, 0, 2))
             self.transport.update(
@@ -176,29 +206,31 @@ class TwoPhaseMixtureDiffusionTransport:
                 transport_property)
 
             # Save old capillary pressure
-            capillary_pressure_old[:] = np.copy(capillary_pressure)
+            capillary_pressure_old = np.copy(capillary_pressure)
 
             # Calculate and constrain capillary pressure
             liquid_pressure = self.transport.solution_array
             capillary_pressure = liquid_pressure - gas_pressure
             show_capillary_pressure = np.round(np.moveaxis(capillary_pressure,
                                                (0, 1, 2), (1, 0, 2)), 2)
-            min_value = self.saturation_model.calc_capillary_pressure(
-                self.saturation_min,
-                surface_tension=np.min(self.fluid.surface_tension),
-                humidity=np.max(self.fluid.humidity)
-            )
-            max_value = self.saturation_model.calc_capillary_pressure(
-                0.99,
-                surface_tension=np.max(self.fluid.surface_tension),
-                humidity=np.min(self.fluid.humidity)
-            )
-            capillary_pressure[capillary_pressure < min_value] = min_value
-            capillary_pressure[capillary_pressure > max_value] = max_value
+            # min_value = self.saturation_model.calc_capillary_pressure(
+            #     self.saturation_min,
+            #     surface_tension=np.min(self.fluid.surface_tension),
+            #     humidity=np.max(self.fluid.humidity)
+            # )
+            # max_value = self.saturation_model.calc_capillary_pressure(
+            #     0.99,
+            #     surface_tension=np.max(self.fluid.surface_tension),
+            #     humidity=np.min(self.fluid.humidity)
+            # )
+            # capillary_pressure[capillary_pressure < min_value] = min_value
+            # capillary_pressure[capillary_pressure > max_value] = max_value
             show_capillary_pressure = np.round(np.moveaxis(capillary_pressure,
                                                (0, 1, 2), (1, 0, 2)), 2)
+            show_humidity = np.moveaxis(self.fluid.humidity,
+                                        (0, 1, 2), (1, 0, 2))
             # Save old saturation
-            saturation_old[:] = np.copy(saturation)
+            saturation_old = np.copy(saturation)
 
             # Calculate new saturation
             saturation = self.saturation_model.calc_saturation(
@@ -206,8 +238,8 @@ class TwoPhaseMixtureDiffusionTransport:
             show_saturation = np.moveaxis(saturation,
                                           (0, 1, 2), (1, 0, 2))
             # Apply underrelaxation
-            saturation[:] = (self.urf * saturation
-                             + (1.0 - self.urf) * saturation_old)
+            saturation[:] = ((1.0 - self.urf) * saturation
+                             + self.urf * saturation_old)
             # Constrain solution
             # saturation[saturation < self.saturation_min] = self.saturation_min
             # saturation[saturation > 1.0] = 1.0
@@ -246,4 +278,6 @@ class TwoPhaseMixtureDiffusionTransport:
         self.gas_volume_fraction = (
                 self.transport.transport_layers[0].initial_volume_fraction
                 * (1.0 - self.saturation))
-
+        self.evaporation_heat[:] = (self.fluid.calc_vaporization_enthalpy() *
+                                    self.net_evaporation_rate *
+                                    self.transport.transport_layers[0].d_volume)

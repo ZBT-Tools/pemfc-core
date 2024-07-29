@@ -282,6 +282,21 @@ class Channel(oo.OutputObject1D, ABC):
         self.reynolds[:] = self.velocity * self.d_h * self.fluid.density \
             / self.fluid.viscosity
 
+    def get_upwind_values(self, values: np.ndarray, flow_direction=None):
+        if flow_direction is None:
+            flow_direction = self.flow_direction
+        if flow_direction > 0:
+            return values[:-1]
+        else:
+            return values[1:]
+
+    def get_downwind_values(self, values: np.ndarray, flow_direction=None):
+        if flow_direction is None:
+            flow_direction = -self.flow_direction
+        else:
+            flow_direction = -flow_direction
+        return self.get_upwind_values(values, flow_direction)
+
     @property
     def flow_direction(self):
         return self._flow_direction
@@ -552,6 +567,7 @@ class GasMixtureChannel(Channel):
         self.mass_flow = np.zeros(arr_shape)
         self.mass_source = np.zeros((self.fluid.n_species, self.n_ele))
         self.mole_source = np.zeros((self.fluid.n_species, self.n_ele))
+        self.concentration_ele = np.zeros((self.fluid.n_species, self.n_ele))
 
         self.add_print_data(self.mole_flow, 'Mole Flow',
                             'mol/s', self.fluid.species_names)
@@ -573,6 +589,7 @@ class GasMixtureChannel(Channel):
     def update_mass(self, mass_flow_in=None, mass_source=None,
                     update_fluid=True):
         self.calc_mass_balance(mass_flow_in, mass_source)
+        self.calc_concentration()
         # if update_fluid:
         #     self.fluid.update(self.temperature, self.pressure, self.mole_flow)
 
@@ -594,6 +611,19 @@ class GasMixtureChannel(Channel):
 
     def update_fluid(self):
         self.fluid.update(self.temperature, self.pressure, self.mole_flow)
+
+    def calc_concentration(self, mole_fraction: np.ndarray = None):
+        """
+        Calculates the gas phase molar concentrations.
+        """
+        if mole_fraction is None:
+            mole_flow = ip.interpolate_along_axis(self.mole_flow, axis=-1)
+            mole_fraction = self.fluid.calc_fraction(mole_flow)
+        pressure = ip.interpolate_1d(self.pressure)
+        total_mol_conc = pressure \
+            / (self.fluid.gas_constant * self.temp_ele)
+        self.concentration_ele[:] = mole_fraction * total_mol_conc
+        return self.concentration_ele
 
     def calc_mass_balance(self, mass_flow_in=None, mass_source=None):
         """
@@ -661,8 +691,11 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         self.mole_flow_gas = np.zeros(arr_shape)
         self.mass_flow_gas = np.zeros(arr_shape)
         self.mass_flow_liq = np.zeros(arr_shape)
-        self.condensation_rate = np.zeros(self.n_ele)
-        self.condensation_heat = np.zeros(self.n_ele)
+        self.evaporation_rate = np.zeros(self.n_ele)
+        self.evaporation_heat = np.zeros(self.n_ele)
+        self.humidity_ratio = np.zeros(self.n_nodes)
+        self.concentration_weights = np.ones((self.fluid.n_species, 2,
+                                               self.n_ele)) * 0.5
         if 'evaporation_model' in channel_dict:
             evaporation_dict = channel_dict['evaporation_model']
 
@@ -672,19 +705,19 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         self.evaporation_model = evap.EvaporationModel(evaporation_dict,
                                                        self.fluid)
         self.droplet_to_slug_transition = 0.1
-        self.saturation = np.ones(self.condensation_rate.shape) * 1e-6
+        self.saturation = np.ones(self.evaporation_rate.shape) * 1e-6
         self.urf = 0.5
         self.add_print_data(self.mole_flow_gas, 'Gas Mole Flow', 'mol/s',
                             self.fluid.species_names)
         self.add_print_data(self.mole_flow_liq, 'Liquid Mole Flow',
                             'mol/s', self.fluid.species_names)
-        self.add_print_data(self.saturation, 'Liquid Channel Saturation', '-')
+        self.add_print_data(self.saturation, 'Liquid Saturation', '-')
 
     def update_mass(self, mass_flow_in=None, liquid_mass_flow_in=None,
                     mass_source=None, update_fluid=True):
-        super().update_mass(mass_flow_in=mass_flow_in, mass_source=mass_source,
-                            update_fluid=update_fluid)
+        self.calc_mass_balance(mass_flow_in, mass_source)
         self.calc_two_phase_flow(liquid_mass_flow_in)
+        self.calc_concentration()
 
     def update_fluid(self):
         if np.all(self.mole_flow_gas_total > 0.0):
@@ -740,6 +773,34 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         mole_flow_pc_gas_max = (
                 mole_fraction_pc_gas_max / (1.0 - mole_fraction_pc_gas_max)
                 * mole_flow_non_pc)
+        concentration_pc_ratio = np.divide(
+            mole_flow_pc_gas, mole_flow_pc_gas_max,
+            out=np.zeros(mole_flow_pc_gas.shape),
+            where=mole_flow_pc_gas_max != 0.0)
+        concentration_pc_ratio_uw = self.get_upwind_values(
+            concentration_pc_ratio)
+        concentration_pc_ratio_dw = self.get_downwind_values(
+            concentration_pc_ratio)
+        indices_lower = (concentration_pc_ratio_uw < 1.0)
+        indices_higher = (concentration_pc_ratio_dw > 1.0)
+        indices = np.nonzero(indices_lower & indices_higher)
+        concentration_averaging_weights = np.ones(
+            (2, *concentration_pc_ratio_uw.shape)) * 0.5
+        if indices[0].size:
+            # change_lower = (1.0 - concentration_pc_ratio_uw)[indices] * 0.5
+            ratio_lower = (np.ones(concentration_pc_ratio_uw.shape)[indices]
+                           * 0.5) * 0.0
+            ratio_higher = (concentration_pc_ratio_dw - 0.5)[indices] + 0.5
+            concentration_factor_non_zero = np.asarray(
+                [ratio_lower, ratio_higher])
+            concentration_weights_non_zero = (
+                self.fluid.gas.calc_fraction(concentration_factor_non_zero))
+            concentration_averaging_weights[0][indices] = (
+                concentration_weights_non_zero[0])
+            concentration_averaging_weights[1][indices] = (
+                concentration_weights_non_zero[1])
+        self.concentration_weights[id_pc] = concentration_averaging_weights
+
         mole_flow_pc_gas = np.where(mole_flow_pc_gas < mole_flow_pc_gas_max,
                                     mole_flow_pc_gas, mole_flow_pc_gas_max)
 
@@ -782,11 +843,22 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         # self.mass_flow_gas_total[:] = \
         #     self.mass_flow_total - np.sum(self.mass_flow_liq, axis=0)
 
-        self.calc_condensation_rate()
-        self.calc_condensation_heat()
+        self.calc_evaporation_rate()
+        self.calc_evaporation_heat()
         # self.fluid.update(self.temperature, self.pressure, self.mole_flow,
         #                   self.mole_flow_gas)
         # print('test')
+
+    def calc_concentration(self, mole_fraction: np.ndarray = None):
+        if mole_fraction is None:
+            mole_flow_gas = np.asarray(
+                [ip.interpolate_1d(self.mole_flow_gas[i],
+                                   weights=self.concentration_weights[i])
+                 for i in range(self.fluid.n_species)])
+
+            mole_fraction = self.fluid.gas.calc_fraction(mole_flow_gas)
+        concentration_ele = super().calc_concentration(mole_fraction)
+        return concentration_ele
 
     def calc_liquid_surface_area(self, saturation):
         # diameter_max = 0.5 * self.height
@@ -807,25 +879,28 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         surface_film = self.dx * self.height
         return surface_film * 10.0
 
-    def calc_condensation_rate(self):
+    def calc_evaporation_rate(self):
         """
         Calculates the molar condensation rate of the phase change species in
         the channel.
         """
-        self.condensation_rate[:] = (self.flow_direction
-                                     * np.ediff1d(self.mole_flow_liq[self.fluid.id_pc]))
+        self.evaporation_rate[:] = (self.flow_direction
+                                    * np.ediff1d(self.mole_flow_gas[
+                                                      self.fluid.id_pc]))
+        return self.evaporation_rate
 
-    def calc_condensation_heat(self):
+    def calc_evaporation_heat(self):
         """
         Calculates the molar condensation rate of the phase change species in
         the channel.
         """
-        condensation_rate = self.flow_direction \
-            * np.ediff1d(self.mole_flow_liq[self.fluid.id_pc])
+        evaporation_rate = self.evaporation_rate
         vaporization_enthalpy = \
             self.fluid.calc_vaporization_enthalpy(self.temp_ele)
-        self.condensation_heat[:] = condensation_rate * vaporization_enthalpy
+        self.evaporation_heat[:] = evaporation_rate * vaporization_enthalpy
 
     def calc_heat_capacitance(self, factor=1.0):
-        self.g_fluid[:] = \
+        g_fluid = \
             factor * self.mass_flow_total * self.fluid.specific_heat
+        g_fluid = np.maximum(g_fluid, 1e-6)
+        self.g_fluid[:] = g_fluid

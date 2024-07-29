@@ -111,7 +111,9 @@ class ElectrochemistryModel(ABC):
             #               * self.diff_coeff_cl / self.th_cl)
         if 'scaling_factors' in kwargs:
             scaling_factors = kwargs['scaling_factors']
-            i_lim_star = current_density / scaling_factors
+            i_lim_star = np.divide(current_density, scaling_factors,
+                                   out=np.zeros(current_density.shape),
+                                   where=scaling_factors != 0)
             i_crit = i_lim_star * 1.1
             gdl_loss = False
             # diff_coeff_gdl_by_length = kwargs['scaling_factors']

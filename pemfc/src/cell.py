@@ -165,7 +165,7 @@ class Cell(OutputObject2D):
                             'Current Density', 'A/m²')
         self.add_print_data(self.temp_layer, 'Temperature', 'K',
                             sub_names=self.nx_names[:self.nx])
-        self.add_print_data(self.voltage, 'Voltage', 'K')
+        self.add_print_data(self.voltage, 'Voltage', 'V')
 
     def create_layer_index_dict(self):
         if self.n_layer % 2 == 0.0:
