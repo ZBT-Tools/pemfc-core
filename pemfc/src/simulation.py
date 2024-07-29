@@ -115,6 +115,7 @@ class Simulation:
             self.timing['output'] = 0.0
             simulation_start_time = timeit.default_timer()
             counter = 0
+            gs.global_state.max_iteration = self.max_it
             while True:
                 if counter == 0:
                     if self.current_control:

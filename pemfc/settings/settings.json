@@ -9,7 +9,7 @@
         "maximum_iteration": 100,
         "minimum_iteration": 10,
         "convergence_criteria": 1e-07,
-        "underrelaxation_factor": 0.9,
+        "underrelaxation_factor": 0.7,
         "current_control": true,
         "operation_control": "Current",
         "elements": 10,
@@ -24,7 +24,7 @@
         "thermoneutral_voltage": 1.25
     },
     "membrane": {
-        "type": "Constant",
+        "type": "YeWang2007",
         "underrelaxation_factor": 0.5,
         "thickness": 1.5e-05,
         "ionic_conductivity": 15.0,
@@ -98,12 +98,12 @@
                     1.0e-12
                 ],
                 "pore_radius": 1e-5,
-                "relative_permeability_exponent": 3.0,
+                "relative_permeability_exponent": 4.0,
                 "saturation_model": {
-                    "type": "imbibition_drainage",
+                    "type": "leverett",
                     "leverett": {
                         "type": "leverett",
-                        "contact_angle": 70.0,
+                        "contact_angle": 120.0,
                         "precalculate_pressure": false,
                         "precalculate_gradient": false
                     },
@@ -159,16 +159,16 @@
                             "type": "leverett",
                             "leverett": {
                                 "contact_angle": 120.0,
-                                "precalculate_pressure": false,
-                                "precalculate_gradient": false
+                                "precalculate_pressure": true,
+                                "precalculate_gradient": true
                             }
                         },
                         "drainage_model": {
                             "type": "leverett",
                             "leverett": {
-                                "contact_angle": 80.0,
-                                "precalculate_pressure": false,
-                                "precalculate_gradient": false
+                                "contact_angle": 70.0,
+                                "precalculate_pressure": true,
+                                "precalculate_gradient": true
                             }
                         }
                     },
@@ -203,7 +203,7 @@
             "evaporation_coefficient": 0.37,
             "condensation_coefficient": 5000
             },
-            "gdl_channel_saturation":  0.01
+            "gdl_channel_saturation":  0.05
         },
         "channel": {
             "name": "Cathode Channel",
@@ -401,7 +401,7 @@
                     "imbibition_drainage": {
                         "type": "imbibition_drainage",
                         "imbibition_model": {
-                            "type": "gostick_correlation",
+                            "type": "leverett",
                             "maximum_water_saturation": 0.99,
                             "residual_water_saturation": 0.1,
                             "f": [

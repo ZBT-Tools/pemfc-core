@@ -230,7 +230,7 @@ class HalfCell(OutputObject2D):
                         channel_concentration, mole_flux)
                 else:
                     # Adjust two-phase flow boundary conditions
-                    liquid_flux_ratio = 0.5
+                    liquid_flux_ratio = 1.0
                     ch_gdl_sat = (np.ones(self.two_phase_flow.saturation.shape)
                                   * self.gdl_channel_saturation)
                     liquid_water_flux = (mass_flux[self.id_h2o]
@@ -560,6 +560,15 @@ class HalfCell(OutputObject2D):
         approximation according to composition gradients and thermodynamics
         should be implemented
         """
-        humidity = ip.interpolate_1d(self.channel.fluid.humidity)
-        return np.asarray([humidity for i in
-                           range(self.discretization.shape[1])]).transpose()
+        if self.calc_gdl_diffusion:
+            axes = self.gdl_diffusion.neumann_bc.axes
+            indices = self.gdl_diffusion.neumann_bc.indices
+            values = self.gdl_diffusion.fluid.humidity
+            humidity = self.gdl_diffusion.get_values(values, axes, indices)
+            humidity = self.reduce_discretization(humidity)
+        else:
+            humidity = ip.interpolate_1d(self.channel.fluid.humidity)
+            humidity = np.asarray([
+                humidity for i in
+                range(self.discretization.shape[-1])]).transpose()
+        return humidity

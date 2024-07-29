@@ -14,6 +14,9 @@ from . import matrix_functions as mf
 from . import global_state as gs
 from . import diffusion_transport as dt
 
+import matplotlib.pyplot as plt
+import matplotlib
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 class TwoPhaseMixtureDiffusionTransport:
     """
@@ -78,7 +81,7 @@ class TwoPhaseMixtureDiffusionTransport:
         self.error = np.inf
         self.max_iterations = 1
         self.min_iterations = 1
-        self.urf = 0.9
+        self.urf = 0.95
         self.error_tolerance = 1e-5
 
     def update(self, temperature: np.ndarray,
@@ -281,3 +284,21 @@ class TwoPhaseMixtureDiffusionTransport:
         self.evaporation_heat[:] = (self.fluid.calc_vaporization_enthalpy() *
                                     self.net_evaporation_rate *
                                     self.transport.transport_layers[0].d_volume)
+        if gs.global_state.iteration == gs.global_state.max_iteration:
+            # matplotlib.use('TkAgg')
+            matplotlib.use('TkAgg')
+            height = self.transport.transport_layers[0].discretization.length[0]
+            width = self.transport.transport_layers[0].discretization.length[2]
+            plt.figure()
+            ax = plt.gca()
+            im = plt.imshow(show_saturation[5], cmap=plt.cm.Reds,
+                            interpolation='none', extent=[0, width, 0, height])
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("right", size="5%", pad=0.1)
+            # plt.xlim([0, 1.0])
+            # plt.ylim([0, 1.0])
+            plt.colorbar(im, cax=cax)
+            plt.show()
+            input("Press Enter to continue...")
+            # matplotlib.use('Agg')
+
