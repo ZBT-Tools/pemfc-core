@@ -1207,7 +1207,7 @@ def create(fluid_dict, **kwargs):
               'using internal gas property library')
         backend = 'pemfc'
 
-    array_shape = fluid_dict['nodes']
+    array_shape = fluid_dict.get('nodes', 1)
     if isinstance(array_shape, int):
         array_shape = (array_shape,)
     name = fluid_dict['name']
