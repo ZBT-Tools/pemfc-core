@@ -344,7 +344,7 @@ class YeWang2007Membrane(SpringerMembrane):
         avg_humidity = np.average(humidity, axis=0)
         # water_content[water_content < 1.0] = 1.0
         # Membrane conductivity [S/m]
-        mem_cond = 0.12 * avg_humidity ** 2.80 * 1e2
+        mem_cond = np.maximum(1e-3, 0.12 * avg_humidity ** 2.80 * 1e2)
         # Area-specific membrane resistance [Ohm-m²]
         self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
         # Absolute resistance [Ohm]

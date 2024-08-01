@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
+
 class TwoPhaseMixtureDiffusionTransport:
     """
     Class to describe the diffusion in a porous layer (here defined through the
@@ -38,6 +39,7 @@ class TwoPhaseMixtureDiffusionTransport:
         self.dict = input_dict
         self.transport = dt.DiffusionTransport.create(
             input_dict, discretization)
+        # self.temperature_transport = dt.DiffusionTransport.create()
 
         # self.fluid = fluid.copy(self.liquid_transport.base_shape, plot_axis=-2)
         if fluid.array_shape != self.transport.base_shape:
@@ -285,20 +287,26 @@ class TwoPhaseMixtureDiffusionTransport:
                                     self.net_evaporation_rate *
                                     self.transport.transport_layers[0].d_volume)
         if gs.global_state.iteration == gs.global_state.max_iteration:
-            # matplotlib.use('TkAgg')
-            matplotlib.use('TkAgg')
-            height = self.transport.transport_layers[0].discretization.length[0]
-            width = self.transport.transport_layers[0].discretization.length[2]
-            plt.figure()
-            ax = plt.gca()
-            im = plt.imshow(show_saturation[5], cmap=plt.cm.Reds,
-                            interpolation='none', extent=[0, width, 0, height])
-            divider = make_axes_locatable(ax)
-            cax = divider.append_axes("right", size="5%", pad=0.1)
-            # plt.xlim([0, 1.0])
-            # plt.ylim([0, 1.0])
-            plt.colorbar(im, cax=cax)
-            plt.show()
-            input("Press Enter to continue...")
-            # matplotlib.use('Agg')
+            if self.fluid.gas.species_names[0] == 'O2':
+                # matplotlib.use('TkAgg')
+                matplotlib.use('TkAgg')
+                height = self.transport.transport_layers[0].discretization.length[0]
+                width = self.transport.transport_layers[0].discretization.length[2]
+                fig, ax = plt.subplots(figsize=(8, 6))
+                data = show_saturation[5]
+                im = ax.imshow(data, cmap=matplotlib.cm.coolwarm,
+                               interpolation='none', extent=[0, width, 0, height])
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("right", size="5%", pad=0.1)
+                # plt.xlim([0, 1.0])
+                # plt.ylim([0, 1.0])
+                ax.set_title('Cathode GDL Saturation')
+                ax.set_xlabel('GDL Model Domain Width / m')
+                ax.set_ylabel('GDL Model Domain Height / m')
+                fig.colorbar(im, cax=cax, ticks=[np.min(data),  np.max(data)])
+                # plt.show()
+                plt.savefig(r'D:\Software\Python\PycharmProjects\pemfc-core'
+                            r'\output\GDL_Images\Cathode_GDL_Saturation.png')
+                # input("Press Enter to continue...")
+                # matplotlib.use('Agg')
 

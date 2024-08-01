@@ -2,6 +2,10 @@ from abc import ABC, abstractmethod
 import numpy as np
 import json
 import os
+import matplotlib
+import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
 
 from .fluid import (fluid as fl, diffusion_coefficient as dc,
                     evaporation_model as evap)
@@ -89,7 +93,7 @@ class DiffusionTransport(ABC):
             transport_layers = [
                 tl.TransportLayer.create(
                     input_dict, {'diffusion': permeability}, discretization)]
-            return DarcyFlowDiffusionTransport(
+            return ScalarTransport(
                 input_dict, transport_layers, **kwargs)
         # elif (model_type == 'TwoPhaseMixture'
         #       and isinstance(fluid, fl.TwoPhaseMixture)):
@@ -240,7 +244,7 @@ class ConstantDiffusionTransport(DiffusionTransport):
         raise NotImplementedError
 
 
-class DarcyFlowDiffusionTransport(DiffusionTransport):
+class ScalarTransport(DiffusionTransport):
     """
     Abstract base class to describe the calculate the diffusion transport in
     a solid or porous layer (here defined through the TransportLayer class).
@@ -443,6 +447,26 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         #                       gas_mole_composition=self.solution_array)
         diff_conc = np.diff(conc_array, axis=1)
         self.initialize = False
+        if gs.global_state.iteration == gs.global_state.max_iteration:
+            # matplotlib.use('TkAgg')
+            matplotlib.use('TkAgg')
+            height = self.transport_layers[0].discretization.length[0]
+            width = self.transport_layers[0].discretization.length[2]
+            fig, ax = plt.subplots(figsize=(8, 6))
+            data = show_concentrations[0][5]
+            im = ax.imshow(data, cmap=matplotlib.cm.coolwarm,
+                           interpolation='none', extent=[0, width, 0, height])
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("right", size="5%", pad=0.1)
+            # plt.xlim([0, 1.0])
+            # plt.ylim([0, 1.0])
+            ax.set_title('Cathode GDL O2 Concentration')
+            ax.set_xlabel('GDL Model Domain Width / m')
+            ax.set_ylabel('GDL Model Domain Height / m')
+            fig.colorbar(im, cax=cax, ticks=[np.min(data),  np.max(data)])
+            # plt.show()
+            plt.savefig(r'D:\Software\Python\PycharmProjects\pemfc-core'
+                        r'\output\GDL_Images\Cathode_O2_Concentration.png')
 
     def calc_boundary_flux(self, boundary_type: str):
         # Calculate boundary flux: defined positive if going into domain,

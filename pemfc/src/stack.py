@@ -268,6 +268,8 @@ class Stack(OutputObject1D):
         This function coordinates the program sequence
         """
         update_inflows = False
+        if current_density is not None:
+            self.current_density_avg = current_density
         if any((current_density, voltage)):
             update_inflows = True
         if self.current_control is False:

@@ -331,7 +331,12 @@ class Output:
         with open(file_path, mode) as file:
             if header is not None:
                 file.write('# ' + header + '\n')
-            if separator_lines is not None:
+            if isinstance(array, np.ndarray) and array.ndim == 3:
+                array = np.moveaxis(array, -1, 0)
+                for sub_array in array:
+                    np.savetxt(file, sub_array,
+                               delimiter=self.delimiter, fmt=self.csv_format)
+            elif separator_lines is not None:
                 for i in range(len(separator_lines)):
                     a = array[i]
                     if a.ndim == 1:
