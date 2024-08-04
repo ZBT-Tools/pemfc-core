@@ -62,6 +62,12 @@ class Stack(OutputObject1D):
         # Add underrelaxation factor to cell settings
         cell_dict['underrelaxation_factor'] = \
             settings['simulation']['underrelaxation_factor']
+        # Add GDL diffusion and two-phase switches to half-cell dicts
+        for half_cell_dict in half_cell_dicts:
+            half_cell_dict['calc_gdl_diffusion'] = (
+                settings['simulation'].get('calc_gdl_diffusion', False))
+            half_cell_dict['calc_two_phase_flow'] = (
+                settings['simulation'].get('calc_two_phase_flow', False))
 
         # Initialize fluid channels
         fluids, channels = [], []

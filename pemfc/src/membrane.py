@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from . import transport_layer as tl, constants
 # from pemfc.src import global_functions as gf
 from . import discretization as dsct
+from . import global_state as gs
 
 
 class Membrane(tl.TransportLayer2D, ABC):
@@ -344,15 +345,17 @@ class YeWang2007Membrane(SpringerMembrane):
         avg_humidity = np.average(humidity, axis=0)
         # water_content[water_content < 1.0] = 1.0
         # Membrane conductivity [S/m]
-        mem_cond = np.maximum(1e-3, 0.12 * avg_humidity ** 2.80 * 1e2)
+        mem_cond = np.maximum(1e-1, 0.12 * avg_humidity ** 2.80 * 1e2)
         # Area-specific membrane resistance [Ohm-m²]
         self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
         # Absolute resistance [Ohm]
         self.omega[:] = self.omega_ca / self.discretization.d_area
+        if gs.global_state.iteration == 30:
+            print('test')
         return self.omega, self.omega_ca
 
     def calc_eod(self):
-        self.eod[:] = 1.07
+        self.eod[:] = 0.5
         return self.eod
 
     def calc_diffusion_coefficient(self, *args):

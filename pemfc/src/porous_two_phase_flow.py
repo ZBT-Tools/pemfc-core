@@ -1,7 +1,7 @@
 import numpy as np
 import json
 import os
-from porous_two_phase_flow import porous_layer as pl
+from porous_two_phase_flow import porous_layer as pl, saturation_model as sm
 from porous_two_phase_flow import helper_functions as hf
 
 from .fluid import (fluid as fl, diffusion_coefficient as dc,
@@ -17,6 +17,7 @@ from . import diffusion_transport as dt
 import matplotlib.pyplot as plt
 import matplotlib
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+np.set_printoptions(legacy="1.21")
 
 
 class TwoPhaseMixtureDiffusionTransport:
@@ -54,12 +55,13 @@ class TwoPhaseMixtureDiffusionTransport:
         self.dict['porosity_model']['saturation_model']['minimum_saturation'] =\
             self.saturation_min
         # Create porosity model
-        self.porosity_model = pl.PorousLayer(self.dict['porosity_model'],
-                                             fluid)
+        self.porosity_model = pl.PorousLayer(self.dict['porosity_model'])
         if not isinstance(self.porosity_model, pl.PorousTwoPhaseLayer):
             raise TypeError('attribute "porosity_model" must be of type '
                             'PorousTwoPhaseLayer')
-        self.saturation_model = self.porosity_model.saturation_model
+        self.saturation_model = sm.SaturationModel(
+            self.dict['porosity_model']['saturation_model'],
+            self.porosity_model, self.fluid)
         # Create evaporation model
         self.evaporation_model = evap.EvaporationModel(
             input_dict['evaporation_model'], fluid)
@@ -83,7 +85,7 @@ class TwoPhaseMixtureDiffusionTransport:
         self.error = np.inf
         self.max_iterations = 1
         self.min_iterations = 1
-        self.urf = 0.95
+        self.urf = 0.9
         self.error_tolerance = 1e-5
 
     def update(self, temperature: np.ndarray,
@@ -160,9 +162,9 @@ class TwoPhaseMixtureDiffusionTransport:
 
             # Calculate source terms from evaporation/condensation
             specific_area = (
-                self.porosity_model.calc_specific_interfacial_area(saturation)
-                * 1.0)
-            specific_area[specific_area > 5000.0] = 5000.0
+                self.porosity_model.calc_specific_interfacial_area(
+                    saturation, capillary_pressure, self.saturation_model))
+            # specific_area[specific_area > 5000.0] = 5000.0
             # specific_area = 1000.0
             # evaporation_rate = evap_model.calc_evaporation_rate(
             #     temperature=t, pressure=p, capillary_pressure=p_cap)
@@ -192,16 +194,16 @@ class TwoPhaseMixtureDiffusionTransport:
             vol_net_evap_rate, vol_evap_rate, vol_cond_rate, vol_cond_coeff = \
                 vol_evap_arrays
 
-            # Limit maximum evaporation rate
-            max_rate = 10000.0
-            vol_net_evap_rate_unlimited = np.copy(vol_net_evap_rate)
-            vol_net_evap_rate[vol_net_evap_rate > max_rate] = max_rate
-            vol_net_evap_rate[vol_net_evap_rate < -max_rate] = -max_rate
-            limiting_factor = vol_net_evap_rate / vol_net_evap_rate_unlimited
-            # Scale other rates accordingly
-            vol_evap_rate *= limiting_factor
-            vol_net_evap_rate *= limiting_factor
-            vol_cond_coeff *= limiting_factor
+            # # Limit maximum evaporation rate
+            # max_rate = 10000.0
+            # vol_net_evap_rate_unlimited = np.copy(vol_net_evap_rate)
+            # vol_net_evap_rate[vol_net_evap_rate > max_rate] = max_rate
+            # vol_net_evap_rate[vol_net_evap_rate < -max_rate] = -max_rate
+            # limiting_factor = vol_net_evap_rate / vol_net_evap_rate_unlimited
+            # # Scale other rates accordingly
+            # vol_evap_rate *= limiting_factor
+            # vol_net_evap_rate *= limiting_factor
+            # vol_cond_coeff *= limiting_factor
             show_volumetric_evap_rate = np.moveaxis(vol_net_evap_rate,
                                                     (0, 1, 2), (1, 0, 2))
             self.transport.update(
@@ -287,6 +289,7 @@ class TwoPhaseMixtureDiffusionTransport:
                                     self.net_evaporation_rate *
                                     self.transport.transport_layers[0].d_volume)
         if gs.global_state.iteration == gs.global_state.max_iteration:
+        # if gs.global_state.iteration == 10:
             if self.fluid.gas.species_names[0] == 'O2':
                 # matplotlib.use('TkAgg')
                 matplotlib.use('TkAgg')

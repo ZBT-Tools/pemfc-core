@@ -128,8 +128,9 @@ class HalfCell(OutputObject2D):
         self.gde = tl.TransportLayer2D(gde_dict, gde_transport_properties,
                                        self.discretization)
 
-        self.calc_gdl_diffusion = True
-        self.calc_two_phase_flow = True
+        self.calc_gdl_diffusion = halfcell_dict.get('calc_gdl_diffusion', False)
+        self.calc_two_phase_flow = halfcell_dict.get('calc_two_phase_flow',
+                                                     False)
 
         if self.calc_gdl_diffusion:
             gdl_diffusion_dict = gde_dict.copy()
