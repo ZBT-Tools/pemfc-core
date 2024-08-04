@@ -1,7 +1,7 @@
 {
     "stack": {
         "cell_number": 1,
-        "cool_flow": true,
+        "cool_flow": false,
         "calc_temperature": true,
         "calc_current_density": true
     },
@@ -42,7 +42,7 @@
         "name": "Cathode",
         "channel_number": 50,
         "rib_width": 0.001,
-        "stoichiometry": 1.5,
+        "stoichiometry": 5,
         "reaction_stoichiometry": [
             -1.0,
             0.0,
@@ -287,7 +287,7 @@
         "name": "Anode",
         "channel_number": 50,
         "rib_width": 0.001,
-        "stoichiometry": 1.5,
+        "stoichiometry": 5,
         "reaction_stoichiometry": [
             -2.0,
             0.0,
@@ -595,7 +595,7 @@
         "alpha_amb": 0.0,
         "flux_endplate": 0.0,
         "value_endplate": 343.15,
-        "bc_endplate": "gradient",
+        "bc_endplate": "fixed",
         "cool_ch_bc": true,
         "cool_ch_numb": 20,
         "cool_temp_diff": 5.0,

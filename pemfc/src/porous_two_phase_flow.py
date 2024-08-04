@@ -108,9 +108,9 @@ class TwoPhaseMixtureDiffusionTransport:
                 liquid_saturation_value)
         if liquid_mass_flux.shape != self.transport.base_shape:
             liquid_mass_flux = self.transport.rescale_input(liquid_mass_flux)
-        # if update_fluid:
-        #     self.fluid.update(temperature, gas_pressure,
-        #                       gas_mole_composition=molar_composition)
+        if update_fluid:
+            self.fluid.update(temperature, gas_pressure,
+                              gas_mole_composition=molar_composition)
 
         # Boundary conditions for liquid pressure
         sigma_liquid = \
@@ -288,6 +288,8 @@ class TwoPhaseMixtureDiffusionTransport:
         self.evaporation_heat[:] = (self.fluid.calc_vaporization_enthalpy() *
                                     self.net_evaporation_rate *
                                     self.transport.transport_layers[0].d_volume)
+        # if gs.global_state.iteration == 200:
+        #     print('test')
         if gs.global_state.iteration == gs.global_state.max_iteration:
         # if gs.global_state.iteration == 10:
             if self.fluid.gas.species_names[0] == 'O2':

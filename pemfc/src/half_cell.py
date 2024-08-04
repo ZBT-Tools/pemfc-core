@@ -231,7 +231,7 @@ class HalfCell(OutputObject2D):
                         channel_concentration, mole_flux)
                 else:
                     # Adjust two-phase flow boundary conditions
-                    liquid_flux_ratio = 0.5
+                    liquid_flux_ratio = 0.0
                     ch_gdl_sat = (np.ones(self.two_phase_flow.saturation.shape)
                                   * self.gdl_channel_saturation)
                     liquid_water_flux = (mass_flux[self.id_h2o]
@@ -416,8 +416,8 @@ class HalfCell(OutputObject2D):
                 self.channel.mole_flow[self.id_fuel, self.channel.id_in]
                 * self.faraday * self.n_charge
                 / (np.sum(current) * abs(self.n_stoi[self.id_fuel])))
-            if gs.global_state.iteration == 40:
-                print('test')
+            # if gs.global_state.iteration == 40:
+            #     print('test')
             if current_control and self.inlet_stoi < 1.0:
                 raise ValueError('stoichiometry of cell {0} '
                                  'becomes smaller than one: {1:0.3f}'
