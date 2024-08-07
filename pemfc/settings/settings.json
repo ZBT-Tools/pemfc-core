@@ -9,7 +9,7 @@
         "maximum_iteration": 200,
         "minimum_iteration": 10,
         "convergence_criteria": 1e-07,
-        "underrelaxation_factor": 0.90,
+        "underrelaxation_factor": 0.9,
         "current_control": true,
         "operation_control": "Current",
         "elements": 10,
@@ -102,10 +102,10 @@
                 "pore_radius": 1e-5,
                 "relative_permeability_exponent": 3.0,
                 "saturation_model": {
-                    "type": "PSD",
+                    "type": "GostickCorrelation",
                     "Leverett": {
                         "type": "Leverett",
-                        "contact_angle": 90.0,
+                        "contact_angle": 120.0,
                         "precalculate_pressure": false,
                         "precalculate_gradient": false
                     },
@@ -176,26 +176,26 @@
                     },
                     "GostickCorrelation": {
                         "type": "GostickCorrelation",
-                        "maximum_saturation": 1.0,
+                        "maximum_saturation": 0.91,
                         "residual_saturation": 0.0,
                         "f": [
-                            0.25,
-                            0.75
+                            0.35,
+                            0.65
                         ],
                         "m": [
-                            250,
-                            200
+                            200,
+                            150
                         ],
                         "n": [
-                            0.3,
-                            0.5
+                            0.5,
+                            0.3
                         ],
                         "P_C_b": [
                             101500.0,
-                            108000.0
+                            107500.0
                         ],
-                        "precalculate_pressure": true,
-                        "precalculate_gradient": true
+                        "precalculate_pressure": false,
+                        "precalculate_gradient": false
                     }
                 }
             },
