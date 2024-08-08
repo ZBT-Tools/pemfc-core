@@ -227,8 +227,8 @@ class HalfCell(OutputObject2D):
                 # to account for GDL losses anymore
                 if not self.calc_two_phase_flow:
                     self.gdl_diffusion.update(
-                        temperature, self.channel.pressure,
-                        channel_concentration, mole_flux)
+                        channel_concentration, mole_flux,
+                        temperature=temperature, pressure=self.channel.pressure)
                 else:
                     # Adjust two-phase flow boundary conditions
                     liquid_flux_ratio = 0.0
@@ -253,10 +253,10 @@ class HalfCell(OutputObject2D):
                            or iteration < min_iterations):
                         # Update gas diffusion in GDL
                         self.gdl_diffusion.update(
-                            temperature, self.channel.pressure,
                             channel_concentration, mole_flux,
                             self.explicit_source_terms,
                             self.implicit_source_terms,
+                            temperature, self.channel.pressure,
                             self.two_phase_flow.gas_volume_fraction)
 
                         # Update two-phase flow in GDL
@@ -416,8 +416,8 @@ class HalfCell(OutputObject2D):
                 self.channel.mole_flow[self.id_fuel, self.channel.id_in]
                 * self.faraday * self.n_charge
                 / (np.sum(current) * abs(self.n_stoi[self.id_fuel])))
-            # if gs.global_state.iteration == 40:
-            #     print('test')
+            if gs.global_state.iteration == 100:
+                print('test')
             if current_control and self.inlet_stoi < 1.0:
                 raise ValueError('stoichiometry of cell {0} '
                                  'becomes smaller than one: {1:0.3f}'

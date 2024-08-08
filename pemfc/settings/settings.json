@@ -7,14 +7,14 @@
     },
     "simulation": {
         "maximum_iteration": 200,
-        "minimum_iteration": 10,
+        "minimum_iteration": 5,
         "convergence_criteria": 1e-07,
         "underrelaxation_factor": 0.9,
-        "current_control": true,
-        "operation_control": "Current",
+        "current_control": false,
+        "operation_control": "Voltage",
         "elements": 10,
         "current_density": 30000,
-        "average_cell_voltage": 0.5,
+        "average_cell_voltage": 0.2,
         "channel_land_discretization": true,
         "calc_gdl_diffusion": true,
         "calc_two_phase_flow": true
@@ -42,7 +42,7 @@
         "name": "Cathode",
         "channel_number": 50,
         "rib_width": 0.001,
-        "stoichiometry": 5,
+        "stoichiometry": 1.5,
         "reaction_stoichiometry": [
             -1.0,
             0.0,
@@ -65,12 +65,12 @@
             "porosity":
                     0.8,
             "electrical_conductivity": [
-                50000.0,
-                50000.0
+                1000.0,
+                10000.0
             ],
             "thermal_conductivity": [
                 1.0,
-                1.0
+                10.0
             ]
         },
         "electrochemistry":
@@ -287,7 +287,7 @@
         "name": "Anode",
         "channel_number": 50,
         "rib_width": 0.001,
-        "stoichiometry": 5,
+        "stoichiometry": 1.5,
         "reaction_stoichiometry": [
             -2.0,
             0.0,
@@ -310,12 +310,12 @@
             "porosity":
                     0.8,
             "electrical_conductivity": [
-                50000.0,
-                50000.0
+                1000.0,
+                10000.0
             ],
             "thermal_conductivity": [
                 1.0,
-                1.0
+                10.0
             ]
         },
         "electrochemistry":
@@ -603,7 +603,7 @@
         "coolant_control": "Temperature Difference"
     },
     "output": {
-        "save_csv": true,
+        "save_csv": false,
         "save_plot": true,
         "show_loss": true,
         "directory": "../output"

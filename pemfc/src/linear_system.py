@@ -134,10 +134,10 @@ class LinearSystem(ABC):
         else:
             source_term = np.asarray(source_term)
             index_array = np.asarray(index_array)
-            if source_term.ndim > 0:
+            if source_term.ndim > 1:
                 if source_term.shape != index_array.shape:
-                    raise ValueError("shapes of 'source_term' and 'index_array' "
-                                     "must be equal")
+                    raise ValueError("shapes of 'source_term' and "
+                                     "'index_array' must be equal")
             if replace is True:
                 source_vector = np.copy(rhs_vector)
                 np.put(source_vector, index_array, -source_term)
@@ -150,19 +150,15 @@ class LinearSystem(ABC):
             rhs_vector += source_vector
         return rhs_vector, source_vector
 
-    # @staticmethod
-    # def shift_nodes(conductance_list: list, axis=0, **kwargs):
-    #     conductance_list = [np.asarray(item) for item in conductance_list]
-    #     shift_axes = tuple(i for i in range(len(conductance_list)) if i != axis)
-    #     for i in shift_axes:
-    #         conductance_list[i] = (
-    #                 (conductance_list[i]
-    #                  + np.roll(conductance_list[i], 1, axis=axis)) * 0.5)
-    #         conductance_list[i] = np.concatenate(
-    #             (conductance_list[i], [conductance_list[i][0]]), axis=axis)
-    #         conductance_list[i][0] *= 0.5
-    #         conductance_list[i][-1] *= 0.5
-    #     return conductance_list
+    @staticmethod
+    def set_identity_matrix_rows(matrix, index_array):
+        index_array = np.ravel(index_array, order='F')
+        row_length = matrix.shape[0]
+        for row_id in index_array:
+            row = np.zeros(row_length)
+            row[row_id] = 1.0
+            matrix[row_id] = row
+        return matrix
 
 
 @dataclass
@@ -264,16 +260,6 @@ class BasicLinearSystem(LinearSystem, ABC):
                 'argument "transport_layer" must be of '
                 'types (TransportLayer2D, TransportLayer3D)')
 
-    @staticmethod
-    def set_implicit_fixed(matrix, index_array):
-        index_array = index_array.ravel(order='F')
-        row_length = matrix.shape[0]
-        for row_id in index_array:
-            row = np.zeros(row_length)
-            row[row_id] = 1.0
-            matrix[row_id] = row
-        return matrix
-
     @abstractmethod
     def set_neumann_boundary_conditions(
             self, values: (float, np.ndarray), axes: tuple, indices: tuple):
@@ -285,7 +271,7 @@ class BasicLinearSystem(LinearSystem, ABC):
             values = values.ravel(order='F')
         index_array = mtx_func.get_axis_values(self.index_array, axes, indices)
         index_vector = index_array.ravel(order='F')
-        self.set_implicit_fixed(self.mtx, index_vector)
+        self.set_identity_matrix_rows(self.mtx, index_vector)
         self.add_explicit_source(
             self.rhs, -values, index_array=index_vector, replace=True)
 
@@ -470,7 +456,7 @@ class BasicLinearSystem3D(BasicLinearSystem):
                 self.mtx, source, index_array=index_array, replace=False)
 
 
-class StackedLayerLinearSystem(LinearSystem):
+class MultiLayerLinearSystem(LinearSystem):
 
     def __init__(self, layers: list[tl.TransportLayer2D], transport_type: str,
                  init_value=0.0):
@@ -533,15 +519,6 @@ class StackedLayerLinearSystem(LinearSystem):
              matrix, coefficients, index_array=index_array,
              replace=replace)
 
-    @staticmethod
-    def set_implicit_layer_fixed(matrix, index_array, layer_id):
-        row_length = matrix.shape[0]
-        for row_id in index_array[layer_id]:
-            row = np.zeros(row_length)
-            row[row_id] = 1.0
-            matrix[row_id] = row
-        return matrix
-
     def set_neumann_boundary_conditions(self, flux_value, layer_id):
         source = flux_value * self.layers[layer_id].discretization.d_area
         self.add_explicit_source(
@@ -549,8 +526,7 @@ class StackedLayerLinearSystem(LinearSystem):
             self.index_array, layer_id)
 
     def set_dirichlet_boundary_conditions(self, fixed_value, layer_id):
-        self.set_implicit_layer_fixed(
-            self.mtx_const, self.index_array, layer_id)
+        self.set_identity_matrix_rows(self.mtx_const, self.index_array[layer_id])
         self.rhs_const[:], _ = self.add_explicit_source(
             self.rhs_const, -fixed_value, self.index_array, layer_id,
             replace=True)
@@ -589,7 +565,7 @@ class StackedLayerLinearSystem(LinearSystem):
         pass
 
 
-class CellLinearSystem(StackedLayerLinearSystem):
+class CellLinearSystem(MultiLayerLinearSystem):
 
     def __init__(self, cell: Cell, transport_type: str, init_value=0.0):
         self.cell = cell
@@ -667,26 +643,6 @@ class CellLinearSystem(StackedLayerLinearSystem):
             self.add_explicit_source(
                 self.rhs_const, k_amb_vector * temp_amb, self.index_array)
 
-    @staticmethod
-    def create_cell_index_list(shape: tuple[int, ...]):
-        """
-        Create list of lists with each list containing flattened order of indices
-        for a continuous functional layer (for the conductance matrix).
-        Functional layers a discretized in x-direction (z-direction in old version),
-        the remaining flattened order is equal to the order in the overall matrix
-        and the corresponding right-hand side vector
-        (typically first y-, then z-direction within a layer a.k.a x-plane)
-
-        Args:
-            shape: tuple of size 3 containing the number of layers (index 0),
-            the number of y-elements (index 1) and the number z-elements (index 2)
-        """
-        index_list = []
-        for i in range(shape[0]):
-            index_list.append(
-                [(j * shape[0]) + i for j in range(shape[1] * shape[2])])
-        return index_list
-
     def update_rhs(self, *args, **kwargs):
         """
         Create vector with the right hand side entries,
@@ -756,14 +712,14 @@ class StackLinearSystem(LinearSystem, ABC):
         # diff = matrix - old_matrix
         return matrix
 
-    def set_matrix_dirichlet_bc(self, cell_ids, layer_ids):
-        if not len(cell_ids) == len(layer_ids):
-            raise ValueError('cell and layer index lists '
-                             'must have equal length')
-        for i in range(len(cell_ids)):
-            row_ids = self.index_list[cell_ids[i]][:][layer_ids[i]]
-            self.mtx[row_ids, :] = 0.0
-            self.mtx[row_ids, row_ids] = 1.0
+    def set_matrix_dirichlet_bc(self, cell_id: int, layer_id: int,
+                                patch_ids: (list, int) = None):
+        if patch_ids is None:
+            row_ids = self.index_list[cell_id][:][layer_id]
+        else:
+            row_ids = self.index_list[cell_id][:][layer_id][patch_ids]
+        self.mtx[row_ids, :] = 0.0
+        self.mtx[row_ids, row_ids] = 1.0
 
     @abstractmethod
     def update(self, *args, **kwargs):
@@ -1161,13 +1117,27 @@ class TemperatureSystem(StackLinearSystem):
         """
         for i, cell in enumerate(self.cells):
             idx = cell.interface_id['cathode_bpp_gde']
-            cell.cathode.channel.update_heat(
-                wall_temp=g_func.reduce_dimension(cell.temp_layer[idx]),
-                update_fluid=False)
+            temp_gde = g_func.reduce_dimension(cell.temp_layer[idx][:, -1])
+            if cell.channel_land_discretization:
+                idx = cell.interface_id['cathode_bpp_bpp']
+            else:
+                idx = cell.interface_id['cathode_bpp_bc']
+            temp_bpp = g_func.reduce_dimension(cell.temp_layer[idx][:, -1])
+            wall_temp = np.average(np.stack([temp_gde, temp_bpp],
+                                            axis=temp_gde.ndim), axis=-1)
+            cell.cathode.channel.update_heat(wall_temp=wall_temp,
+                                             update_fluid=False)
             idx = cell.interface_id['anode_gde_bpp']
-            cell.anode.channel.update_heat(
-                wall_temp=g_func.reduce_dimension(cell.temp_layer[idx]),
-                update_fluid=False)
+            temp_gde = g_func.reduce_dimension(cell.temp_layer[idx][:, -1])
+            if cell.channel_land_discretization:
+                idx = cell.interface_id['anode_bpp_bpp']
+            else:
+                idx = cell.interface_id['anode_bpp_bc']
+            temp_bpp = g_func.reduce_dimension(cell.temp_layer[idx][:, -1])
+            wall_temp = np.average(np.stack([temp_gde, temp_bpp],
+                                            axis=temp_gde.ndim), axis=-1)
+            cell.anode.channel.update_heat(wall_temp=wall_temp,
+                                           update_fluid=False)
 
     def update_coolant_channel(self):
         """
@@ -1240,12 +1210,16 @@ class ElectricalSystem(StackLinearSystem):
                     * self.cell_systems[index].conductance[0][0])
                 correction_factors = bc_current / inlet_current
                 rhs_bc_values = inlet_current * correction_factors
-
+            self.add_explicit_source(
+                cell_rhs, rhs_bc_values.ravel(order='F'),
+                index_array=cell_sys.index_array, layer_id=0)
         else:
             rhs_bc_values = self.v_loss_tar
-        self.add_explicit_source(
-            cell_rhs, rhs_bc_values.ravel(order='F'),
-            index_array=cell_sys.index_array, layer_id=0)
+            # self.current_density
+            self.add_explicit_source(
+                cell_rhs, np.ravel(-rhs_bc_values, order='F'),
+                index_array=cell_sys.index_array, layer_id=0)
+
         cell_rhs_list.append(cell_rhs)
         for i in range(1, len(self.cells)):
             cell_rhs_list.append(
@@ -1263,9 +1237,9 @@ class ElectricalSystem(StackLinearSystem):
         self.mtx[:] = self.mtx_const + mtx_dyn
         # Modify matrix for dirichlet boundary conditions in last cell
         # (and first cell if voltage is given as BC)
-        self.set_matrix_dirichlet_bc([-1], [-1])
+        self.set_matrix_dirichlet_bc(cell_id=-1, layer_id=-1, patch_ids=None)
         if not self.current_control:
-            self.set_matrix_dirichlet_bc([0], [0])
+            self.set_matrix_dirichlet_bc(cell_id=0, layer_id=0, patch_ids=None)
 
     def update(self, current_density=None, voltage=None):
         """

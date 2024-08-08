@@ -809,7 +809,7 @@ class TwoPhaseMixtureChannel(GasMixtureChannel):
         # humidity = (mole_fraction[id_pc] * self.pressure /
         #             self.fluid.saturation_pressure)
 
-        self.mole_flow_gas = mole_flow_gas
+        self.mole_flow_gas[:] = mole_flow_gas
         self.mass_flow_gas[id_pc] = mole_flow_pc_gas * mw_pc
         # g_func.add_source(self.mass_flow_liq[id_pc], mass_source_liquid,
         #                   self.flow_direction, self.tri_mtx)

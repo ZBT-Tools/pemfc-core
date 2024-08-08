@@ -144,7 +144,7 @@ class Cell(OutputObject2D):
             'Anode BPP-BC']
         if self.additional_layer:
             self.nx_names.insert(1, 'Cathode BPP-BPP')
-            self.nx_names.insert(-2, 'Anode BPP-BPP')
+            self.nx_names.insert(-1, 'Anode BPP-BPP')
 
         # Assign layer id corresponding to material name
         self.layer_id, self.interface_id = self.create_layer_index_dict()
@@ -253,7 +253,6 @@ class Cell(OutputObject2D):
             # self.calc_voltage_loss()
             self.calc_electrochemical_conductance(
                 corrected_current_density[self.layer_id['membrane']])
-
             self.current_density[:] = current_density
             self.voltage[:] = self.e_0 - self.voltage_loss
 
@@ -301,8 +300,7 @@ class Cell(OutputObject2D):
         of the conductance array layout assuming an uneven number of layers.
         """
         current = current_density * self.membrane.discretization.d_area
-        cell_voltage_loss = self.calc_voltage_loss()
-        electrochemical_resistance = (
-            cell_voltage_loss / current)
+        mea_voltage_loss = self.calc_voltage_loss()
+        electrochemical_resistance = mea_voltage_loss / current
         self.electrochemical_conductance[:] = (
                 1.0 / electrochemical_resistance)

@@ -51,6 +51,8 @@ class DiffusionTransport(ABC):
         self.flux_scaling_factors = np.zeros(self.neumann_bc.values.shape)
         self.diff_coeff_by_length = np.zeros(self.neumann_bc.values.shape)
         self.discretization = self.transport_layers[0].discretization
+        self.time_step = None
+        self.capacitance = [1.0 for item in self.linear_systems]
 
     @classmethod
     def create(cls, input_dict: dict,
@@ -61,17 +63,7 @@ class DiffusionTransport(ABC):
                **kwargs):
         model_type = input_dict['type']
         input_dict['shift_axis'] = 0
-        if model_type == 'Constant':
-            input_dict['effective'] = False
-            transport_layers = [
-                tl.TransportLayer.create(
-                    input_dict,
-                    {'diffusion': input_dict['diffusion_coefficient']},
-                    discretization)]
-
-            return ConstantDiffusionTransport(
-                input_dict, transport_layers, **kwargs)
-        elif model_type == 'GasMixture' and fluid is not None:
+        if model_type == 'GasMixture' and fluid is not None:
             if id_inert is None:
                 raise ValueError('for type GasMixtureDiffusionTransport the '
                                  'integer value "id_inert" must be specified')
@@ -95,16 +87,6 @@ class DiffusionTransport(ABC):
                     input_dict, {'diffusion': permeability}, discretization)]
             return ScalarTransport(
                 input_dict, transport_layers, **kwargs)
-        # elif (model_type == 'TwoPhaseMixture'
-        #       and isinstance(fluid, fl.TwoPhaseMixture)):
-        #     input_dict['volume_fraction'] = input_dict['porosity']
-        #     input_dict['effective'] = True
-        #     permeability = input_dict.get('permeability', 0.0)
-        #     transport_layers = [
-        #         tl.TransportLayer.create(
-        #             input_dict, {'diffusion': permeability}, discretization)]
-        #     return p2pf.TwoPhaseMixtureDiffusionTransport(
-        #         input_dict, transport_layers, fluid, **kwargs)
         else:
             raise NotImplementedError(
                 'given type {} not implemented as concrete '
@@ -119,8 +101,53 @@ class DiffusionTransport(ABC):
                                indices=indices)
 
     @abstractmethod
-    def update(self, *args, **kwargs):
-        pass
+    def update(self, dirichlet_values, neumann_values,
+               explicit_sources: (list, np.ndarray) = None,
+               implicit_sources: (list, np.ndarray) = None, *args, **kwargs):
+
+        if self.time_step is not None:
+            if isinstance(self.time_step, (float, int)):
+                time_steps = [self.time_step for item in self.linear_systems]
+            else:
+                time_steps = self.time_step
+            if implicit_sources is None:
+                implicit_sources = [0.0 for item in self.linear_systems]
+            implicit_sources = [
+                implicit_sources[i] + self.capacitance[i] / time_steps[i]
+                for i in range(len(self.linear_systems))]
+            if explicit_sources is None:
+                explicit_sources = [0.0 for item in self.linear_systems]
+            if len(self.linear_systems) == 1:
+                old_solution = [self.solution_array]
+            else:
+                old_solution = self.solution_array
+            explicit_sources = [
+                explicit_sources[i]
+                + self.capacitance[i] / time_steps[i] * old_solution[i]
+                for i in range(len(self.linear_systems))]
+
+        for i, lin_sys in enumerate(self.linear_systems):
+            self.neumann_bc.values = mf.get_axis_values(
+                neumann_values[i],
+                axes=self.neumann_bc.axes,
+                indices=self.neumann_bc.indices)
+            self.dirichlet_bc.values = mf.get_axis_values(
+                dirichlet_values[i],
+                axes=self.dirichlet_bc.axes,
+                indices=self.dirichlet_bc.indices)
+            if explicit_sources is not None:
+                explicit_source_data = ls.SourceData(values=explicit_sources[i])
+            else:
+                explicit_source_data = None
+            if implicit_sources is not None:
+                implicit_source_data = ls.SourceData(values=implicit_sources[i])
+            else:
+                implicit_source_data = None
+            rhs_input = ls.RHSInput(neumann_bc=self.neumann_bc,
+                                    dirichlet_bc=self.dirichlet_bc,
+                                    explicit_sources=explicit_source_data,
+                                    implicit_sources=implicit_source_data)
+            lin_sys.update(rhs_input=rhs_input)
 
     @staticmethod
     def reshape_1d_input(array: np.ndarray):
@@ -228,22 +255,6 @@ class DiffusionTransport(ABC):
         return flux_scaling_factors, diff_coeff_by_length
 
 
-class ConstantDiffusionTransport(DiffusionTransport):
-    """
-    Abstract base class to describe the calculate the diffusion transport in
-    a solid or porous layer (here defined through the TransportLayer class).
-    """
-    def __init__(self, input_dict: dict,
-                 transport_layers: list[tl.TransportLayer], *args, **kwargs):
-        super().__init__(input_dict, transport_layers, *args, **kwargs)
-
-    def update(self, *args, **kwargs):
-        raise NotImplementedError
-
-    def calc_boundary_flux(self, boundary_type: str):
-        raise NotImplementedError
-
-
 class ScalarTransport(DiffusionTransport):
     """
     Abstract base class to describe the calculate the diffusion transport in
@@ -257,8 +268,8 @@ class ScalarTransport(DiffusionTransport):
 
     def update(self, dirichlet_values: np.ndarray,
                neumann_values: np.ndarray,
-               source_values: np.ndarray,
-               transport_property: (list, np.ndarray),
+               source_values: np.ndarray = None,
+               transport_property: (list, np.ndarray) = None,
                *args, **kwargs):
         dirichlet_values = self.rescale_input(dirichlet_values)
         neumann_values = self.rescale_input(neumann_values)
@@ -266,20 +277,9 @@ class ScalarTransport(DiffusionTransport):
             trans_layer.update({self.transport_type: transport_property})
             # trans_layer.conductance['diffusion'][:, 0:5, :, 0:10] = 1e-16
 
-        for i, lin_sys in enumerate(self.linear_systems):
-            self.neumann_bc.values = mf.get_axis_values(
-                    neumann_values,
-                    axes=self.neumann_bc.axes,
-                    indices=self.neumann_bc.indices)
-            self.dirichlet_bc.values = mf.get_axis_values(
-                    dirichlet_values,
-                    axes=self.dirichlet_bc.axes,
-                    indices=self.dirichlet_bc.indices)
-            volumetric_source = ls.SourceData(values=source_values)
-            rhs_input = ls.RHSInput(neumann_bc=self.neumann_bc,
-                                    dirichlet_bc=self.dirichlet_bc,
-                                    explicit_sources=volumetric_source)
-            lin_sys.update(rhs_input=rhs_input)
+        # Update linear systems
+        super().update([dirichlet_values], [neumann_values],
+                       explicit_sources=[source_values])
 
         solution_list = [lin_sys.solution_array for lin_sys
                          in self.linear_systems]
@@ -330,11 +330,12 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
                 'fluid must be of types (GasMixture, CanteraGasMixture, '
                 'TwoPhaseMixture, or CanteraTwoPhaseMixture)')
 
-    def update(self, temperature: np.ndarray, pressure: np.ndarray,
-               dirichlet_molar_composition: np.ndarray,
+    def update(self, dirichlet_molar_composition: np.ndarray,
                neumann_flux: np.ndarray,
                explicit_source: np.ndarray = None,
                implicit_source: np.ndarray = None,
+               temperature: np.ndarray = None,
+               pressure: np.ndarray = None,
                volume_fraction: np.ndarray = None,
                *args, **kwargs):
         # temperature = gf.rescale(temperature, self.fluid.temperature.shape)
@@ -346,8 +347,6 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         #     molar_composition, self.fluid.gas.mole_fraction.shape)
         # flux = np.asarray([self.reshape_input(item) for item in flux])
         # flux = gf.rescale(flux, self.fluid.gas.mole_fraction.shape)
-        temperature = self.rescale_input(temperature)
-        pressure = self.rescale_input(pressure)
         dirichlet_molar_composition = self.rescale_input(
             dirichlet_molar_composition, except_first_axis=True)
         neumann_flux = self.rescale_input(neumann_flux, except_first_axis=True)
@@ -361,6 +360,10 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
                                                  except_first_axis=True)
             implicit_source = [implicit_source[i] for i in range(len(
                 implicit_source)) if i != self.id_inert]
+        if temperature is not None:
+            temperature = self.rescale_input(temperature)
+        if pressure is not None:
+            pressure = self.rescale_input(pressure)
         if self.initialize:
             self.fluid.update(temperature, pressure,
                               dirichlet_molar_composition)
@@ -382,28 +385,10 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
                 volume_fraction=volume_fraction)
             # trans_layer.conductance['diffusion'][:, 0:5, :, 0:10] = 1e-16
 
-        for i, lin_sys in enumerate(self.linear_systems):
-            self.neumann_bc.values = mf.get_axis_values(
-                    boundary_flux[i],
-                    axes=self.neumann_bc.axes,
-                    indices=self.neumann_bc.indices)
-            self.dirichlet_bc.values = mf.get_axis_values(
-                    boundary_composition[i],
-                    axes=self.dirichlet_bc.axes,
-                    indices=self.dirichlet_bc.indices)
-            if explicit_source is not None:
-                explicit_source_data = ls.SourceData(values=explicit_source[i])
-            else:
-                explicit_source_data = None
-            if implicit_source is not None:
-                implicit_source_data = ls.SourceData(values=implicit_source[i])
-            else:
-                implicit_source_data = None
-            rhs_input = ls.RHSInput(neumann_bc=self.neumann_bc,
-                                    dirichlet_bc=self.dirichlet_bc,
-                                    explicit_sources=explicit_source_data,
-                                    implicit_sources=implicit_source_data)
-            lin_sys.update(rhs_input=rhs_input)
+        # Update linear systems
+        super().update(boundary_composition, boundary_flux,
+                       explicit_sources=explicit_source,
+                       implicit_sources=implicit_source)
 
         concentrations = [lin_sys.solution_array for
                           lin_sys in self.linear_systems]

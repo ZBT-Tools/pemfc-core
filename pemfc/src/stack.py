@@ -307,9 +307,8 @@ class Stack(OutputObject1D):
             [np.average(cell.e_0 - cell.voltage_loss, weights=cell.d_area)
              for cell in self.cells])
 
-        if self.current_control:
-            self.voltage_stack = np.sum(self.voltage_cells)
-            self.voltage_loss = self.e_0 - self.voltage_stack
+        self.voltage_stack = np.sum(self.voltage_cells)
+        self.voltage_loss = self.e_0 - self.voltage_stack
 
         # Calculate average current density from first cell
         ref_cell = self.cells[-1]
