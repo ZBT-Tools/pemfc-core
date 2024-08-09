@@ -434,7 +434,7 @@ class GasMixtureDiffusionTransport(DiffusionTransport):
         self.initialize = False
         # if gs.global_state.iteration == gs.global_state.max_iteration:
         #     # matplotlib.use('TkAgg')
-        #     matplotlib.use('TkAgg')
+        #     matplotlib.use('Agg')
         #     height = self.transport_layers[0].discretization.length[0]
         #     width = self.transport_layers[0].discretization.length[2]
         #     fig, ax = plt.subplots(figsize=(8, 6))

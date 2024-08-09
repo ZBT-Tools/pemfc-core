@@ -248,8 +248,8 @@ class TwoPhaseMixtureDiffusionTransport:
             saturation[:] = ((1.0 - self.urf) * saturation
                              + self.urf * saturation_old)
             # Constrain solution
-            # saturation[saturation < self.saturation_min] = self.saturation_min
-            # saturation[saturation > 1.0] = 1.0
+            saturation[saturation < self.saturation_min] = self.saturation_min
+            saturation[saturation > 1.0] = 1.0
             show_saturation = np.moveaxis(saturation,
                                           (0, 1, 2), (1, 0, 2))
 
@@ -294,7 +294,7 @@ class TwoPhaseMixtureDiffusionTransport:
         # if gs.global_state.iteration == 10:
             if self.fluid.gas.species_names[0] == 'O2':
                 # matplotlib.use('TkAgg')
-                matplotlib.use('TkAgg')
+                matplotlib.use('Agg')
                 height = self.transport.transport_layers[0].discretization.length[0]
                 width = self.transport.transport_layers[0].discretization.length[2]
                 fig, ax = plt.subplots(figsize=(8, 6))
