@@ -35,12 +35,20 @@ class TwoPhaseMixtureDiffusionTransport:
         input_dict['volume_fraction'] = (
             input_dict['porosity_model']['porosity'])
         input_dict['effective'] = True
-        input_dict['permeability'] = (
+        input_dict['transport_property'] = (
             input_dict['porosity_model']['permeability'])
         self.dict = input_dict
         self.transport = dt.DiffusionTransport.create(
             input_dict, discretization)
-        # self.temperature_transport = dt.DiffusionTransport.create()
+
+        self.calc_thermal_transport = True
+        if self.calc_thermal_transport:
+            input_dict_thermal = input_dict.copy()
+            input_dict_thermal['transport_property'] = input_dict[
+                'thermal_conductivity']
+            input_dict_thermal['effective'] = False
+            self.thermal_transport = dt.DiffusionTransport.create(
+                input_dict_thermal, discretization)
 
         # self.fluid = fluid.copy(self.liquid_transport.base_shape, plot_axis=-2)
         if fluid.array_shape != self.transport.base_shape:
@@ -211,6 +219,18 @@ class TwoPhaseMixtureDiffusionTransport:
                 liquid_mass_flux,
                 -vol_net_evap_rate * 1.0,
                 transport_property)
+
+            # Calculate dedicated temperature field for GDL
+            if self.calc_thermal_transport:
+                mw_pc = self.fluid.gas.species_mw[self.fluid.id_pc]
+                evap_enthalpy = (
+                        self.fluid.calc_vaporization_enthalpy(
+                            temperature) / mw_pc)
+                evaporation_heat = evap_enthalpy * vol_net_evap_rate
+                heat_flux = self.thermal_transport.calc_boundary_flux('Neumann')
+                self.thermal_transport.update(
+                    temperature, heat_flux,
+                    source_values=-evaporation_heat)
 
             # Save old capillary pressure
             capillary_pressure_old = np.copy(capillary_pressure)

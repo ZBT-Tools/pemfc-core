@@ -361,10 +361,45 @@ def linear_rescale_1d(arr: np.ndarray, new_shape: int):
     return np.interp(x_new, x_old, arr)
 
 
-def rescale(arr, new_shape: tuple[int, ...], axes: tuple[int, ...] = None):
-    if axes is None:
-        axes = tuple(i for i in range(len(new_shape)))
-    for i in range(len(axes)):
-        arr = np.apply_along_axis(linear_rescale_1d, axes[i], arr, new_shape[i])
-    return arr
+def segment_upscale(arr: np.ndarray, new_shape: int):
+    array_size = len(arr)
+    segment_size = int(new_shape / array_size)
+    if segment_size == 0:
+        raise ValueError("'new_shape' must be larger than length of input "
+                         "array shape")
+    result = np.ones(new_shape) * arr[-1]
+    for i in range(array_size):
+        id_start = i * segment_size
+        id_end = (i + 1) * segment_size
+        result[id_start:id_end] = arr[i]
+    return result
 
+
+def get_scaling_function_object(method: str):
+    if method == 'linear':
+        return linear_rescale_1d
+    elif method == 'constant_segments':
+        return segment_upscale
+    else:
+        raise NotImplementedError("only 'linear' and 'segmented_constant' "
+                                  "methods implemented right now")
+
+
+def rescale(arr: np.ndarray, new_shape: tuple[int, ...],
+            axes: tuple[int, ...] = None, method='linear'):
+    if arr.shape != new_shape:
+        if axes is None:
+            axes = tuple(i for i in range(len(new_shape)))
+        if isinstance(method, str):
+            functions = [get_scaling_function_object(method)
+                         for i in range(len(axes))]
+        elif isinstance(method, (list, tuple)):
+            functions = [get_scaling_function_object(method[i])
+                         for i in range(len(axes))]
+        else:
+            raise TypeError("'method' must be of type string, list or tuple of "
+                            "strings")
+        for i in range(len(axes)):
+            func = functions[i]
+            arr = np.apply_along_axis(func, axes[i], arr, new_shape[i])
+    return arr

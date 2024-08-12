@@ -6,7 +6,7 @@
         "calc_current_density": true
     },
     "simulation": {
-        "maximum_iteration": 100,
+        "maximum_iteration": 200,
         "minimum_iteration": 5,
         "convergence_criteria": 1e-07,
         "underrelaxation_factor": 0.9,
@@ -102,7 +102,7 @@
                 "pore_radius": 1e-5,
                 "relative_permeability_exponent": 3.0,
                 "saturation_model": {
-                    "type": "Leverett",
+                    "type": "Linear",
                     "Leverett": {
                         "type": "Leverett",
                         "contact_angle": 120.0,
@@ -207,6 +207,15 @@
                         "n": 0.11,
                         "precalculate_pressure": false,
                         "precalculate_gradient": false
+                    },
+                    "Linear": {
+                      "type": "Linear",
+                      "residual_wetting_saturation": 0.0,
+                      "residual_non-wetting_saturation": 0.0,
+                      "m": 0.00001,
+                      "b": 0,
+                      "precalculate_pressure": false,
+                      "precalculate_gradient": false
                     }
                 }
             },
