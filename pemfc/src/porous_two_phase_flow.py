@@ -46,6 +46,8 @@ class TwoPhaseMixtureDiffusionTransport:
             input_dict_thermal = input_dict.copy()
             input_dict_thermal['transport_property'] = input_dict[
                 'thermal_conductivity']
+            input_dict_thermal['boundary_patches']['Dirichlet'] = {
+                'axes': (0,), 'indices': (0,)}
             input_dict_thermal['effective'] = False
             self.thermal_transport = dt.DiffusionTransport.create(
                 input_dict_thermal, discretization)
@@ -232,6 +234,7 @@ class TwoPhaseMixtureDiffusionTransport:
                     temperature, heat_flux,
                     source_values=-evaporation_heat * 0.0)
 
+            temperature_gdl = self.thermal_transport.solution_array
             # Save old capillary pressure
             capillary_pressure_old = np.copy(capillary_pressure)
 
