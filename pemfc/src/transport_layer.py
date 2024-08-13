@@ -72,6 +72,37 @@ class TransportLayer(oo.OutputObject2D, ABC):
                                      include_axis=True, inverse=False)
         return np.asarray(factor_array)
 
+    def reshape_conductivity(self, conductivity):
+        conductivity = np.asarray(conductivity)
+        unity_array = np.ones(self.geometric_factors.shape)
+        if np.ndim(conductivity) == 0:
+            conductivity = unity_array * conductivity
+        elif np.ndim(conductivity) == 1:
+            if len(conductivity) == 2:
+                conductivity = np.asarray(
+                    [conductivity[0], conductivity[1], conductivity[1]])
+                conductivity = (
+                    conductivity * unity_array.transpose()).transpose()
+            elif len(conductivity) == 3:
+                conductivity = (
+                    conductivity * unity_array.transpose()).transpose()
+            else:
+                raise ValueError('conductivity array is limited to three '
+                                 'entries in first dimension')
+        elif (np.ndim(conductivity) == np.ndim(unity_array) and
+                conductivity.shape == unity_array.shape):
+            conductivity = conductivity * unity_array
+        elif conductivity.shape == unity_array[0].shape:
+            conductivity = np.asarray([conductivity for i in range(len(
+                unity_array))])
+            conductivity = conductivity * unity_array
+        else:
+            raise ValueError('conductivity must be either single scalar,'
+                             'an iterable with two (tp, ip) or three (x, '
+                             'y, z) entries, or a full array with the same '
+                             'shape as the attribute "geometric_factors"')
+        return conductivity
+
     def calc_conductance(self, conductivity, effective=False):
         conductivity = np.asarray(conductivity)
         if np.ndim(conductivity) == 0:

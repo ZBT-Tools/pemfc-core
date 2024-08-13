@@ -354,7 +354,8 @@ class ScalarTransport(DiffusionTransport):
     def get_transport_coeffs(self, axes, indices):
         transport_coeff = self.transport_layers[0].transport_properties[
             self.transport_type]
-        transport_coeff = np.asarray(transport_coeff)
+        transport_coeff = self.transport_layers[0].reshape_conductivity(
+            transport_coeff)
         return self.get_effective_values(transport_coeff, axes, indices)
 
 

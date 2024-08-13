@@ -230,7 +230,7 @@ class TwoPhaseMixtureDiffusionTransport:
                 heat_flux = self.thermal_transport.calc_boundary_flux('Neumann')
                 self.thermal_transport.update(
                     temperature, heat_flux,
-                    source_values=-evaporation_heat)
+                    source_values=-evaporation_heat * 0.0)
 
             # Save old capillary pressure
             capillary_pressure_old = np.copy(capillary_pressure)
