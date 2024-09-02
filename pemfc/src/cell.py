@@ -70,14 +70,14 @@ class Cell(OutputObject2D):
             half_cell.channel.fluid.extend_data_names(
                 half_cell.channel.fluid.name)
 
-        """heat conductivity along and through the cell layers"""
         # self.width_straight_channels = \
         #     self.cathode.flow_field.width_straight_channels
-        self.d_area = self.cathode.gde.discretization.d_area
+        self.discretization = self.cathode.gde.discretization
+        self.d_area = self.discretization.d_area
 
         # Setup membrane
         self.membrane = membrane.Membrane.create(
-            membrane_dict, self.cathode.gde.discretization)
+            membrane_dict, self.discretization)
         # memb = membrane.Constant(
         #     membrane_dict, self.cathode.gde.discretization)
         # Overall cell thickness (cell pitch)
@@ -159,6 +159,8 @@ class Cell(OutputObject2D):
         # Voltage loss over the single cell stack (bpp-to-bpp)
         self.voltage_loss = np.zeros(self.electrochemical_conductance.shape)
         self.voltage = np.zeros(self.electrochemical_conductance.shape)
+        # Heat source array
+        self.explicit_heat_sources = np.zeros(self.temp_layer.shape)
 
         # Assign results to output data
         self.add_print_data(self.current_density[self.layer_id['membrane']],
@@ -220,6 +222,12 @@ class Cell(OutputObject2D):
             self.cathode.w_cross_flow[:] = self.membrane.water_flux * -1.0
             self.anode.w_cross_flow[:] = self.membrane.water_flux
 
+        # Update electrochemical heat sources
+        self.calc_electrochemical_heat_sources(
+            current_density[self.layer_id['membrane']])
+        # Calculate heat flux at MEA-GDL interfaces
+        heat_flux_cat_gdl, heat_flux_ano_gdl = self.calc_heat_flux()
+
         mea_current_density_prev = (
             self.current_density[self.layer_id['membrane']])
         mea_current_density = current_density[self.layer_id['membrane']]
@@ -229,14 +237,16 @@ class Cell(OutputObject2D):
         self.cathode.update(mea_current_density,
                             cathode_temperature,
                             update_channel=update_channel,
-                            current_control=current_control)
+                            current_control=current_control,
+                            heat_flux=heat_flux_cat_gdl)
         anode_temperature = np.stack(
             [self.temp_layer[self.interface_id['anode_mem_gde']],
              self.temp_layer[self.interface_id['anode_gde_bpp']]], axis=0)
         self.anode.update(mea_current_density,
                           anode_temperature,
                           update_channel=update_channel,
-                          current_control=True)
+                          current_control=True,
+                          heat_flux=heat_flux_ano_gdl)
         if self.cathode.electrochemistry.corrected_current_density is not None:
             corrected_current_density = \
                 self.cathode.electrochemistry.corrected_current_density
@@ -290,7 +300,57 @@ class Cell(OutputObject2D):
         #     electrode.v_loss[:] *= correction_factor
         # self.membrane.v_loss[:] *= correction_factor
 
-    def calc_electrochemical_conductance(self, current_density):
+    def calc_electrochemical_heat_sources(self, current_density: np.ndarray):
+        current = current_density * self.d_area
+        half_ohmic_heat_membrane = (
+                0.5 * self.membrane.omega * np.square(current))
+
+        # Cathode gde-mem source
+        cathode_source = np.copy(half_ohmic_heat_membrane)
+        idx = self.interface_id['cathode_gde_mem']
+        v_loss = np.minimum(self.e_0, self.cathode.voltage_loss)
+        v_loss[v_loss < 0.0] = 0.0
+        cathode_reaction_heat = (self.e_tn - self.e_0 + v_loss) * current
+        cathode_source += cathode_reaction_heat
+        self.explicit_heat_sources[idx] = cathode_source
+
+        # Anode gde-mem source
+        idx = self.interface_id['anode_mem_gde']
+        anode_source = np.copy(half_ohmic_heat_membrane)
+        v_loss = np.minimum(self.e_0, self.anode.voltage_loss)
+        v_loss[v_loss < 0.0] = 0.0
+        anode_reaction_heat = v_loss * current
+        anode_source += anode_reaction_heat
+        self.explicit_heat_sources[idx] = anode_source
+
+    def calc_heat_flux(self):
+        # Retrieve layer and interface ids
+        idx_mem = self.layer_id['membrane']
+        idx_cat_gde_mem = self.interface_id['cathode_gde_mem']
+        idx_ano_mem_gde = self.interface_id['anode_mem_gde']
+
+        # Conductance [W/K] of membrane in x-direction (index: 0)
+        cond_mem = self.thermal_system.conductance[0][idx_mem]
+
+        # Temperatures [K] at cathode and anode gde-membrane interfaces
+        temp_cat_gde_mem = self.temp_layer[idx_cat_gde_mem]
+        temp_ano_mem_gde = self.temp_layer[idx_ano_mem_gde]
+
+        # Heat sources
+        heat_source_cat = self.explicit_heat_sources[idx_cat_gde_mem]
+        heat_source_ano = self.explicit_heat_sources[idx_ano_mem_gde]
+
+        # Heat [W] in membrane from cathode to anode side
+        heat_membrane = - cond_mem * (temp_ano_mem_gde - temp_cat_gde_mem)
+
+        # Energy balance at mem-gde interfaces to calculate heat flux [W/m²]
+        heat_flux_cat_gdl = ((heat_source_cat - heat_membrane) /
+                             self.cathode.discretization.d_area)
+        heat_flux_ano_gdl = ((heat_source_ano + heat_membrane) /
+                             self.anode.discretization.d_area)
+        return heat_flux_cat_gdl, heat_flux_ano_gdl
+
+    def calc_electrochemical_conductance(self, current_density: np.ndarray):
         """
         Calculates the element-wise area-specific electrochemical conductance
         in through-plane direction (x-direction). This inverse resistance

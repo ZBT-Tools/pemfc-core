@@ -103,6 +103,7 @@ class TwoPhaseMixtureDiffusionTransport:
                molar_composition: np.ndarray,
                liquid_saturation_value: np.ndarray,
                liquid_mass_flux: np.ndarray,
+               heat_flux: np.ndarray,
                update_fluid: bool = True,
                *args, **kwargs):
         # Rescale input data
@@ -229,7 +230,8 @@ class TwoPhaseMixtureDiffusionTransport:
                         self.fluid.calc_vaporization_enthalpy(
                             temperature) / mw_pc)
                 evaporation_heat = evap_enthalpy * vol_net_evap_rate
-                heat_flux = self.thermal_transport.calc_boundary_flux('Neumann')
+                # heat_flux = -self.thermal_transport.calc_boundary_flux(
+                #     'Neumann', values=temperature)
                 self.thermal_transport.update(
                     temperature, heat_flux,
                     source_values=-evaporation_heat * 0.0)
@@ -293,6 +295,8 @@ class TwoPhaseMixtureDiffusionTransport:
                                                   (0, 1, 2), (1, 0, 2))
             show_temperature = np.moveaxis(temperature,
                                            (0, 1, 2), (1, 0, 2))
+            show_temperature_gdl = np.moveaxis(temperature_gdl,
+                                               (0, 1, 2), (1, 0, 2))
             iteration += 1
 
         show_concentration = np.moveaxis(self.fluid.gas.concentration,

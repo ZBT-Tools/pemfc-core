@@ -205,8 +205,9 @@ class HalfCell(OutputObject2D):
         self.voltage_loss = np.zeros(self.gde.discretization.shape)
 
     def update(self, current_density: np.ndarray,
-               temperature: np.ndarray, update_channel=True,
-               current_control=True):
+               temperature: np.ndarray, update_channel: bool = True,
+               current_control: bool = True,
+               heat_flux: np.ndarray = None):
         """
         This function coordinates the program sequence
         """
@@ -265,7 +266,7 @@ class HalfCell(OutputObject2D):
                         mol_comp = self.gdl_diffusion.solution_array
                         self.two_phase_flow.update(
                             temp, press, mol_comp, ch_gdl_sat,
-                            liquid_water_flux, update_fluid=True)
+                            liquid_water_flux, heat_flux, update_fluid=True)
                         fluid = self.two_phase_flow.fluid
                         molar_mass = fluid.species_mw[fluid.id_pc]
                         molar_evap_rate_old = np.copy(molar_evap_rate)
@@ -314,8 +315,6 @@ class HalfCell(OutputObject2D):
                     self.gdl_diffusion.flux_scaling_factors[self.id_fuel])
                 # diff_coeff_by_length = self.reduce_discretization(
                 #     self.gdl_diffusion.diff_coeff_by_length[self.id_fuel])
-
-
 
                 # fuel_gdl_concentration = np.asarray([
                 #     ip.interpolate_1d(channel_concentration[self.id_fuel])

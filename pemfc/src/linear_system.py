@@ -1016,35 +1016,7 @@ class TemperatureSystem(StackLinearSystem):
             if electrochemical_heat:
                 # Cathode gde-mem source
                 idx = self.cells[i].interface_id['cathode_gde_mem']
-                current = (self.cells[i].current_density[idx]
-                           * self.cells[i].d_area)
-
-                cathode_ohmic_heat_membrane = (
-                        0.5 * self.cells[i].membrane.omega * np.square(current))
-                source = np.copy(cathode_ohmic_heat_membrane)
-
-                # test_current_density = np.zeros(current.shape)
-                # test_current_density[:] = 30000.0
-                # test_current = test_current_density * cell.d_area
-                # test_omega = np.copy(cell.membrane.omega)
-                # test_omega[:] = test_omega[0]
-                # test_ohmic_heat = 0.5 * test_omega * np.square(test_current)
-                # source = np.copy(test_ohmic_heat)
-
-                v_loss = np.minimum(
-                    self.e_0, self.cells[i].cathode.voltage_loss)
-                v_loss[v_loss < 0.0] = 0.0
-                reaction_heat = (self.e_tn - self.e_0 + v_loss) * current
-                # reaction_heat_sum = np.sum(reaction_heat)
-
-                # test_v_loss = np.copy(v_loss)
-                # test_v_loss[:] = 0.3
-                # test_reaction_heat = (
-                #         (self.e_tn - self.e_0 + test_v_loss) * test_current)
-                # test_reaction_heat_sum = np.sum(test_reaction_heat)
-
-                source += reaction_heat
-                # source *= 1.0
+                source = self.cells[i].explicit_heat_sources[idx]
                 cell_sys.rhs_dyn[:], _ = (
                     self.add_explicit_source(
                         cell_sys.rhs_dyn, source.ravel(order='F'),
@@ -1052,16 +1024,7 @@ class TemperatureSystem(StackLinearSystem):
 
                 # Anode gde-mem source
                 idx = self.cells[i].interface_id['anode_mem_gde']
-                current = (self.cells[i].current_density[idx]
-                           * self.cells[i].d_area)
-                anode_ohmic_heat_membrane = (
-                        0.5 * self.cells[i].membrane.omega * np.square(current))
-                source = anode_ohmic_heat_membrane
-                v_loss = np.minimum(self.e_0, self.cells[i].anode.voltage_loss)
-                v_loss[v_loss < 0.0] = 0.0
-                reaction_heat = v_loss * current
-                source += reaction_heat
-                source *= 1.0
+                source = self.cells[i].explicit_heat_sources[idx]
                 cell_sys.rhs_dyn[:], _ = self.add_explicit_source(
                     cell_sys.rhs_dyn, source.ravel(order='F'),
                     index_array=cell_sys.index_array, layer_id=idx)

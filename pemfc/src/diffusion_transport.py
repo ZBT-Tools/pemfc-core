@@ -264,20 +264,23 @@ class DiffusionTransport(ABC):
             eff_values *= volume_fraction ** trans_layer.bruggeman_exponent
         return eff_values
 
-    def calc_boundary_flux(self, boundary_type: str):
+    def calc_boundary_flux(self, boundary_type: str, values: np.ndarray = None):
         # Calculate boundary flux: defined positive if going into domain,
         # negative if going out of domain
         axes, indices_boundary, indices_adjacent = self.get_boundary_indices(
             boundary_type)
-        boundary_flux = self.calc_flux(axes, indices_boundary, indices_adjacent)
+        boundary_flux = self.calc_flux(axes, indices_boundary,
+                                       indices_adjacent, values=values)
         return boundary_flux
 
-    def calc_flux(self, axes, indices, indices_neighbour):
+    def calc_flux(self, axes, indices, indices_neighbour,
+                  values: np.ndarray = None):
         # Calculate flux between cell located at indices and neighbouring
         # cell located at indices_neighbour
-        values = (self.get_values(self.solution_array, axes, indices))
-        values_neighbour = (self.get_values(self.solution_array, axes,
-                                            indices_neighbour))
+        if values is None:
+            values = self.solution_array
+        values_boundary = self.get_values(values, axes, indices)
+        values_neighbour = self.get_values(values, axes, indices_neighbour)
         # Be careful to use the shifted node d_volume from one of the
         # TransportLayer attributes instead of the original discrete volumes
         # from the Discretization attributes
@@ -303,7 +306,7 @@ class DiffusionTransport(ABC):
         #                            axis=-1)
         # diff_coeff_avg = np.average(np.average(diff_coeffs, axis=-1),
         #                             axis=-1)
-        flux = - transport_coeff_by_length * (values - values_neighbour)
+        flux = - transport_coeff_by_length * (values_boundary - values_neighbour)
         return flux
 
     @abstractmethod
@@ -356,7 +359,9 @@ class ScalarTransport(DiffusionTransport):
             self.transport_type]
         transport_coeff = self.transport_layers[0].reshape_conductivity(
             transport_coeff)
-        return self.get_effective_values(transport_coeff, axes, indices)
+        transport_coeff = self.get_effective_values(transport_coeff, axes,
+                                                    indices)
+        return transport_coeff[axes[0]]
 
 
 class GasMixtureDiffusionTransport(DiffusionTransport):
