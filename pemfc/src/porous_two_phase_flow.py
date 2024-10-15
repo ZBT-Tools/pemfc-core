@@ -317,28 +317,28 @@ class TwoPhaseMixtureDiffusionTransport:
                                     self.transport.transport_layers[0].d_volume)
         # if gs.global_state.iteration == 200:
         #     print('test')
-        if gs.global_state.iteration == gs.global_state.max_iteration:
-        # if gs.global_state.iteration == 10:
-            if self.fluid.gas.species_names[0] == 'O2':
-                # matplotlib.use('TkAgg')
-                matplotlib.use('Agg')
-                height = self.transport.transport_layers[0].discretization.length[0]
-                width = self.transport.transport_layers[0].discretization.length[2]
-                fig, ax = plt.subplots(figsize=(8, 6))
-                data = show_saturation[5]
-                im = ax.imshow(data, cmap=matplotlib.cm.coolwarm,
-                               interpolation='none', extent=[0, width, 0, height])
-                divider = make_axes_locatable(ax)
-                cax = divider.append_axes("right", size="5%", pad=0.1)
-                # plt.xlim([0, 1.0])
-                # plt.ylim([0, 1.0])
-                ax.set_title('Cathode GDL Saturation')
-                ax.set_xlabel('GDL Model Domain Width / m')
-                ax.set_ylabel('GDL Model Domain Height / m')
-                fig.colorbar(im, cax=cax, ticks=[np.min(data),  np.max(data)])
-                # plt.show()
-                plt.savefig(r'D:\Software\Python\PycharmProjects\pemfc-core'
-                            r'\output\GDL_Images\Cathode_GDL_Saturation.png')
-                # input("Press Enter to continue...")
-                # matplotlib.use('Agg')
+        # if gs.global_state.iteration == gs.global_state.max_iteration:
+        # # if gs.global_state.iteration == 10:
+        #     if self.fluid.gas.species_names[0] == 'O2':
+        #         # matplotlib.use('TkAgg')
+        #         matplotlib.use('Agg')
+        #         height = self.transport.transport_layers[0].discretization.length[0]
+        #         width = self.transport.transport_layers[0].discretization.length[2]
+        #         fig, ax = plt.subplots(figsize=(8, 6))
+        #         data = show_saturation[5]
+        #         im = ax.imshow(data, cmap=matplotlib.cm.coolwarm,
+        #                        interpolation='none', extent=[0, width, 0, height])
+        #         divider = make_axes_locatable(ax)
+        #         cax = divider.append_axes("right", size="5%", pad=0.1)
+        #         # plt.xlim([0, 1.0])
+        #         # plt.ylim([0, 1.0])
+        #         ax.set_title('Cathode GDL Saturation')
+        #         ax.set_xlabel('GDL Model Domain Width / m')
+        #         ax.set_ylabel('GDL Model Domain Height / m')
+        #         fig.colorbar(im, cax=cax, ticks=[np.min(data),  np.max(data)])
+        #         # plt.show()
+        #         plt.savefig(r'D:\Software\Python\PycharmProjects\pemfc-core'
+        #                     r'\output\GDL_Images\Cathode_GDL_Saturation.png')
+        #         # input("Press Enter to continue...")
+        #         # matplotlib.use('Agg')
 

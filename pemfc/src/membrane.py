@@ -350,8 +350,8 @@ class YeWang2007Membrane(SpringerMembrane):
         self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
         # Absolute resistance [Ohm]
         self.omega[:] = self.omega_ca / self.discretization.d_area
-        if gs.global_state.iteration == 30:
-            print('test')
+        # if gs.global_state.iteration == 30:
+        #     print('test')
         return self.omega, self.omega_ca
 
     def calc_eod(self):

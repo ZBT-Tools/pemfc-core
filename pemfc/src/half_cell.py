@@ -415,8 +415,8 @@ class HalfCell(OutputObject2D):
                 self.channel.mole_flow[self.id_fuel, self.channel.id_in]
                 * self.faraday * self.n_charge
                 / (np.sum(current) * abs(self.n_stoi[self.id_fuel])))
-            if gs.global_state.iteration == 100:
-                print('test')
+            # if gs.global_state.iteration == 100:
+            #     print('test')
             if current_control and self.inlet_stoi < 1.0:
                 raise ValueError('stoichiometry of cell {0} '
                                  'becomes smaller than one: {1:0.3f}'

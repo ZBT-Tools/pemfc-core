@@ -44,4 +44,4 @@ if isinstance(channel, chl.TwoPhaseMixtureChannel):
 for i in range(5):
     channel.update(mass_flow_in=5e-5, update_mass=True, update_fluid=True,
                    update_flow=True)
-print('test')
+# print('test')
