@@ -93,7 +93,7 @@ class Simulation:
         self.output = output.Output(output_dict)
 
     # @do_c_profile
-    def run(self):
+    def run(self, print_iterations=False):
         """
         This function coordinates the program sequence
         """
@@ -129,12 +129,14 @@ class Simulation:
                 current_error, temp_error = self.calc_convergence_criteria()
                 current_errors.append(current_error)
                 temp_errors.append(temp_error)
-                if len(target_value) < 1:
-                    print(counter)
+                if print_iterations:
+                    if len(target_value) < 1:
+                        print(counter)
                 counter += 1
-                print('Iteration: ', counter)
-                print('Current error: ', current_error)
-                print('Temperature error: ', temp_error)
+                if print_iterations:
+                    print('Iteration: ', counter)
+                    print('Current error: ', current_error)
+                    print('Temperature error: ', temp_error)
                 gs.global_state.iteration = counter
                 gs.global_state.error = current_error + temp_error
                 if ((current_error < self.it_crit and temp_error < self.it_crit)
