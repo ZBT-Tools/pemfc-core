@@ -93,7 +93,7 @@ class Simulation:
         self.output = output.Output(output_dict)
 
     # @do_c_profile
-    def run(self, print_iterations=False):
+    def run(self, print_iterations=False, save_summary=False):
         """
         This function coordinates the program sequence
         """
@@ -226,8 +226,9 @@ class Simulation:
             global_data_list.append(global_data)
             output_stop_time = timeit.default_timer()
             self.timing['output'] += output_stop_time - output_start_time
-            self.output.print_global_data(self, global_data)
-            self.output.save_global_results(global_data)
+            if save_summary:
+                self.output.print_global_data(self, global_data)
+                self.output.save_global_results(global_data)
 
         output_start_time = timeit.default_timer()
 
