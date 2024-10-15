@@ -1084,7 +1084,7 @@ class TemperatureSystem(StackLinearSystem):
             if cell.channel_land_discretization:
                 idx = cell.interface_id['cathode_bpp_bpp']
             else:
-                idx = cell.interface_id['cathode_bpp_bc']
+                idx = cell.interface_id['cathode_bc_bpp']
             temp_bpp = g_func.reduce_dimension(cell.temp_layer[idx][:, -1])
             wall_temp = np.average(np.stack([temp_gde, temp_bpp],
                                             axis=temp_gde.ndim), axis=-1)

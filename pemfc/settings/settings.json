@@ -102,12 +102,12 @@
                 "pore_radius": 1e-5,
                 "relative_permeability_exponent": 3.0,
                 "saturation_model": {
-                    "type": "Linear",
+                    "type": "Leverett",
                     "Leverett": {
                         "type": "Leverett",
                         "contact_angle": 120.0,
-                        "precalculate_pressure": false,
-                        "precalculate_gradient": false
+                        "precalculate_pressure": true,
+                        "precalculate_gradient": true
                     },
                     "DataTable": {
                         "type": "DataTable",
@@ -371,8 +371,8 @@
                     "Leverett": {
                         "type": "Leverett",
                         "contact_angle": 120.0,
-                        "precalculate_pressure": false,
-                        "precalculate_gradient": false
+                        "precalculate_pressure": true,
+                        "precalculate_gradient": true
                     },
                     "DataTable": {
                         "type": "DataTable",

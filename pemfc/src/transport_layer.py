@@ -208,15 +208,16 @@ class TransportLayer(oo.OutputObject2D, ABC):
     def calc_average_inter_node_value(values: (list, np.ndarray), axis):
         return mf.transform_nodes(values, axis, mode='average')
 
-    def update(self, transport_properties: dict,
+    def update(self, transport_properties: dict = None,
                volume_fraction: np.ndarray = None, *args, **kwargs):
         if volume_fraction is not None:
             self.volume_fraction = volume_fraction
             self.effective = True
-        for key in self.conductance:
-            self.transport_properties.update(transport_properties)
-            self.conductance[key][:] = self.calc_conductance(
-                transport_properties[key], effective=self.effective)
+        if transport_properties is not None:
+            for key in self.conductance:
+                self.transport_properties.update(transport_properties)
+                self.conductance[key][:] = self.calc_conductance(
+                    transport_properties[key], effective=self.effective)
 
 
 class TransportLayer2D(TransportLayer):
