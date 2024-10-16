@@ -112,7 +112,6 @@ class Simulation:
             temp_errors = []
             convergence_flags = []
             self.timing['simulation'] = 0.0
-            self.timing['output'] = 0.0
             simulation_start_time = timeit.default_timer()
             counter = 0
             gs.global_state.max_iteration = self.max_it
@@ -150,40 +149,31 @@ class Simulation:
             simulation_stop_time = timeit.default_timer()
             simulation_time = simulation_stop_time - simulation_start_time
             self.timing['simulation'] += simulation_time
-            output_start_time = timeit.default_timer()
 
-            if not self.stack.break_program:
-                # voltage_loss = self.get_voltage_losses(self.stack)
-                cell_voltages.append(np.average([cell.voltage for cell in
-                                                 self.stack.cells]))
-                current_densities.append(self.stack.current_density_avg)
-
-                case_name = 'Case'+str(i)
-                self.output.save(case_name, self.stack)
-                local_data_dict = self.output.get_data(self.stack)
-                local_data_dict['Iterations'] = \
-                    {'value': [list(range(counter))], 'units': '-'}
-                local_data_dict['Current Density Error'] = \
-                    {'value': [current_errors], 'units': '-',
-                     'xkey': 'Iterations'}
-                local_data_dict['Temperature Error'] = \
-                    {'value': [current_errors], 'units': '-',
-                     'xkey': 'Iterations'}
-
-                local_data_list.append(local_data_dict)
-                if self.output.save_plot:
-                    path = os.path.join(self.output.output_dir, case_name,
-                                        'plots', 'Convergence.png')
-                    self.output.create_figure(
-                        path, list(range(counter)),
-                        [current_errors, temp_errors],
-                        xlabels='Iteration', ylabels='Error',
-                        yscale='log', legend=['Current Density', 'Temperature'],
-                        plot_axis=-1)
-            else:
+            if self.stack.break_program:
                 target_value = target_value[0:-i]
                 break
 
+            self.timing['output'] = 0.0
+            output_start_time = timeit.default_timer()
+
+            # Collect local data
+            # voltage_loss = self.get_voltage_losses(self.stack)
+            cell_voltages.append(np.average([cell.voltage for cell in
+                                             self.stack.cells]))
+            current_densities.append(self.stack.current_density_avg)
+            local_data_dict = self.output.get_data(self.stack)
+            local_data_dict['Iterations'] = \
+                {'value': [list(range(counter))], 'units': '-'}
+            local_data_dict['Current Density Error'] = \
+                {'value': [current_errors], 'units': '-',
+                 'xkey': 'Iterations'}
+            local_data_dict['Temperature Error'] = \
+                {'value': [current_errors], 'units': '-',
+                 'xkey': 'Iterations'}
+            local_data_list.append(local_data_dict)
+
+            # Collect global data
             current_density_avg = np.average(
                     [np.average(np.average(cell.current_density, axis=0),
                                 weights=cell.d_area)
@@ -224,14 +214,26 @@ class Simulation:
                      'units': 'kg/s', 'format': '.4E'},
                 }
             global_data_list.append(global_data)
-            output_stop_time = timeit.default_timer()
-            self.timing['output'] += output_stop_time - output_start_time
-            if save_summary:
+
+            # Save data
+            case_name = 'Case'+str(i)
+            self.output.save(case_name, self.stack)
+            if self.output.save_settings.plot:
+                path = os.path.join(self.output.output_dir, case_name,
+                                    'plots', 'Convergence.png')
+                self.output.create_figure(
+                    path, list(range(counter)),
+                    [current_errors, temp_errors],
+                    xlabels='Iteration', ylabels='Error',
+                    yscale='log', legend=['Current Density', 'Temperature'],
+                    plot_axis=-1)
+            if self.output.save_settings.summary:
                 self.output.print_global_data(self, global_data)
                 self.output.save_global_results(global_data)
+            output_stop_time = timeit.default_timer()
+            self.timing['output'] += output_stop_time - output_start_time
 
         output_start_time = timeit.default_timer()
-
         # print polarization curve, if more than one current_density value
         # was provided
         if len(target_value) > 1:

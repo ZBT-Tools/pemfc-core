@@ -8,6 +8,8 @@ import sys
 import matplotlib.pyplot as plt
 import timeit
 import json
+import dataclasses as dc
+from dataclasses import dataclass
 from json import JSONEncoder
 
 # Local module imports
@@ -35,12 +37,29 @@ class NumpyArrayEncoder(JSONEncoder):
         return JSONEncoder.default(self, obj)
 
 
+@dataclass
+class SaveSettings:
+    csv: bool = True
+    plot: bool = True
+    settings: bool = True
+    summary: bool = True
+    
+
 class Output:
 
     def __init__(self, dict_output):
-        self.save_csv = dict_output['save_csv']
+        self.save_settings = SaveSettings(
+            csv=dict_output['save']['csv'],
+            plot=dict_output['save']['plot'],
+            settings=dict_output['save']['settings'],
+            summary=dict_output['save']['summary'])
+        if any(dict_output['save'].values()):
+            self.make_dir = True
+        else:
+            self.make_dir = False
+        # self.save_csv = dict_output['save_csv']
         # switch to save the csv data
-        self.save_plot = dict_output['save_plot']
+        # self.save_plot = dict_output['save_plot']
         # switch to save the plot data
         self.show_loss = dict_output['show_loss']
         # switch to show the single voltage losses in the u-i-graph
@@ -50,13 +69,17 @@ class Output:
         self.output_dir = dict_output.get('directory',
                                           os.path.join(os.getcwd(), 'output'))
         self.case_name = None
-        if not os.path.exists(self.output_dir):
-            try:
-                original_umask = os.umask(0)
-                # print(self.output_dir)
-                os.makedirs(self.output_dir)  # , 0o0777)
-            finally:
-                os.umask(original_umask)
+
+        # Only create output directory if any of the save settings is True
+        # and if it not yet exists
+        if self.make_dir:
+            if not os.path.exists(self.output_dir):
+                try:
+                    original_umask = os.umask(0)
+                    # print(self.output_dir)
+                    os.makedirs(self.output_dir)  # , 0o0777)
+                finally:
+                    os.umask(original_umask)
 
         # self.clean_directory(self.output_dir)
 
@@ -352,7 +375,7 @@ class Output:
     def write_data(self, x_values, data_array, x_label, data_name,
                    units='-', colormap='coolwarm', **kwargs):
         file_name = kwargs.get('file_name', data_name.replace(' ', '_'))
-        if kwargs.get('save_plot', self.save_plot):
+        if kwargs.get('save_plot', self.save_settings.plot):
             y_label = data_name + ' $[' + units + ']$'
             if 'directory' in kwargs:
                 directory = kwargs['directory']
@@ -364,7 +387,7 @@ class Output:
             file_path = os.path.join(directory, file_name + '.png')
             self.create_figure(file_path, x_values, data_array, x_label,
                                y_label, colormap=colormap, **kwargs)
-        if kwargs.get('save_csv', self.save_csv):
+        if kwargs.get('save_csv', self.save_settings.csv):
             if 'directory' in kwargs:
                 directory = kwargs['directory']
             elif 'csv_dir' in kwargs:
@@ -509,20 +532,20 @@ class Output:
 
     def save(self, folder_name, fc_stack: stack.Stack):
         self.case_name = folder_name
+        if not self.save_settings.csv and not self.save_settings.plot:
+            return None
         case_path = os.path.join(self.output_dir, folder_name)
-        if not os.path.exists(case_path):
-            os.makedirs(case_path)
+        if self.make_dir:
+            if not os.path.exists(case_path):
+                os.makedirs(case_path)
         # else:
         #     self.clean_directory(case_path)
-
-        if not self.save_csv and not self.save_plot:
-            return None
 
         if not isinstance(fc_stack, stack.Stack):
             raise TypeError('argument fc_stack must be of type Stack from pemfc'
                             ' module')
-        csv_path = os.path.join(case_path, 'csv_data')
-        plot_path = os.path.join(case_path, 'plots')
+        csv_path = os.path.join(case_path, "csv_data")
+        plot_path = os.path.join(case_path, "plots")
         if not os.path.exists(csv_path):
             os.makedirs(csv_path)
         else:
