@@ -102,7 +102,7 @@ class Stack(OutputObject1D):
                 cell_dict['temp_amb'] = temperature_dict['temp_amb']
             except KeyError:
                 raise KeyError("parameter 'temp_amb' must be provided if "
-                               "'allpha_amb' is given")
+                               "'alpha_amb' is given")
         for i in range(self.n_cells):
             if self.n_cells == 1:
                 cell_dict['first_cell'] = True

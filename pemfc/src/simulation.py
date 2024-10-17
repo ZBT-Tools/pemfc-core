@@ -166,10 +166,10 @@ class Simulation:
             local_data_dict['Iterations'] = \
                 {'value': [list(range(counter))], 'units': '-'}
             local_data_dict['Current Density Error'] = \
-                {'value': [current_errors], 'units': '-',
+                {'value': current_errors, 'units': '-',
                  'xkey': 'Iterations'}
             local_data_dict['Temperature Error'] = \
-                {'value': [current_errors], 'units': '-',
+                {'value': temp_errors, 'units': '-',
                  'xkey': 'Iterations'}
             local_data_list.append(local_data_dict)
 
