@@ -102,7 +102,7 @@
                 "pore_radius": 1e-5,
                 "relative_permeability_exponent": 3.0,
                 "saturation_model": {
-                    "type": "Leverett",
+                    "type": "VanGenuchten",
                     "Leverett": {
                         "type": "Leverett",
                         "contact_angle": 120.0,
@@ -367,7 +367,7 @@
                 "pore_radius": 1e-5,
                 "relative_permeability_exponent": 3.0,
                 "saturation_model": {
-                    "type": "Leverett",
+                    "type": "VanGenuchten",
                     "Leverett": {
                         "type": "Leverett",
                         "contact_angle": 120.0,
@@ -461,6 +461,26 @@
                         ],
                         "precalculate_pressure": true,
                         "precalculate_gradient": true
+                    },
+                    "VanGenuchten": {
+                        "type": "VanGenuchten",
+                        "residual_wetting_saturation": 0.0,
+                        "residual_non-wetting_saturation": 0.1,
+                        "wetting": false,
+                        "alpha": 0.00001,
+                        "m": 1,
+                        "n": 0.11,
+                        "precalculate_pressure": false,
+                        "precalculate_gradient": false
+                    },
+                    "Linear": {
+                      "type": "Linear",
+                      "residual_wetting_saturation": 0.0,
+                      "residual_non-wetting_saturation": 0.0,
+                      "m": 0.00001,
+                      "b": 0,
+                      "precalculate_pressure": false,
+                      "precalculate_gradient": false
                     }
                 }
             },
@@ -627,7 +647,7 @@
             "csv": false,
             "plot": false,
             "settings": false,
-            "summary": false
+            "summary": true
             },
         "show_loss": true,
         "directory": "../output"
