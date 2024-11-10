@@ -174,7 +174,8 @@ class TwoPhaseMixtureDiffusionTransport:
             # Calculate source terms from evaporation/condensation
             specific_area = (
                 self.porosity_model.calc_specific_interfacial_area(
-                    saturation, capillary_pressure, self.saturation_model))
+                    saturation, capillary_pressure, self.saturation_model,
+                    a_vol_max=265.0))
             # specific_area[specific_area > 5000.0] = 5000.0
             # specific_area = 1000.0
             # evaporation_rate = evap_model.calc_evaporation_rate(
@@ -298,6 +299,8 @@ class TwoPhaseMixtureDiffusionTransport:
             show_temperature_gdl = np.moveaxis(temperature_gdl,
                                                (0, 1, 2), (1, 0, 2))
             iteration += 1
+            # if gs.global_state.iteration == gs.global_state.max_iteration:
+            #     continue
 
         show_concentration = np.moveaxis(self.fluid.gas.concentration,
                                          (0, 1, 2, 3), (0, 2, 1, 3))

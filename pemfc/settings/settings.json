@@ -6,7 +6,7 @@
         "calc_current_density": true
     },
     "simulation": {
-        "maximum_iteration": 200,
+        "maximum_iteration": 400,
         "minimum_iteration": 5,
         "convergence_criteria": 1e-07,
         "underrelaxation_factor": 0.9,
@@ -26,7 +26,7 @@
         "thermoneutral_voltage": 1.25
     },
     "membrane": {
-        "type": "YeWang2007",
+        "type": "Constant",
         "underrelaxation_factor": 0.95,
         "thickness": 1.5e-05,
         "ionic_conductivity": 15.0,
@@ -102,12 +102,12 @@
                 "pore_radius": 1e-5,
                 "relative_permeability_exponent": 3.0,
                 "saturation_model": {
-                    "type": "VanGenuchten",
+                    "type": "Leverett",
                     "Leverett": {
                         "type": "Leverett",
-                        "contact_angle": 120.0,
-                        "precalculate_pressure": true,
-                        "precalculate_gradient": true
+                        "contact_angle": 100.0,
+                        "precalculate_pressure": false,
+                        "precalculate_gradient": false
                     },
                     "DataTable": {
                         "type": "DataTable",
@@ -367,12 +367,12 @@
                 "pore_radius": 1e-5,
                 "relative_permeability_exponent": 3.0,
                 "saturation_model": {
-                    "type": "VanGenuchten",
+                    "type": "Leverett",
                     "Leverett": {
                         "type": "Leverett",
-                        "contact_angle": 120.0,
-                        "precalculate_pressure": true,
-                        "precalculate_gradient": true
+                        "contact_angle": 100.0,
+                        "precalculate_pressure": false,
+                        "precalculate_gradient": false
                     },
                     "DataTable": {
                         "type": "DataTable",
