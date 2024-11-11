@@ -19,7 +19,7 @@ class Stack(OutputObject1D):
         # Switch to calculate the temperature distribution
         self.calc_temp = stack_dict['calc_temperature']
         # Switch to calculate the current density distribution
-        self.calc_electric = stack_dict['calc_current_density']
+        self.calc_current = stack_dict['calc_current']
         # Switch to calculate the flow distribution
         # self.calc_flow_dis = stack_dict['calc_flow_distribution']
 
@@ -64,10 +64,12 @@ class Stack(OutputObject1D):
             settings['simulation']['underrelaxation_factor']
         # Add GDL diffusion and two-phase switches to half-cell dicts
         for half_cell_dict in half_cell_dicts:
-            half_cell_dict['calc_gdl_diffusion'] = (
-                settings['simulation'].get('calc_gdl_diffusion', False))
-            half_cell_dict['calc_two_phase_flow'] = (
-                settings['simulation'].get('calc_two_phase_flow', False))
+            if 'calc_gdl_diffusion' not in half_cell_dict:
+                half_cell_dict['calc_gdl_diffusion'] = (
+                    settings['simulation'].get('calc_gdl_diffusion', False))
+            if 'calc_two_phase_flow' not in half_cell_dict:
+                half_cell_dict['calc_two_phase_flow'] = (
+                    settings['simulation'].get('calc_two_phase_flow', False))
 
         # Initialize fluid channels
         fluids, channels = [], []
@@ -238,7 +240,11 @@ class Stack(OutputObject1D):
         # self.temp_sys = therm_cpl.TemperatureSystem(self, temperature_dict)
         self.temp_sys = lin_sys.TemperatureSystem(self, temperature_dict)
         # Initialize the electrical coupling
-        self.elec_sys = lin_sys.ElectricalSystem(self, {})
+        if self.calc_current:
+            self.elec_sys = lin_sys.ElectricalSystem(self, {})
+        else:
+            self.elec_sys = lin_sys.ConstantCurrentElectricalSystem(self, {})
+
 
         """Boolean alarms"""
         self.v_alarm = False
@@ -294,8 +300,8 @@ class Stack(OutputObject1D):
         if not self.break_program:
             if self.calc_temp:
                 self.temp_sys.update()
-            if self.calc_electric:
-                self.update_electric_system(current_density, voltage)
+            # if self.calc_electric:
+            self.update_electric_system(current_density, voltage)
 
     def update_electric_system(self, current_density, voltage):
         self.current_density_old[:] = self.elec_sys.current_density

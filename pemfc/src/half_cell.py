@@ -153,7 +153,7 @@ class HalfCell(OutputObject2D):
             else:
                 nx = 2
                 ny = self.discretization.shape[0]
-                nz = 2
+                nz = 1
                 gdl_diffusion_dict['boundary_patches']['Dirichlet'] = {
                     'axes': (0,), 'indices': (0,)}
             discretization_dict = {

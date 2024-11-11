@@ -1,23 +1,23 @@
 {
     "stack": {
         "cell_number": 1,
-        "cool_flow": true,
+        "cool_flow": false,
         "calc_temperature": true,
         "calc_current_density": true
     },
     "simulation": {
-        "maximum_iteration": 200,
-        "minimum_iteration": 10,
+        "maximum_iteration": 400,
+        "minimum_iteration": 5,
         "convergence_criteria": 1e-07,
-        "underrelaxation_factor": 0.7,
-        "current_control": true,
-        "operation_control": "Current",
+        "underrelaxation_factor": 0.9,
+        "current_control": false,
+        "operation_control": "Voltage",
         "elements": 10,
-        "current_density": [500.0, 1000.0, 5000.0, 10000.0, 15000.0,
-            20000.0, 25000.0, 30000.0, 35000.0, 40000.0, 45000.0, 50000.0,
-            55000.0],
-        "average_cell_voltage": 0.5,
-        "channel_land_discretization": true
+        "current_density": 30000,
+        "average_cell_voltage": 0.3,
+        "channel_land_discretization": true,
+        "calc_gdl_diffusion": true,
+        "calc_two_phase_flow": true
     },
     "cell": {
         "width": 0.1,
@@ -26,8 +26,8 @@
         "thermoneutral_voltage": 1.25
     },
     "membrane": {
-        "type": "YeWang2007",
-        "underrelaxation_factor": 0.5,
+        "type": "Constant",
+        "underrelaxation_factor": 0.95,
         "thickness": 1.5e-05,
         "ionic_conductivity": 15.0,
         "basic_resistance": 4.3e-05,
@@ -65,12 +65,12 @@
             "porosity":
                     0.8,
             "electrical_conductivity": [
-                500.0,
-                500.0
+                1000.0,
+                10000.0
             ],
             "thermal_conductivity": [
                 1.0,
-                1.0
+                10.0
             ]
         },
         "electrochemistry":
@@ -80,7 +80,7 @@
             "prot_con_cl": 3.5,
             "vol_ex_cd": 800000.0,
             "diff_coeff_cl": 1e-07,
-            "diff_coeff_gdl": 6e-06,
+            "diff_coeff_gdl": 7.8e-06,
             "thickness_cl": 1e-05,
             "calc_act_loss": true,
             "calc_cl_diff_loss": true,
@@ -100,22 +100,22 @@
                     1.0e-12
                 ],
                 "pore_radius": 1e-5,
-                "relative_permeability_exponent": 4.0,
+                "relative_permeability_exponent": 3.0,
                 "saturation_model": {
-                    "type": "leverett",
-                    "leverett": {
-                        "type": "leverett",
-                        "contact_angle": 120.0,
+                    "type": "Leverett",
+                    "Leverett": {
+                        "type": "Leverett",
+                        "contact_angle": 100.0,
                         "precalculate_pressure": false,
                         "precalculate_gradient": false
                     },
-                    "data_table": {
-                        "type": "data_table",
+                    "DataTable": {
+                        "type": "DataTable",
                         "data_format": "file",
                         "file_path": "C:\\Users\\lukas\\Desktop\\test.csv"
                     },
-                    "psd": {
-                        "type": "psd",
+                    "PSD": {
+                        "type": "PSD",
                         "r": [
                             [
                                 14.20e-6,
@@ -155,47 +155,67 @@
                             120.0
                         ]
                     },
-                    "imbibition_drainage": {
-                        "type": "imbibition_drainage",
+                    "ImbibitionDrainage": {
+                        "type": "ImbibitionDrainage",
                         "imbibition_model": {
-                            "type": "leverett",
-                            "leverett": {
-                                "contact_angle": 120.0,
-                                "precalculate_pressure": true,
-                                "precalculate_gradient": true
+                            "type": "Leverett",
+                            "Leverett": {
+                                "contact_angle": 110.0,
+                                "precalculate_pressure": false,
+                                "precalculate_gradient": false
                             }
                         },
                         "drainage_model": {
-                            "type": "leverett",
-                            "leverett": {
+                            "type": "Leverett",
+                            "Leverett": {
                                 "contact_angle": 70.0,
-                                "precalculate_pressure": true,
-                                "precalculate_gradient": true
+                                "precalculate_pressure": false,
+                                "precalculate_gradient": false
                             }
                         }
                     },
-                    "gostick_correlation": {
-                        "type": "gostick_correlation",
-                        "maximum_saturation": 1.0,
+                    "GostickCorrelation": {
+                        "type": "GostickCorrelation",
+                        "maximum_saturation": 0.91,
                         "residual_saturation": 0.0,
                         "f": [
-                            0.25,
-                            0.75
+                            0.35,
+                            0.65
                         ],
                         "m": [
-                            250,
-                            200
+                            200,
+                            150
                         ],
                         "n": [
-                            0.3,
-                            0.5
+                            0.5,
+                            0.3
                         ],
                         "P_C_b": [
                             101500.0,
-                            108000.0
+                            107500.0
                         ],
-                        "precalculate_pressure": true,
-                        "precalculate_gradient": true
+                        "precalculate_pressure": false,
+                        "precalculate_gradient": false
+                    },
+                    "VanGenuchten": {
+                        "type": "VanGenuchten",
+                        "residual_wetting_saturation": 0.0,
+                        "residual_non-wetting_saturation": 0.1,
+                        "wetting": false,
+                        "alpha": 0.00001,
+                        "m": 1,
+                        "n": 0.11,
+                        "precalculate_pressure": false,
+                        "precalculate_gradient": false
+                    },
+                    "Linear": {
+                      "type": "Linear",
+                      "residual_wetting_saturation": 0.0,
+                      "residual_non-wetting_saturation": 0.0,
+                      "m": 0.00001,
+                      "b": 0,
+                      "precalculate_pressure": false,
+                      "precalculate_gradient": false
                     }
                 }
             },
@@ -225,7 +245,7 @@
                         "molar_fraction": 0.0
                     }
                 },
-                "humidity": 0.0
+                "humidity": 0.75
             },
             "cross_sectional_shape": "rectangular",
             "base_width": 0.0008,
@@ -310,12 +330,12 @@
             "porosity":
                     0.8,
             "electrical_conductivity": [
-                50000.0,
-                50000.0
+                1000.0,
+                10000.0
             ],
             "thermal_conductivity": [
                 1.0,
-                1.0
+                10.0
             ]
         },
         "electrochemistry":
@@ -347,20 +367,20 @@
                 "pore_radius": 1e-5,
                 "relative_permeability_exponent": 3.0,
                 "saturation_model": {
-                    "type": "leverett",
-                    "leverett": {
-                        "type": "leverett",
-                        "contact_angle": 120.0,
+                    "type": "Leverett",
+                    "Leverett": {
+                        "type": "Leverett",
+                        "contact_angle": 100.0,
                         "precalculate_pressure": false,
                         "precalculate_gradient": false
                     },
-                    "data_table": {
-                        "type": "data_table",
+                    "DataTable": {
+                        "type": "DataTable",
                         "data_format": "file",
                         "file_path": "C:\\Users\\lukas\\Desktop\\test.csv"
                     },
-                    "psd": {
-                        "type": "psd",
+                    "PSD": {
+                        "type": "PSD",
                         "r": [
                             [
                                 14.20e-6,
@@ -400,53 +420,27 @@
                             120.0
                         ]
                     },
-                    "imbibition_drainage": {
-                        "type": "imbibition_drainage",
+                    "ImbibitionDrainage": {
+                        "type": "ImbibitionDrainage",
                         "imbibition_model": {
-                            "type": "leverett",
-                            "maximum_water_saturation": 0.99,
-                            "residual_water_saturation": 0.1,
-                            "f": [
-                                0.25,
-                                0.75
-                            ],
-                            "m": [
-                                250,
-                                200
-                            ],
-                            "n": [
-                                0.4,
-                                0.5
-                            ],
-                            "P_C_b": [
-                                101500.0,
-                                107500.0
-                            ],
-                            "precalculate_pressure": true,
-                            "precalculate_gradient": true
+                            "type": "Leverett",
+                            "Leverett": {
+                                "contact_angle": 100.0,
+                                "precalculate_pressure": false,
+                                "precalculate_gradient": false
+                            }
                         },
                         "drainage_model": {
-                            "type": "gostick_correlation",
-                            "maximum_water_saturation": 0.99,
-                            "residual_water_saturation": 0.1,
-                            "f": [
-                                1.0
-                            ],
-                            "m": [
-                                150
-                            ],
-                            "n": [
-                                1.0
-                            ],
-                            "P_C_b": [
-                                105000.0
-                            ],
-                            "precalculate_pressure": true,
-                            "precalculate_gradient": true
+                            "type": "Leverett",
+                            "Leverett": {
+                                "contact_angle": 70.0,
+                                "precalculate_pressure": false,
+                                "precalculate_gradient": false
+                            }
                         }
                     },
-                    "gostick_correlation": {
-                        "type": "gostick_correlation",
+                    "GostickCorrelation": {
+                        "type": "GostickCorrelation",
                         "maximum_saturation": 1.0,
                         "residual_saturation": 0.0,
                         "f": [
@@ -467,6 +461,26 @@
                         ],
                         "precalculate_pressure": true,
                         "precalculate_gradient": true
+                    },
+                    "VanGenuchten": {
+                        "type": "VanGenuchten",
+                        "residual_wetting_saturation": 0.0,
+                        "residual_non-wetting_saturation": 0.1,
+                        "wetting": false,
+                        "alpha": 0.00001,
+                        "m": 1,
+                        "n": 0.11,
+                        "precalculate_pressure": false,
+                        "precalculate_gradient": false
+                    },
+                    "Linear": {
+                      "type": "Linear",
+                      "residual_wetting_saturation": 0.0,
+                      "residual_non-wetting_saturation": 0.0,
+                      "m": 0.00001,
+                      "b": 0,
+                      "precalculate_pressure": false,
+                      "precalculate_gradient": false
                     }
                 }
             },
@@ -496,7 +510,7 @@
                         "molar_fraction": 0.0
                     }
                 },
-                "humidity": 0.5
+                "humidity": 0.75
             },
             "cross_sectional_shape": "rectangular",
             "base_width": 0.0008,
@@ -621,17 +635,21 @@
         "alpha_amb": 0.0,
         "flux_endplate": 0.0,
         "value_endplate": 343.15,
-        "bc_endplate": "gradient",
+        "bc_endplate": "fixed",
         "cool_ch_bc": true,
         "cool_ch_numb": 20,
-        "cool_temp_diff": 10.0,
+        "cool_temp_diff": 5.0,
         "cool_mass_flow": null,
         "coolant_control": "Temperature Difference"
     },
     "output": {
-        "save_csv": false,
-        "save_plot": true,
-        "show_loss": false,
+        "save": {
+            "csv": false,
+            "plot": false,
+            "settings": false,
+            "summary": true
+            },
+        "show_loss": true,
         "directory": "../output"
     }
 }

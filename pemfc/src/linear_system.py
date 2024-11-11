@@ -103,7 +103,7 @@ class LinearSystem(ABC):
             self.solution_vector[:] = x
 
         else:
-            cond_number = np.linalg.cond(self.mtx)
+            # cond_number = np.linalg.cond(self.mtx)
             self.solution_vector[:] = np.linalg.solve(self.mtx, self.rhs)
         self.solution_array[:] = np.reshape(
             self.solution_vector, self.shape, order='F')
@@ -748,14 +748,14 @@ class StackLinearSystem(LinearSystem, ABC):
             layer_index_list.append(np.hstack(sub_list))
         return index_list, layer_index_list
 
-    def update_cell_solution(self):
+    def update_cell_solution(self, solution_vector=None):
         """
         Transfer the general solution vector (1D) into the
         single cell solution arrays (3D)
         """
-
-        cell_solution_vectors = np.array_split(self.solution_vector,
-                                               len(self.cells))
+        if solution_vector is None:
+            solution_vector = self.solution_vector
+        cell_solution_vectors = np.array_split(solution_vector, len(self.cells))
         cell_solution_list = []
         for i, cell_sys in enumerate(self.cell_systems):
             new_cell_solution_array = np.reshape(
@@ -1216,13 +1216,20 @@ class ElectricalSystem(StackLinearSystem):
             self.v_loss_tar = self.e_0_stack - self.v_tar
 
         dynamic_conductances = self.create_dynamic_conductance_list()
-        self.update_and_solve_linear_system(dynamic_conductances)
-        voltage_array = self.update_cell_voltage()
-        constant_conductances = np.asarray([cell_sys.conductance[0]
-                                            for cell_sys in self.cell_systems])
+        constant_conductances = np.asarray(
+            [cell_sys.conductance[0] for cell_sys in self.cell_systems])
         conductance_array = (constant_conductances
                              + np.asarray(dynamic_conductances))
-        self.update_current_density(voltage_array, conductance_array)
+        self.update_and_solve_linear_system(dynamic_conductances)
+        voltage_array = self.update_cell_voltage()
+        # constant_conductances = np.asarray(
+        #     [cell_sys.conductance[0] for cell_sys in self.cell_systems])
+        # conductance_array = (constant_conductances
+        #                      + np.asarray(dynamic_conductances))
+        self.current_density[:] = self.calc_current_density(
+            voltage_array, conductance_array)
+        self.update_cell_current_density()
+
 
     def create_dynamic_conductance_list(self):
         dynamic_cell_conductance_list = []
@@ -1235,7 +1242,7 @@ class ElectricalSystem(StackLinearSystem):
             dynamic_cell_conductance_list.append(dynamic_cell_conductance)
         return dynamic_cell_conductance_list
 
-    def update_cell_voltage(self):
+    def update_cell_voltage(self, **kwargs):
         """
         Wrapper for the update_cell_solution-function which the cell-wise parts
         of the flattened solution_vector into the corresponding cell member (
@@ -1253,24 +1260,106 @@ class ElectricalSystem(StackLinearSystem):
             # cell.update_voltage_loss(v_diff[i])
         return voltage_array
 
-    def update_current_density(self, voltage_array, conductance,
-                               update_cells=False):
+    def calc_current_density(self, voltage_array, conductance):
         """
         Calculates the current density in each layer of each in through-plane
         direction, i.e. the x-direction
         """
         v_diff = np.abs(np.diff(voltage_array, axis=1))
-        active_area = np.array([cell.d_area for cell in self.cells])
+        # active_area = np.array([cell.d_area for cell in self.cells])
         active_area_array = np.asarray(
             [np.stack([cell.d_area for i in range(v_diff.shape[1])], axis=0)
              for cell in self.cells])
         current_density = v_diff * conductance / active_area_array
-        self.current_density[:] = current_density
-        if update_cells:
-            for i, cell in enumerate(self.cells):
-                cell.current_density[:] = current_density[i]
         return current_density
 
+    def update_cell_current_density(self):
+            for i, cell in enumerate(self.cells):
+                cell.current_density[:] = self.current_density[i]
+
+
+class ConstantCurrentElectricalSystem(ElectricalSystem):
+
+    def __init__(self, stack: stack_module.Stack, input_dict: dict):
+        super().__init__(stack, input_dict)
+
+
+    def update_rhs(self, *args, **kwargs):
+        """
+        Create vector with the right hand side entries,
+        Sources from outside the src to the src must be defined negative.
+        """
+        pass
+
+    def update_matrix(self, electrochemical_conductance, *args, **kwargs):
+        """
+        Updates matrix coefficients
+        """
+        pass
+
+    def update(self, current_density=None, voltage=None):
+        """
+        #TODO: Update docs
+        Wrapper function to solve underlying linear system with updated input
+        and update every member results accordingly
+        """
+        if current_density is not None:
+            self.current_density_target = current_density
+        if voltage is not None:
+            self.v_tar = voltage
+            self.v_loss_tar = self.e_0_stack - self.v_tar
+
+        dynamic_conductances = self.create_dynamic_conductance_list()
+        constant_conductances = np.asarray(
+            [cell_sys.conductance[0] for cell_sys in self.cell_systems])
+        conductance_array = (constant_conductances
+                             + np.asarray(dynamic_conductances))
+        resistance_array = 1.0 / conductance_array
+        active_area_array = np.asarray(
+            [np.stack([cell.d_area
+                       for i in range(resistance_array.shape[1])], axis=0)
+             for cell in self.cells])
+        current = self.current_density_target * active_area_array
+        voltage_array = resistance_array * current
+        self.update_cell_voltage(voltage_array)
+        self.current_density[:] = self.current_density_target
+        self.update_cell_current_density()
+
+    def create_dynamic_conductance_list(self):
+        dynamic_cell_conductance_list = []
+        for i, cell_sys in enumerate(self.cell_systems):
+            shape = cell_sys.conductance[0].shape
+            dynamic_cell_conductance = np.zeros(shape)
+            layer_id = (cell_sys.conductance[0].shape[0] // 2)
+            dynamic_cell_conductance[layer_id] = (
+                self.cells[i].electrochemical_conductance)
+            dynamic_cell_conductance_list.append(dynamic_cell_conductance)
+        return dynamic_cell_conductance_list
+
+    def update_cell_voltage(self, voltage_array):
+        """
+        The area-distribution of the cell voltage
+        loss is calculated from cathode to anode bipolar plate for each cell.
+        Returns: the reshaped voltage_array containing the over-potential in
+        each cell layer discretized according to the y-z-discretization of
+        each cell.
+        """
+        for i, cell in enumerate(self.cells):
+            # cell.voltage_layer[:] = cell.e_0 - cell.voltage_layer
+            cell.voltage_loss[:] = np.sum(voltage_array[i], axis=0)
+            # cell.update_voltage_loss(v_diff[i])
+        return voltage_array
+
+    def calc_current_density(self, voltage_array, conductance):
+        """
+        Calculates the current density in each layer of each in through-plane
+        direction, i.e. the x-direction
+        """
+        pass
+
+    def update_cell_current_density(self):
+        for i, cell in enumerate(self.cells):
+            cell.current_density[:] = self.current_density[i]
 
 # disc_dict = {
 #     'length': 1.0,

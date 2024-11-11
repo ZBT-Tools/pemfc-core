@@ -88,6 +88,7 @@ class Membrane(tl.TransportLayer2D, ABC):
         pass
 
     def calc_voltage_loss(self, current_density, **kwargs):
+
         """
         Calculates the voltage loss at the membrane.
         """
@@ -156,7 +157,7 @@ class WaterTransportMembrane(Membrane, ABC):
         self.diff_coeff = np.zeros(self.discretization.shape)
         # Electro-osmotic drag coefficient
         self.eod = np.zeros(self.discretization.shape)
-        self.eod[:] = membrane_dict.get('electro-osmotic_drag_coeff', 1.07)
+        self.eod[:] = membrane_dict.get('electro-osmotic_drag_coeff', 1.0)
 
         self.add_print_data(self.water_flux,
                             'Membrane Water Flux', 'mol/(s-m²)')
@@ -203,11 +204,35 @@ class SpringerMembrane(WaterTransportMembrane):
         self.urf = membrane_dict.get('underrelaxation_factor', 0.95)
 
     def calc_water_content(self, humidity):
-        self.water_content[:] = \
-            np.where(humidity < 1.0,
-                     0.043 + 17.81 * humidity
-                     - 39.85 * humidity ** 2. + 36. * humidity ** 3.0,
-                     14.0 + 1.4 * (humidity - 1.0))
+        """
+        Equations (16, 17) in
+        Springer, T. E., T. A. Zawodzinski, S. Gottesfeld. „Polymer
+        Electrolyte Fuel Cell Model“. Journal of The Electrochemical Society
+        138, Nr. 8 (1. August 1991): 2334–42. https://doi.org/10.1149/1.2085971.
+        """
+        # self.water_content[:] = \
+        #     np.where(humidity < 1.0,
+        #              0.043 + 17.81 * humidity
+        #              - 39.85 * humidity ** 2. + 36. * humidity ** 3.0,
+        #              14.0 + 1.4 * (humidity - 1.0))
+
+        """
+        Equation (25) in:
+        Dickinson, E. J. F., G. Smith. „Modelling the Proton-Conductive 
+        Membrane in Practical Polymer Electrolyte Membrane Fuel Cell (PEMFC) 
+        Simulation: A Review“. Membranes 10, Nr. 11 (28. Oktober 2020): 310. 
+        https://doi.org/10.3390/membranes10110310.
+        """
+        self.water_content[:] = (
+            0.3 + 6.0 * humidity * (1.0 - np.tanh(humidity - 0.5))
+            + 3.9 * np.sqrt(humidity)
+            * (1.0 + np.tanh((humidity - 0.89) / 0.23)))
+
+        """
+        linear test equation
+        """
+        # self.water_content[:] = (humidity * 10.0)
+
         self.avg_water_content[:] = np.average(self.water_content, axis=0)
         return self.water_content, self.avg_water_content
 
@@ -237,7 +262,7 @@ class SpringerMembrane(WaterTransportMembrane):
         #     * np.exp(2416.0 * (1.0/303.0 * 1.0/self.temp))
 
         # Constant diffusion coefficient test
-        # diff_coeff = 2.5e-6 * 0.0001
+        # diff_coeff = 12e-10
 
         self.diff_coeff[:] = diff_coeff
         return self.diff_coeff
@@ -311,6 +336,8 @@ class SpringerMembrane(WaterTransportMembrane):
         water_flux = np.copy(self.water_flux)
         water_flux_new = water_flux_diff + water_flux_drag
         # water_flux_new = water_flux_drag
+        if gs.global_state.iteration == 150:
+            pass
         self.water_flux[:] = self.urf * water_flux \
             + (1.0 - self.urf) * water_flux_new
 
@@ -323,10 +350,6 @@ class YeWang2007Membrane(SpringerMembrane):
     X. Ye, C.-Y. Wang. „Measurement of Water Transport Properties Through
     Membrane-Electrode Assemblies: I. Membranes“. Journal of The Electrochemical
     Society 154, Nr. 7 (21. Mai 2007): B676. https://doi.org/10.1149/1.2737379.
-
-    Currently, the water vapour activity at the membrane-catalyst interface
-    is approximated by the channel humidity/water activity due to insufficient
-    resolution of the through-plane concentration gradients.
     """
     def __init__(self, membrane_dict: dict,
                  discretization: dsct.Discretization2D, *args, **kwargs):
@@ -350,13 +373,12 @@ class YeWang2007Membrane(SpringerMembrane):
         self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
         # Absolute resistance [Ohm]
         self.omega[:] = self.omega_ca / self.discretization.d_area
-        # if gs.global_state.iteration == 30:
-        #     print('test')
         return self.omega, self.omega_ca
 
     def calc_eod(self):
-        self.eod[:] = 0.5
+        self.eod[:] = 1.0
         return self.eod
+        # return super().calc_eod()
 
     def calc_diffusion_coefficient(self, *args):
         """

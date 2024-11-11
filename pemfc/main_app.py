@@ -4,6 +4,7 @@ import inspect
 import json
 import numpy as np
 import timeit
+from pprint import pprint
 
 # Location of this file
 __location__ = os.path.realpath(
@@ -47,4 +48,5 @@ if __name__ == "__main__":
     # with open(os.path.join(base_dir, 'settings', 'settings.json'), 'w') as file:
     #     json.dump(settings, file, indent=4)
     global_data, local_data, sim = main(sim_settings)
+    pprint(global_data)
 

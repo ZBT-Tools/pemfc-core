@@ -1,21 +1,29 @@
 {
     "stack": {
         "cell_number": 1,
-        "cool_flow": false,
+        "cool_flow": true,
         "calc_temperature": true,
-        "calc_current_density": true
+        "calc_current": true,
+        "init_current_density": [
+            45000
+        ],
+        "voltage": 0.3
     },
     "simulation": {
-        "maximum_iteration": 400,
+        "maximum_iteration": 600,
         "minimum_iteration": 5,
         "convergence_criteria": 1e-07,
         "underrelaxation_factor": 0.9,
-        "current_control": false,
-        "operation_control": "Voltage",
+        "current_control": true,
+        "operation_control": "current",
         "elements": 10,
-        "current_density": 30000,
-        "average_cell_voltage": 0.3,
-        "channel_land_discretization": true,
+        "current_density": [
+            40000
+        ],
+        "average_cell_voltage": [
+            0.3
+        ],
+        "channel_land_discretization": false,
         "calc_gdl_diffusion": true,
         "calc_two_phase_flow": true
     },
@@ -23,10 +31,17 @@
         "width": 0.1,
         "length": 0.5,
         "open_circuit_voltage": 1.0,
-        "thermoneutral_voltage": 1.25
+        "thermoneutral_voltage": 1.25,
+        "channel_land_discretization": false,
+        "underrelaxation_factor": 0.6,
+        "flux_endplate": 0.0,
+        "alpha_amb": 0.0,
+        "temp_amb": 293.15,
+        "first_cell": true,
+        "last_cell": true
     },
     "membrane": {
-        "type": "Constant",
+        "type": "YeWang2007",
         "underrelaxation_factor": 0.95,
         "thickness": 1.5e-05,
         "ionic_conductivity": 15.0,
@@ -36,7 +51,8 @@
             0.26,
             0.26
         ],
-        "calc_loss": true
+        "calc_loss": true,
+        "name": "Membrane"
     },
     "cathode": {
         "name": "Cathode",
@@ -49,8 +65,7 @@
             2.0
         ],
         "bpp": {
-            "thickness":
-                    0.002,
+            "thickness": 0.002,
             "electrical_conductivity": [
                 60000.0,
                 60000.0
@@ -62,8 +77,7 @@
         },
         "gde": {
             "thickness": 0.0002,
-            "porosity":
-                    0.8,
+            "porosity": 0.8,
             "electrical_conductivity": [
                 1000.0,
                 10000.0
@@ -73,20 +87,19 @@
                 10.0
             ]
         },
-        "electrochemistry":
-        {
+        "electrochemistry": {
             "charge_number": 4.0,
             "tafel_slope": 0.035,
             "prot_con_cl": 3.5,
             "vol_ex_cd": 800000.0,
             "diff_coeff_cl": 1e-07,
-            "diff_coeff_gdl": 7.8e-06,
+            "diff_coeff_gdl": 8e-06,
             "thickness_cl": 1e-05,
             "calc_act_loss": true,
             "calc_cl_diff_loss": true,
             "calc_gdl_diff_loss": true,
             "c_eps": 0.02,
-            "delta_i": 1e-3
+            "delta_i": 0.001
         },
         "two_phase_flow": {
             "porosity_model": {
@@ -95,14 +108,14 @@
                 "porosity": 0.8,
                 "bruggemann_coefficient": 1.5,
                 "permeability": [
-                    1.0e-12,
-                    1.0e-12,
-                    1.0e-12
+                    1e-12,
+                    1e-12,
+                    1e-12
                 ],
-                "pore_radius": 1e-5,
+                "pore_radius": 1e-05,
                 "relative_permeability_exponent": 3.0,
                 "saturation_model": {
-                    "type": "Leverett",
+                    "type": "GostickCorrelation",
                     "Leverett": {
                         "type": "Leverett",
                         "contact_angle": 100.0,
@@ -118,12 +131,12 @@
                         "type": "PSD",
                         "r": [
                             [
-                                14.20e-6,
-                                34.00e-6
+                                1.42e-05,
+                                3.4e-05
                             ],
                             [
-                                14.20e-6,
-                                34.00e-6
+                                1.42e-05,
+                                3.4e-05
                             ]
                         ],
                         "F": [
@@ -202,30 +215,30 @@
                         "residual_wetting_saturation": 0.0,
                         "residual_non-wetting_saturation": 0.1,
                         "wetting": false,
-                        "alpha": 0.00001,
+                        "alpha": 1e-05,
                         "m": 1,
                         "n": 0.11,
                         "precalculate_pressure": false,
                         "precalculate_gradient": false
                     },
                     "Linear": {
-                      "type": "Linear",
-                      "residual_wetting_saturation": 0.0,
-                      "residual_non-wetting_saturation": 0.0,
-                      "m": 0.00001,
-                      "b": 0,
-                      "precalculate_pressure": false,
-                      "precalculate_gradient": false
+                        "type": "Linear",
+                        "residual_wetting_saturation": 0.0,
+                        "residual_non-wetting_saturation": 0.0,
+                        "m": 1e-05,
+                        "b": 0,
+                        "precalculate_pressure": false,
+                        "precalculate_gradient": false
                     }
                 }
             },
             "evaporation_model": {
-            "name": "Evaporation Model",
-            "type": "HertzKnudsenSchrage",
-            "evaporation_coefficient": 0.37,
-            "condensation_coefficient": 5000
+                "name": "Evaporation Model",
+                "type": "HertzKnudsenSchrage",
+                "evaporation_coefficient": 0.37,
+                "condensation_coefficient": 5000
             },
-            "gdl_channel_saturation":  0.05
+            "gdl_channel_saturation": 0.05
         },
         "channel": {
             "name": "Cathode Channel",
@@ -245,18 +258,27 @@
                         "molar_fraction": 0.0
                     }
                 },
-                "humidity": 0.75
+                "humidity": 0.75,
+                "temperature": 343.15,
+                "pressure": 250000.0,
+                "nodes": 11
             },
             "cross_sectional_shape": "rectangular",
             "base_width": 0.0008,
             "length": 0.5,
-            "p_out": 101325.0,
+            "p_out": 250000.0,
             "temp_in": 343.15,
             "flow_direction": 1,
             "width": 0.001,
             "height": 0.001,
             "bend_number": 0,
-            "bend_friction_factor": 0.1
+            "bend_friction_factor": 0.1,
+            "evaporation_model": {
+                "name": "Evaporation Model",
+                "type": "HertzKnudsenSchrage",
+                "evaporation_coefficient": 0.37,
+                "condensation_coefficient": 5000
+            }
         },
         "flow_circuit": {
             "name": "Cathode Flow Circuit",
@@ -269,7 +291,7 @@
             "underrelaxation_factor": 0.3,
             "inlet_manifold": {
                 "name": "Cathode Inlet Manifold",
-                "length": null,
+                "length": 0.004435,
                 "p_out": 250000.0,
                 "temp_in": 343.15,
                 "flow_direction": 1,
@@ -279,14 +301,15 @@
                 "height": 0.01,
                 "bend_number": 0,
                 "bend_friction_factor": 0.0,
-                "junction_resistance_model":
-                    {"type": "Bassett",
-                     "value":  0.4,
-                     "branch_manifold_diameter_ratio": 0.2}
+                "junction_resistance_model": {
+                    "type": "Bassett",
+                    "value": 0.4,
+                    "branch_manifold_diameter_ratio": 0.2
+                }
             },
             "outlet_manifold": {
                 "name": "Cathode Outlet Manifold",
-                "length": null,
+                "length": 0.004435,
                 "p_out": 250000.0,
                 "temp_in": 343.15,
                 "flow_direction": 1,
@@ -296,12 +319,15 @@
                 "height": 0.01,
                 "bend_number": 0,
                 "bend_friction_factor": 0.0,
-                "junction_resistance_model":
-                    {"type": "Bassett",
-                     "value":  0.4,
-                     "branch_manifold_diameter_ratio": 0.2}
+                "junction_resistance_model": {
+                    "type": "Bassett",
+                    "value": 0.4,
+                    "branch_manifold_diameter_ratio": 0.2
+                }
             }
-        }
+        },
+        "calc_gdl_diffusion": true,
+        "calc_two_phase_flow": true
     },
     "anode": {
         "name": "Anode",
@@ -314,8 +340,7 @@
             0.0
         ],
         "bpp": {
-            "thickness":
-                    0.002,
+            "thickness": 0.002,
             "electrical_conductivity": [
                 60000.0,
                 60000.0
@@ -327,8 +352,7 @@
         },
         "gde": {
             "thickness": 0.0002,
-            "porosity":
-                    0.8,
+            "porosity": 0.8,
             "electrical_conductivity": [
                 1000.0,
                 10000.0
@@ -338,8 +362,7 @@
                 10.0
             ]
         },
-        "electrochemistry":
-        {
+        "electrochemistry": {
             "charge_number": 4.0,
             "tafel_slope": 0.035,
             "prot_con_cl": 3.5,
@@ -351,7 +374,7 @@
             "calc_cl_diff_loss": true,
             "calc_gdl_diff_loss": true,
             "c_eps": 0.02,
-            "delta_i": 1e-3
+            "delta_i": 0.001
         },
         "two_phase_flow": {
             "porosity_model": {
@@ -360,14 +383,14 @@
                 "porosity": 0.8,
                 "bruggemann_coefficient": 1.5,
                 "permeability": [
-                    1.0e-12,
-                    1.0e-12,
-                    1.0e-12
+                    1e-12,
+                    1e-12,
+                    1e-12
                 ],
-                "pore_radius": 1e-5,
+                "pore_radius": 1e-05,
                 "relative_permeability_exponent": 3.0,
                 "saturation_model": {
-                    "type": "Leverett",
+                    "type": "GostickCorrelation",
                     "Leverett": {
                         "type": "Leverett",
                         "contact_angle": 100.0,
@@ -383,12 +406,12 @@
                         "type": "PSD",
                         "r": [
                             [
-                                14.20e-6,
-                                34.00e-6
+                                1.42e-05,
+                                3.4e-05
                             ],
                             [
-                                14.20e-6,
-                                34.00e-6
+                                1.42e-05,
+                                3.4e-05
                             ]
                         ],
                         "F": [
@@ -467,30 +490,30 @@
                         "residual_wetting_saturation": 0.0,
                         "residual_non-wetting_saturation": 0.1,
                         "wetting": false,
-                        "alpha": 0.00001,
+                        "alpha": 1e-05,
                         "m": 1,
                         "n": 0.11,
                         "precalculate_pressure": false,
                         "precalculate_gradient": false
                     },
                     "Linear": {
-                      "type": "Linear",
-                      "residual_wetting_saturation": 0.0,
-                      "residual_non-wetting_saturation": 0.0,
-                      "m": 0.00001,
-                      "b": 0,
-                      "precalculate_pressure": false,
-                      "precalculate_gradient": false
+                        "type": "Linear",
+                        "residual_wetting_saturation": 0.0,
+                        "residual_non-wetting_saturation": 0.0,
+                        "m": 1e-05,
+                        "b": 0,
+                        "precalculate_pressure": false,
+                        "precalculate_gradient": false
                     }
                 }
             },
             "evaporation_model": {
-            "name": "Evaporation Model",
-            "type": "HertzKnudsenSchrage",
-            "evaporation_coefficient": 0.37,
-            "condensation_coefficient": 5000
+                "name": "Evaporation Model",
+                "type": "HertzKnudsenSchrage",
+                "evaporation_coefficient": 0.37,
+                "condensation_coefficient": 5000
             },
-            "gdl_channel_saturation":  1e-6
+            "gdl_channel_saturation": 1e-06
         },
         "channel": {
             "name": "Anode Channel",
@@ -510,18 +533,27 @@
                         "molar_fraction": 0.0
                     }
                 },
-                "humidity": 0.75
+                "humidity": 0.75,
+                "temperature": 343.15,
+                "pressure": 250000.0,
+                "nodes": 11
             },
             "cross_sectional_shape": "rectangular",
             "base_width": 0.0008,
             "length": 0.5,
-            "p_out": 101325.0,
+            "p_out": 250000.0,
             "temp_in": 343.15,
             "flow_direction": -1,
             "width": 0.001,
             "height": 0.001,
             "bend_number": 0,
-            "bend_friction_factor": 0.1
+            "bend_friction_factor": 0.1,
+            "evaporation_model": {
+                "name": "Evaporation Model",
+                "type": "HertzKnudsenSchrage",
+                "evaporation_coefficient": 0.37,
+                "condensation_coefficient": 5000
+            }
         },
         "flow_circuit": {
             "name": "Anode Flow Circuit",
@@ -534,7 +566,7 @@
             "underrelaxation_factor": 0.3,
             "inlet_manifold": {
                 "name": "Anode Inlet Manifold",
-                "length": null,
+                "length": 0.004435,
                 "p_out": 101325.0,
                 "temp_in": 343.15,
                 "flow_direction": 1,
@@ -544,14 +576,15 @@
                 "height": 0.01,
                 "bend_number": 0,
                 "bend_friction_factor": 0.0,
-                "junction_resistance_model":
-                    {"type": "Bassett",
-                     "value":  0.4,
-                     "branch_manifold_diameter_ratio": 0.2}
+                "junction_resistance_model": {
+                    "type": "Bassett",
+                    "value": 0.4,
+                    "branch_manifold_diameter_ratio": 0.2
+                }
             },
             "outlet_manifold": {
                 "name": "Anode Outlet Manifold",
-                "length": null,
+                "length": 0.004435,
                 "p_out": 250000.0,
                 "temp_in": 343.15,
                 "flow_direction": 1,
@@ -561,12 +594,15 @@
                 "height": 0.01,
                 "bend_number": 0,
                 "bend_friction_factor": 0.0,
-                "junction_resistance_model":
-                    {"type": "Bassett",
-                     "value":  0.4,
-                     "branch_manifold_diameter_ratio": 0.2}
+                "junction_resistance_model": {
+                    "type": "Bassett",
+                    "value": 0.4,
+                    "branch_manifold_diameter_ratio": 0.2
+                }
             }
-        }
+        },
+        "calc_gdl_diffusion": true,
+        "calc_two_phase_flow": false
     },
     "coolant_channel": {
         "name": "Coolant Channel",
@@ -575,7 +611,10 @@
             "specific_heat": 2010.0,
             "density": 981.0,
             "viscosity": 0.00981,
-            "thermal_conductivity": 0.159
+            "thermal_conductivity": 0.159,
+            "nodes": 11,
+            "temperature": 340.65,
+            "pressure": 101325.0
         },
         "cross_sectional_shape": "rectangular",
         "base_width": 0.0016,
@@ -608,10 +647,12 @@
             "height": 0.01,
             "bend_number": 0,
             "bend_friction_factor": 0.0,
-            "junction_resistance_model":
-                {"type": "Bassett",
-                 "value":  0.4,
-                 "branch_manifold_diameter_ratio": 0.2}
+            "junction_resistance_model": {
+                "type": "Bassett",
+                "value": 0.4,
+                "branch_manifold_diameter_ratio": 0.2
+            },
+            "length": 0.004435
         },
         "outlet_manifold": {
             "name": "Coolant Inlet Manifold",
@@ -624,10 +665,12 @@
             "height": 0.01,
             "bend_number": 0,
             "bend_friction_factor": 0.0,
-            "junction_resistance_model":
-                {"type": "Bassett",
-                 "value":  0.4,
-                 "branch_manifold_diameter_ratio": 0.2}
+            "junction_resistance_model": {
+                "type": "Bassett",
+                "value": 0.4,
+                "branch_manifold_diameter_ratio": 0.2
+            },
+            "length": 0.004435
         }
     },
     "temperature_system": {
@@ -635,7 +678,7 @@
         "alpha_amb": 0.0,
         "flux_endplate": 0.0,
         "value_endplate": 343.15,
-        "bc_endplate": "fixed",
+        "bc_endplate": "gradient",
         "cool_ch_bc": true,
         "cool_ch_numb": 20,
         "cool_temp_diff": 5.0,
@@ -647,8 +690,8 @@
             "csv": false,
             "plot": false,
             "settings": false,
-            "summary": true
-            },
+            "summary": false
+        },
         "show_loss": true,
         "directory": "../output"
     }

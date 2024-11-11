@@ -62,15 +62,23 @@ class Simulation:
                        'simulation': 0.0,
                        'output': 0.0}
 
-        """General variables"""
-        # initialize stack object
         n_nodes = dict_simulation['elements'] + 1
-        self.current_control = dict_simulation.get('current_control', True)
+
         if 'operation_control' in dict_simulation:
             if dict_simulation['operation_control'].lower() == 'current':
                 self.current_control = True
             elif dict_simulation['operation_control'].lower() == 'voltage':
                 self.current_control = False
+        elif 'current_control' in dict_simulation:
+            self.current_control = dict_simulation['current_control']
+        else:
+            raise ValueError("Either boolean entry 'current_control' or "
+                             "string entry 'operation_control' with the "
+                             "options 'voltage' or 'current' must be provided "
+                             "in the settings")
+
+        # self.current_control = dict_simulation.get('current_control', True)
+
 
         self.current_density = dict_simulation['current_density']
         self.average_cell_voltage = dict_simulation['average_cell_voltage']
@@ -185,6 +193,17 @@ class Simulation:
             global_data = {
                 'Convergence':
                     {'value': convergence_flag, 'units': ' '},
+                'Iterations':
+                    {'value': local_data_dict['Iterations']['value'][-1][-1],
+                     'units': local_data_dict['Iterations']['units']},
+                'Current Error':
+                    {'value':
+                         local_data_dict['Current Density Error']['value'][-1],
+                     'units':
+                         local_data_dict['Current Density Error']['units']},
+                'Temperature Error':
+                    {'value': local_data_dict['Temperature Error']['value'][-1],
+                     'units': local_data_dict['Temperature Error']['units']},
                 'Stack Voltage':
                     {'value': self.stack.voltage_stack, 'units': 'V'},
                 'Average Cell Voltage':
