@@ -2,8 +2,8 @@
     "stack": {
         "cell_number": 1,
         "cool_flow": true,
-        "calc_temperature": true,
-        "calc_current": true,
+        "calc_temperature": false,
+        "calc_current": false,
         "init_current_density": [
             45000
         ],
@@ -11,12 +11,12 @@
     },
     "simulation": {
         "maximum_iteration": 600,
-        "minimum_iteration": 5,
+        "minimum_iteration": 300,
         "convergence_criteria": 1e-07,
-        "underrelaxation_factor": 0.9,
+        "underrelaxation_factor": 0.0,
         "current_control": true,
         "operation_control": "current",
-        "elements": 10,
+        "elements": 1,
         "current_density": [
             40000
         ],
@@ -24,8 +24,8 @@
             0.3
         ],
         "channel_land_discretization": false,
-        "calc_gdl_diffusion": true,
-        "calc_two_phase_flow": true
+        "calc_gdl_diffusion": false,
+        "calc_two_phase_flow": false
     },
     "cell": {
         "width": 0.1,
@@ -33,7 +33,6 @@
         "open_circuit_voltage": 1.0,
         "thermoneutral_voltage": 1.25,
         "channel_land_discretization": false,
-        "underrelaxation_factor": 0.6,
         "flux_endplate": 0.0,
         "alpha_amb": 0.0,
         "temp_amb": 293.15,
@@ -42,7 +41,7 @@
     },
     "membrane": {
         "type": "YeWang2007",
-        "underrelaxation_factor": 0.95,
+        "underrelaxation_factor": 0.9,
         "thickness": 1.5e-05,
         "ionic_conductivity": 15.0,
         "basic_resistance": 4.3e-05,
@@ -602,7 +601,7 @@
             }
         },
         "calc_gdl_diffusion": true,
-        "calc_two_phase_flow": false
+        "calc_two_phase_flow": true
     },
     "coolant_channel": {
         "name": "Coolant Channel",

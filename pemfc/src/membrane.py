@@ -210,7 +210,7 @@ class SpringerMembrane(WaterTransportMembrane):
         Electrolyte Fuel Cell Model“. Journal of The Electrochemical Society
         138, Nr. 8 (1. August 1991): 2334–42. https://doi.org/10.1149/1.2085971.
         """
-        # self.water_content[:] = \
+        # water_content = \
         #     np.where(humidity < 1.0,
         #              0.043 + 17.81 * humidity
         #              - 39.85 * humidity ** 2. + 36. * humidity ** 3.0,
@@ -223,16 +223,19 @@ class SpringerMembrane(WaterTransportMembrane):
         Simulation: A Review“. Membranes 10, Nr. 11 (28. Oktober 2020): 310. 
         https://doi.org/10.3390/membranes10110310.
         """
-        self.water_content[:] = (
-            0.3 + 6.0 * humidity * (1.0 - np.tanh(humidity - 0.5))
-            + 3.9 * np.sqrt(humidity)
-            * (1.0 + np.tanh((humidity - 0.89) / 0.23)))
+        # water_content = (
+            # 0.3 + 6.0 * humidity * (1.0 - np.tanh(humidity - 0.5))
+            # + 3.9 * np.sqrt(humidity)
+            # * (1.0 + np.tanh((humidity - 0.89) / 0.23)))
 
         """
         linear test equation
         """
-        # self.water_content[:] = (humidity * 10.0)
-
+        water_content = (humidity * 10.0)
+        # Underrelaxation of water content
+        water_content_old = np.copy(self.water_content)
+        self.water_content[:] = (self.urf * water_content_old
+                                 + (1.0 - self.urf) * water_content)
         self.avg_water_content[:] = np.average(self.water_content, axis=0)
         return self.water_content, self.avg_water_content
 
@@ -244,22 +247,22 @@ class SpringerMembrane(WaterTransportMembrane):
 
         wc_avg = self.avg_water_content
 
-        diff_coeff_star = (
-            np.where(wc_avg <= 2.0, 1.0,
-                     np.where(wc_avg <= 3.0, 1.0 + 2.0 * (wc_avg - 2.0),
-                              np.where(wc_avg <= 4.0,
-                                       3.0 - 1.38 * (wc_avg - 3.0),
-                                       2.563 - 0.33 * wc_avg
-                                       + 0.0264 * wc_avg ** 2.0
-                                       - 0.000671 * wc_avg ** 3.0))))
-
-        diff_coeff = (1.0e-10 * np.exp(2416.0 * (1.0 / 303.0 * 1.0 / self.temp))
-                      * diff_coeff_star)
+        # diff_coeff_star = (
+        #     np.where(wc_avg <= 2.0, 1.0,
+        #              np.where(wc_avg <= 3.0, 1.0 + 2.0 * (wc_avg - 2.0),
+        #                       np.where(wc_avg <= 4.0,
+        #                                3.0 - 1.38 * (wc_avg - 3.0),
+        #                                2.563 - 0.33 * wc_avg
+        #                                + 0.0264 * wc_avg ** 2.0
+        #                                - 0.000671 * wc_avg ** 3.0))))
+        #
+        # diff_coeff = (1.0e-10 * np.exp(2416.0 * (1.0 / 303.0 * 1.0 / self.temp))
+        #               * diff_coeff_star)
 
         # # Based on Nguyen and White (1993);
         # # as formulated by Kamarajugadda et al. (2008)
-        # diff_coeff = 2.5/22.0 * 5.5e-11 * wc_avg \
-        #     * np.exp(2416.0 * (1.0/303.0 * 1.0/self.temp))
+        diff_coeff = 2.5/22.0 * 5.5e-11 * wc_avg \
+            * np.exp(2416.0 * (1.0/303.0 * 1.0/self.temp))
 
         # Constant diffusion coefficient test
         # diff_coeff = 12e-10
