@@ -257,9 +257,12 @@ class Cell(OutputObject2D):
         else:
             humidity = np.asarray([self.cathode.calc_humidity(),
                                    self.anode.calc_humidity()])
+            liquid_pressure = np.asarray([self.cathode.calc_liquid_pressure(),
+                                          self.anode.calc_liquid_pressure()])
 
             self.membrane.update(
-                corrected_current_density[self.layer_id['membrane']], humidity)
+                corrected_current_density[self.layer_id['membrane']], humidity,
+                liquid_pressure=liquid_pressure)
             # self.calc_voltage_loss()
             self.calc_electrochemical_conductance(
                 corrected_current_density[self.layer_id['membrane']])

@@ -555,10 +555,7 @@ class HalfCell(OutputObject2D):
 
     def calc_humidity(self):
         """
-        For now this is a helper function to map the channel humidity to the
-        gde-membrane interface in the correct discretization. In the future, a
-        approximation according to composition gradients and thermodynamics
-        should be implemented
+        Humidity at GDE-Membrane-Interface
         """
         if self.calc_gdl_diffusion:
             axes = self.gdl_diffusion.neumann_bc.axes
@@ -572,3 +569,18 @@ class HalfCell(OutputObject2D):
                 humidity for i in
                 range(self.discretization.shape[-1])]).transpose()
         return humidity
+
+    def calc_liquid_pressure(self):
+        """
+        Liquid pressure at GDE-Membrane-Interface
+        """
+        if self.calc_two_phase_flow:
+            axes = self.two_phase_flow.transport.neumann_bc.axes
+            indices = self.two_phase_flow.transport.neumann_bc.indices
+            values = self.two_phase_flow.liquid_pressure
+            liquid_pressure = self.two_phase_flow.transport.get_values(
+                values, axes, indices)
+            liquid_pressure = self.reduce_discretization(liquid_pressure)
+        else:
+            liquid_pressure = np.zeros(self.discretization.shape)
+        return liquid_pressure

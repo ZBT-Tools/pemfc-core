@@ -80,6 +80,7 @@ class TwoPhaseMixtureDiffusionTransport:
         self.saturation = (np.ones(self.transport.base_shape) *
                            self.saturation_min)
         self.capillary_pressure = np.zeros(self.transport.base_shape)
+        self.liquid_pressure = np.zeros(self.transport.base_shape)
         self.net_evaporation_rate = np.zeros(self.transport.base_shape)
         self.condensation_rate = np.zeros(self.transport.base_shape)
         self.evaporation_rate = np.zeros(self.transport.base_shape)
@@ -311,6 +312,7 @@ class TwoPhaseMixtureDiffusionTransport:
         self.implicit_condensation_coeff[:] = vol_cond_coeff
         self.specific_liquid_surface_area[:] = specific_area
         self.capillary_pressure[:] = capillary_pressure
+        self.liquid_pressure[:] = liquid_pressure
         self.saturation[:] = saturation
         self.gas_volume_fraction = (
                 self.transport.transport_layers[0].initial_volume_fraction

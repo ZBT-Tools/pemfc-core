@@ -391,10 +391,15 @@ class VapourLiquidInterfaceResistanceMembrane(SpringerMembrane):
             liquid_saturation = 0.0
         else:
             liquid_saturation = self.calc_interface_saturation(liquid_pressure)
+
+        liquid_equilibrium = kwargs.get('liquid_equilibrium', False)
+        if liquid_equilibrium:
+            liquid_saturation = 1.0
+
         # Use average liquid saturation due to lack of better knowledge
         # liquid_saturation_avg = np.average(liquid_saturation, axis=0)
 
-        no_interface_resistance_water_flux = super().calc_cross_water_flux(
+        water_flux_new = super().calc_cross_water_flux(
             current_density, humidity)
 
         vapour_interfacial_resistance_coeff = (
@@ -407,10 +412,6 @@ class VapourLiquidInterfaceResistanceMembrane(SpringerMembrane):
         interfacial_resistance_coeff = (
                 vl_factor * vapour_interfacial_resistance_coeff)
 
-        water_flux_new = (no_interface_resistance_water_flux /
-            (1.0 + self.diff_coeff / self.thickness *
-             (1.0 / interfacial_resistance_coeff[0]
-              + 1.0 / interfacial_resistance_coeff[1])))
 
         # Recalculate membrane water activity
         activity = np.zeros(humidity.shape)
@@ -420,6 +421,10 @@ class VapourLiquidInterfaceResistanceMembrane(SpringerMembrane):
         activity[1] = (
             (interfacial_resistance_coeff[1] * humidity[1] + water_flux_new)
             / interfacial_resistance_coeff[1])
+        activity = np.maximum(activity, 0.0)
+        activity = np.minimum(activity, 1.0)
+
+        #TODO: Missing link between activity and water content in equations
         self.activity[:] = activity
         # Underrelaxation of flux
         water_flux = np.copy(self.water_flux)
@@ -429,6 +434,26 @@ class VapourLiquidInterfaceResistanceMembrane(SpringerMembrane):
         self.water_flux[:] = self.urf * water_flux \
                              + (1.0 - self.urf) * water_flux_new
 
+    def calc_eod(self):
+        return 1.0
+
+    def calc_ionic_resistance(self, *args, **kwargs):
+        """
+        Equation 13 in:
+        X. Ye, C.-Y. Wang. „Measurement of Water Transport Properties Through
+        Membrane-Electrode Assemblies: I. Membranes“. Journal of The
+        Electrochemical Society 154, Nr. 7 (21. Mai 2007): B676.
+        https://doi.org/10.1149/1.2737379.
+        """
+        avg_activity = np.average(self.activity, axis=0)
+        # water_content[water_content < 1.0] = 1.0
+        # Membrane conductivity [S/m]
+        mem_cond = np.maximum(1e-1, 0.12 * avg_activity ** 2.80 * 1e2)
+        # Area-specific membrane resistance [Ohm-m²]
+        self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
+        # Absolute resistance [Ohm]
+        self.omega[:] = self.omega_ca / self.discretization.d_area
+        return self.omega, self.omega_ca
 
 class YeWang2007Membrane(SpringerMembrane):
     """
@@ -445,7 +470,7 @@ class YeWang2007Membrane(SpringerMembrane):
         # Under-relaxation factor for water flux update
         self.urf = membrane_dict.get('underrelaxation_factor', 0.8)
 
-    def calc_ionic_resistance(self, humidity, *args, **kwargs):
+    def calc_ionic_resistance(self, *args, **kwargs):
         """
         Equation 13 in:
         X. Ye, C.-Y. Wang. „Measurement of Water Transport Properties Through
@@ -453,10 +478,10 @@ class YeWang2007Membrane(SpringerMembrane):
         Electrochemical Society 154, Nr. 7 (21. Mai 2007): B676.
         https://doi.org/10.1149/1.2737379.
         """
-        avg_humidity = np.average(humidity, axis=0)
+        avg_activity = np.average(self.activity, axis=0)
         # water_content[water_content < 1.0] = 1.0
         # Membrane conductivity [S/m]
-        mem_cond = np.maximum(1e-1, 0.12 * avg_humidity ** 2.80 * 1e2)
+        mem_cond = np.maximum(1e-1, 0.12 * avg_activity ** 2.80 * 1e2)
         # Area-specific membrane resistance [Ohm-m²]
         self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
         # Absolute resistance [Ohm]

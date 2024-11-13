@@ -40,7 +40,7 @@
         "last_cell": true
     },
     "membrane": {
-        "type": "YeWang2007",
+        "type": "VapourLiquidInterface",
         "underrelaxation_factor": 0.9,
         "thickness": 1.5e-05,
         "ionic_conductivity": 15.0,
