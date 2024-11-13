@@ -79,6 +79,8 @@ class Membrane(tl.TransportLayer2D, ABC):
             return SpringerMembrane(membrane_dict, discretization)
         elif model_type == 'YeWang2007':
             return YeWang2007Membrane(membrane_dict, discretization)
+        elif model_type == 'VapourLiquidInterface':
+            return VapourLiquidInterfaceResistanceMembrane(membrane_dict, discretization)
         else:
             raise NotImplementedError(
                 'Specified membrane model is not implemented. Available models '
@@ -156,6 +158,7 @@ class WaterTransportMembrane(Membrane, ABC):
         self.water_content = np.zeros((2, *self.discretization.shape))
         self.avg_water_content = np.zeros(self.discretization.shape)
         self.water_flux = np.zeros(self.discretization.shape)
+        self.activity = np.zeros(self.water_content.shape)
         self.add_print_data(self.water_flux,
                             'Membrane Water Flux', 'mol/(s-m²)')
         self.add_print_data(self.avg_water_content,
@@ -177,6 +180,8 @@ class WaterTransportMembrane(Membrane, ABC):
         pass
 
     def update(self, current_density, humidity, *args, **kwargs):
+        self.water_content[:] = self.calc_water_content(self.activity)
+        self.avg_water_content[:] = np.average(self.water_content, axis=0)
         self.calc_cross_water_flux(current_density, humidity, *args, **kwargs)
         super().update(current_density, humidity, *args, **kwargs)
 
@@ -276,6 +281,7 @@ class SpringerMembrane(WaterTransportMembrane):
         """
         # water_content[water_content < 1.0] = 1.0
         # Membrane conductivity [S/m]
+
         mem_cond = (0.005139 * self.avg_water_content - 0.00326) \
             * np.exp(1268.0 * (0.0033 - 1. / self.temp)) * 1e2
         # Area-specific membrane resistance [Ohm-m²]
@@ -297,12 +303,11 @@ class SpringerMembrane(WaterTransportMembrane):
         resolve this issue in the future, which is part of a current project.
         """
 
-        water_content = self.calc_water_content(humidity)
-        water_content_old = np.copy(self.water_content)
-        self.water_content[:] = (self.urf * water_content_old
-                                 + (1.0 - self.urf) * water_content)
-        self.avg_water_content[:] = np.average(self.water_content, axis=0)
-
+        # water_content = self.calc_water_content(humidity)
+        # water_content_old = np.copy(self.water_content)
+        # self.water_content[:] = (self.urf * water_content_old
+        #                          + (1.0 - self.urf) * water_content)
+        # self.avg_water_content[:] = np.average(self.water_content, axis=0)
         eod = self.calc_eod()
         diff_coeff = self.calc_diffusion_coefficient()
 
@@ -340,6 +345,7 @@ class SpringerMembrane(WaterTransportMembrane):
             pass
         self.water_flux[:] = self.urf * water_flux \
             + (1.0 - self.urf) * water_flux_new
+        self.activity[:] = humidity
         return water_flux_new
 
 
@@ -388,14 +394,33 @@ class VapourLiquidInterfaceResistanceMembrane(SpringerMembrane):
         # Use average liquid saturation due to lack of better knowledge
         # liquid_saturation_avg = np.average(liquid_saturation, axis=0)
 
-        liquid_equilibrated_water_flux = super().calc_cross_water_flux(
+        no_interface_resistance_water_flux = super().calc_cross_water_flux(
             current_density, humidity)
 
-        vapor_interface_fraction = 1.0 - liquid_saturation
-        water_flux_new = (liquid_equilibrated_water_flux /
-            (1.0 + self.diff_coeff / self.thickness * ()))
+        vapour_interfacial_resistance_coeff = (
+            self.calc_interfacial_resistance_coeff(humidity))
+        # Assumed factor of liquid-equilibrated interface resistance compared
+        # to vapour-equilibrated interface resistance
+        liquid_factor = 100.0
+        vl_factor = (1.0 * (1.0 - liquid_saturation)
+                     + liquid_saturation * liquid_factor)
+        interfacial_resistance_coeff = (
+                vl_factor * vapour_interfacial_resistance_coeff)
 
+        water_flux_new = (no_interface_resistance_water_flux /
+            (1.0 + self.diff_coeff / self.thickness *
+             (1.0 / interfacial_resistance_coeff[0]
+              + 1.0 / interfacial_resistance_coeff[1])))
 
+        # Recalculate membrane water activity
+        activity = np.zeros(humidity.shape)
+        activity[0] = (
+            (interfacial_resistance_coeff[0] * humidity[0] - water_flux_new)
+            / interfacial_resistance_coeff[0])
+        activity[1] = (
+            (interfacial_resistance_coeff[1] * humidity[1] + water_flux_new)
+            / interfacial_resistance_coeff[1])
+        self.activity[:] = activity
         # Underrelaxation of flux
         water_flux = np.copy(self.water_flux)
         # water_flux_new = water_flux_drag
