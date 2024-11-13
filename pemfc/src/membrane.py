@@ -1,5 +1,6 @@
 # General imports
 import numpy as np
+import scipy as sp
 from abc import ABC, abstractmethod
 
 # Local module imports
@@ -149,16 +150,12 @@ class WaterTransportMembrane(Membrane, ABC):
 
         # self.vapour_coeff = membrane_dict['vapour_transport_coefficient']
         # self.acid_group_conc = membrane_dict['acid_group_concentration']
+        self.diff_coeff = np.zeros(self.discretization.shape)
 
         # Water cross flux through the membrane
         self.water_content = np.zeros((2, *self.discretization.shape))
         self.avg_water_content = np.zeros(self.discretization.shape)
         self.water_flux = np.zeros(self.discretization.shape)
-        self.diff_coeff = np.zeros(self.discretization.shape)
-        # Electro-osmotic drag coefficient
-        self.eod = np.zeros(self.discretization.shape)
-        self.eod[:] = membrane_dict.get('electro-osmotic_drag_coeff', 1.0)
-
         self.add_print_data(self.water_flux,
                             'Membrane Water Flux', 'mol/(s-m²)')
         self.add_print_data(self.avg_water_content,
@@ -173,14 +170,14 @@ class WaterTransportMembrane(Membrane, ABC):
         pass
 
     @abstractmethod
-    def calc_cross_water_flux(self, current_density, humidity, *args):
+    def calc_cross_water_flux(self, current_density, humidity, *args, **kwargs):
         """
         Calculates the water cross flux through the membrane
         """
         pass
 
     def update(self, current_density, humidity, *args, **kwargs):
-        self.calc_cross_water_flux(current_density, humidity)
+        self.calc_cross_water_flux(current_density, humidity, *args, **kwargs)
         super().update(current_density, humidity, *args, **kwargs)
 
 
@@ -203,7 +200,7 @@ class SpringerMembrane(WaterTransportMembrane):
         # Under-relaxation factor for water flux update
         self.urf = membrane_dict.get('underrelaxation_factor', 0.95)
 
-    def calc_water_content(self, humidity):
+    def calc_water_content(self, activity):
         """
         Equations (16, 17) in
         Springer, T. E., T. A. Zawodzinski, S. Gottesfeld. „Polymer
@@ -223,21 +220,17 @@ class SpringerMembrane(WaterTransportMembrane):
         Simulation: A Review“. Membranes 10, Nr. 11 (28. Oktober 2020): 310. 
         https://doi.org/10.3390/membranes10110310.
         """
-        # water_content = (
-            # 0.3 + 6.0 * humidity * (1.0 - np.tanh(humidity - 0.5))
-            # + 3.9 * np.sqrt(humidity)
-            # * (1.0 + np.tanh((humidity - 0.89) / 0.23)))
+        water_content = (
+                0.3 + 6.0 * activity * (1.0 - np.tanh(activity - 0.5))
+                + 3.9 * np.sqrt(activity)
+                * (1.0 + np.tanh((activity - 0.89) / 0.23)))
 
         """
         linear test equation
         """
-        water_content = (humidity * 10.0)
+        # water_content = (humidity * 10.0)
         # Underrelaxation of water content
-        water_content_old = np.copy(self.water_content)
-        self.water_content[:] = (self.urf * water_content_old
-                                 + (1.0 - self.urf) * water_content)
-        self.avg_water_content[:] = np.average(self.water_content, axis=0)
-        return self.water_content, self.avg_water_content
+        return water_content
 
     def calc_diffusion_coefficient(self, *args):
         # Based on Springer et al. (1991);
@@ -247,35 +240,34 @@ class SpringerMembrane(WaterTransportMembrane):
 
         wc_avg = self.avg_water_content
 
-        # diff_coeff_star = (
-        #     np.where(wc_avg <= 2.0, 1.0,
-        #              np.where(wc_avg <= 3.0, 1.0 + 2.0 * (wc_avg - 2.0),
-        #                       np.where(wc_avg <= 4.0,
-        #                                3.0 - 1.38 * (wc_avg - 3.0),
-        #                                2.563 - 0.33 * wc_avg
-        #                                + 0.0264 * wc_avg ** 2.0
-        #                                - 0.000671 * wc_avg ** 3.0))))
-        #
-        # diff_coeff = (1.0e-10 * np.exp(2416.0 * (1.0 / 303.0 * 1.0 / self.temp))
-        #               * diff_coeff_star)
+        diff_coeff_star = (
+            np.where(wc_avg <= 2.0, 1.0,
+                     np.where(wc_avg <= 3.0, 1.0 + 2.0 * (wc_avg - 2.0),
+                              np.where(wc_avg <= 4.0,
+                                       3.0 - 1.38 * (wc_avg - 3.0),
+                                       2.563 - 0.33 * wc_avg
+                                       + 0.0264 * wc_avg ** 2.0
+                                       - 0.000671 * wc_avg ** 3.0))))
+
+        diff_coeff = (1.0e-10 * np.exp(2416.0 * (1.0 / 303.0 * 1.0 / self.temp))
+                      * diff_coeff_star)
 
         # # Based on Nguyen and White (1993);
         # # as formulated by Kamarajugadda et al. (2008)
-        diff_coeff = 2.5/22.0 * 5.5e-11 * wc_avg \
-            * np.exp(2416.0 * (1.0/303.0 * 1.0/self.temp))
+        # diff_coeff = 2.5/22.0 * 5.5e-11 * wc_avg \
+        #     * np.exp(2416.0 * (1.0/303.0 * 1.0/self.temp))
 
         # Constant diffusion coefficient test
         # diff_coeff = 12e-10
-
         self.diff_coeff[:] = diff_coeff
-        return self.diff_coeff
+        return diff_coeff
 
     def calc_eod(self):
         # Minimum water content of the cathode and anode side
         wc_min = np.min(self.water_content, axis=0)
         # Electro-osmotic drag coefficient according to Springer et al. (1991),
-        self.eod[:] = 2.5 * wc_min / 22.0
-        return self.eod
+        eod = 2.5 * wc_min / 22.0
+        return eod
 
     def calc_ionic_resistance(self, *args, **kwargs):
         """
@@ -292,7 +284,7 @@ class SpringerMembrane(WaterTransportMembrane):
         self.omega[:] = self.omega_ca / self.discretization.d_area
         return self.omega, self.omega_ca
 
-    def calc_cross_water_flux(self, current_density, humidity, *args):
+    def calc_cross_water_flux(self, current_density, humidity, *args, **kwargs):
         """
         Calculates the water cross flux through the membrane based on
         Springer et al. (1991). Water content on each membrane side is
@@ -305,14 +297,19 @@ class SpringerMembrane(WaterTransportMembrane):
         resolve this issue in the future, which is part of a current project.
         """
 
-        self.calc_water_content(humidity)
-        self.calc_eod()
-        self.calc_diffusion_coefficient()
+        water_content = self.calc_water_content(humidity)
+        water_content_old = np.copy(self.water_content)
+        self.water_content[:] = (self.urf * water_content_old
+                                 + (1.0 - self.urf) * water_content)
+        self.avg_water_content[:] = np.average(self.water_content, axis=0)
+
+        eod = self.calc_eod()
+        diff_coeff = self.calc_diffusion_coefficient()
 
         # Water flux due to electro-osmosis (ionic drag); -1 since
         # current_density is a magnitude but its direction should be
-        # negative drag flux means from cathode to anode
-        water_flux_drag = self.eod * -1.0 * current_density / self.FARADAY
+        # negative corresponding to the direction from anode to cathode
+        water_flux_drag = eod * -1.0 * current_density / self.FARADAY
 
         # Dry density of membrane (kg/m³), could be generalized as input
         rho_m = 2000.0
@@ -324,7 +321,7 @@ class SpringerMembrane(WaterTransportMembrane):
         # # water_content[0]: lambda at cathode side,
         # # water_content[1]: lambda at anode side
         # # negative diffusion flux mean from anode to cathode
-        water_flux_diff = - rho_m / mw_m * self.diff_coeff \
+        water_flux_diff = - rho_m / mw_m * diff_coeff \
             * (self.water_content[1] - self.water_content[0]) / self.thickness
 
         # Predicting the water content on each membrane side seems to be
@@ -343,6 +340,69 @@ class SpringerMembrane(WaterTransportMembrane):
             pass
         self.water_flux[:] = self.urf * water_flux \
             + (1.0 - self.urf) * water_flux_new
+        return water_flux_new
+
+
+class VapourLiquidInterfaceResistanceMembrane(SpringerMembrane):
+    """
+    Membrane model according to Springer, but with additional interface
+    resistance for the water transport and water transport in the
+    membrane according to the review in
+    Dickinson, E. J. F., G. Smith. “Modelling the Proton-Conductive
+    Membrane in Practical Polymer Electrolyte Membrane Fuel Cell (PEMFC)
+    Simulation: A Review.” Membranes 10, no. 11 (October 28, 2020): 310.
+    https://doi.org/10.3390/membranes10110310.
+    """
+
+    @staticmethod
+    def calc_interface_saturation(liquid_pressure):
+        """
+        Equations (95) and (96) in:
+        Dickinson, E. J. F., G. Smith. “Modelling the Proton-Conductive
+        Membrane in Practical Polymer Electrolyte Membrane Fuel Cell (PEMFC)
+        Simulation: A Review.” Membranes 10, no. 11 (October 28, 2020): 310.
+        https://doi.org/10.3390/membranes10110310.
+        """
+        r_c = (4e-5 / liquid_pressure) * 1e9  # in nm
+        saturation = 0.5 * (1.0 - sp.special.erf((np.log(r_c) - np.log(1.25))
+                                                 / 0.3 * np.sqrt(2.0)))
+        return saturation
+
+    @staticmethod
+    def calc_interfacial_resistance_coeff(humidity):
+        """
+        Equation (92)
+        """
+        # result = 4.4e-3
+        return 1.04e-3 * np.exp(4.48e-4 * humidity)
+
+    def calc_cross_water_flux(self, current_density, humidity, *args, **kwargs):
+        """
+
+        """
+        liquid_pressure = kwargs.get('liquid_pressure', None)
+        if liquid_pressure is None:
+            liquid_saturation = 0.0
+        else:
+            liquid_saturation = self.calc_interface_saturation(liquid_pressure)
+        # Use average liquid saturation due to lack of better knowledge
+        # liquid_saturation_avg = np.average(liquid_saturation, axis=0)
+
+        liquid_equilibrated_water_flux = super().calc_cross_water_flux(
+            current_density, humidity)
+
+        vapor_interface_fraction = 1.0 - liquid_saturation
+        water_flux_new = (liquid_equilibrated_water_flux /
+            (1.0 + self.diff_coeff / self.thickness * ()))
+
+
+        # Underrelaxation of flux
+        water_flux = np.copy(self.water_flux)
+        # water_flux_new = water_flux_drag
+        if gs.global_state.iteration == 150:
+            pass
+        self.water_flux[:] = self.urf * water_flux \
+                             + (1.0 - self.urf) * water_flux_new
 
 
 class YeWang2007Membrane(SpringerMembrane):
@@ -379,8 +439,7 @@ class YeWang2007Membrane(SpringerMembrane):
         return self.omega, self.omega_ca
 
     def calc_eod(self):
-        self.eod[:] = 1.0
-        return self.eod
+        return 1.0
         # return super().calc_eod()
 
     def calc_diffusion_coefficient(self, *args):
