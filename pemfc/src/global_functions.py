@@ -61,18 +61,23 @@ def array_vector_multiply(array, vector):
     return (array.transpose() * vector).transpose()
 
 
-def add_source(var, source, direction=1, tri_mtx=None):
+def add_source(base_values, source, direction=1, tri_mtx=None, zero_limit=True):
     """
     Add discrete 1d source of length n-1 to var of length n
-    :param var: 1d array of quantity variable
+    :param base_values: 1d array of quantity variable
     :param source: 1d array of source to add to var
     :param direction: flow direction (1: along array counter, -1: opposite to
-    array counter)
+                      array counter)
     :param tri_mtx: if triangle matrix (2D array, nxn) is not provided,
-    it will be created temporarily
-    :return:
+                    it will be created temporarily
+    :param zero_limit: if True and source reduces flow variable to zero,
+                       variable and local source will be limited to zero and
+                       local source
+    :return: result, source: resultant flow variable array and corresponding
+                             source array
     """
-    n = len(var) - 1
+    n = len(base_values) - 1
+    result = np.copy(base_values)
     if len(source) != n:
         raise ValueError('parameter source must be of length (var-1)')
     if direction == 1:
@@ -82,7 +87,7 @@ def add_source(var, source, direction=1, tri_mtx=None):
             fwd_mat = np.tril(ones)
         else:
             fwd_mat = tri_mtx
-        var[1:] += np.matmul(fwd_mat, source)
+        result[1:] += np.matmul(fwd_mat, source)
     elif direction == -1:
         if tri_mtx is None:
             ones = np.zeros((n, n))
@@ -90,10 +95,27 @@ def add_source(var, source, direction=1, tri_mtx=None):
             bwd_mat = np.triu(ones)
         else:
             bwd_mat = tri_mtx
-        var[:-1] += np.matmul(bwd_mat, source)
+        result[:-1] += np.matmul(bwd_mat, source)
     else:
         raise ValueError('parameter direction must be either 1 or -1')
-    return var
+
+    # Correct sources and flow for lower limit (zero)
+    result_source = np.copy(source)
+    if zero_limit:
+        id_negative = np.argwhere(result < 0.0)
+        if direction == 1:
+            id_negative_src = id_negative - 1
+            id_last_positive = id_negative[0] - 1
+            id_last_nonzero_src = id_last_positive
+        else:
+            id_negative_src = id_negative
+            id_last_positive = id_negative[-1] + 1
+            id_last_nonzero_src = id_last_positive - 1
+
+        result_source[id_last_nonzero_src] = result[id_last_positive]
+        result_source[id_negative_src] = 0.0
+        result[id_negative] = 0.0
+    return result, result_source
 
 
 def np_log(array):

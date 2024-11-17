@@ -395,9 +395,19 @@ class HalfCell(OutputObject2D):
                     mole_flux, flux_interface_area)
                 mole_source[self.id_inert] *= 0.0
                 mass_source[self.id_inert] *= 0.0
-                mole_source_sum = np.sum(mole_source, axis=-1)
+                # mole_source_sum = np.sum(mole_source, axis=-1)
+
+                # Corrected cross-water mass flows due to possible
+                # full dry-out of channel using material flows from previous
+                # iteration (material flows calculated in flow circuit loop)
+                _, mole_source[self.id_h2o] = gf.add_source(
+                    self.channel.mole_flow[self.id_h2o],
+                    mole_source[self.id_h2o])
+                mass_source[self.id_h2o] = (mole_source[self.id_h2o] *
+                                   self.channel.fluid.species_mw[self.id_h2o])
                 self.channel.mass_source[:], self.channel.mole_source[:] = (
                     mass_source, mole_source)
+
                 # Only updating mass and mole sources here, because channel
                 # mass flow is updated in ParallelFlowCircuit calculations
                 # even for single cell, so be careful to modify this here
@@ -408,9 +418,8 @@ class HalfCell(OutputObject2D):
 
             # Calculate stoichiometry
             current = self.surface_flux_to_channel_source(current_density)
-            current_sum = np.sum(current)
-            current_density = current_sum / np.sum(self.discretization.d_area)
-
+            # current_sum = np.sum(current)
+            # current_density = current_sum / np.sum(self.discretization.d_area)
             self.inlet_stoi = (
                 self.channel.mole_flow[self.id_fuel, self.channel.id_in]
                 * self.faraday * self.n_charge

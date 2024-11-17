@@ -247,6 +247,14 @@ class Cell(OutputObject2D):
                           update_channel=update_channel,
                           current_control=True,
                           heat_flux=heat_flux_ano_gdl)
+
+        # Correct common membrane water cross-flow in case of one-side channel
+        # dry-out
+        #TODO: Update water cross flow, however only calculate differences to
+        # previous water cross flow (mole/m²-s), where mole_sources (mole/s)
+        # are smaller than previous water cross flow calculations (all in
+        # magnitude)
+
         if self.cathode.electrochemistry.corrected_current_density is not None:
             corrected_current_density = \
                 self.cathode.electrochemistry.corrected_current_density

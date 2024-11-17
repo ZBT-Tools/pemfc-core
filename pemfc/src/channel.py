@@ -420,7 +420,8 @@ class Channel(oo.OutputObject1D, ABC):
         dp = self.calc_pressure_drop()
         pressure_direction = -self.flow_direction
         self.pressure[:] = self.p_out
-        g_func.add_source(self.pressure, dp, pressure_direction)
+        self.pressure[:], _ = g_func.add_source(self.pressure, dp,
+                                                pressure_direction)
         # if np.any(self.p < (self.p[self.id_out] - 1e-5)):
         #     raise ValueError('Pressure dropped below outlet pressure, please '
         #                      'check boundary conditions. Pressure calculation'
@@ -480,8 +481,8 @@ class Channel(oo.OutputObject1D, ABC):
             heat = heat_flux * self.surface_area
             dtemp = heat / g_fluid
             self.temperature[:] = self.temperature[self.id_in]
-            g_func.add_source(self.temperature, dtemp,
-                              self.flow_direction, self.tri_mtx)
+            self.temperature[:], _ = g_func.add_source(
+                self.temperature, dtemp, self.flow_direction, self.tri_mtx)
             self.heat[:] = heat
             self.temp_ele[:] = ip.interpolate_1d(self.temperature)
             wall_temp = self.temp_ele + heat / self.k_coeff
@@ -553,8 +554,9 @@ class IncompressibleFluidChannel(Channel):
             self.mass_flow_total[:] = mass_flow_in
         if mass_source is not None:
             self.mass_source[:] = mass_source
-        g_func.add_source(self.mass_flow_total, self.mass_source,
-                          self.flow_direction, self.tri_mtx)
+        self.mass_flow_total[:], self.mass_source[:] = g_func.add_source(
+            self.mass_flow_total, self.mass_source, self.flow_direction,
+            self.tri_mtx)
         self.mass_flow_total[self.mass_flow_total < 0.0] = 0.0
 
 
@@ -668,10 +670,9 @@ class GasMixtureChannel(Channel):
                 raise ValueError('shape of mass_source does not conform '
                                  'to mole_source array')
         for i in range(self.fluid.n_species):
-            g_func.add_source(self.mass_flow[i], self.mass_source[i],
-                              self.flow_direction, self.tri_mtx)
-
-        self.mass_flow[self.mass_flow < 0.0] = 0.0
+            self.mass_flow[i][:], self.mass_source[i][:] = g_func.add_source(
+                self.mass_flow[i], self.mass_source[i], self.flow_direction,
+                self.tri_mtx)
         self.mass_flow_total[:] = np.sum(self.mass_flow, axis=0)
         # self.mass_flow[:] = \
         #     (self.mole_flow.transpose() * self.fluid.species_mw).transpose()
