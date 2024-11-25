@@ -207,229 +207,214 @@ class HalfCell(OutputObject2D):
     def update(self, current_density: np.ndarray,
                temperature: np.ndarray, update_channel: bool = True,
                current_control: bool = True,
-               heat_flux: np.ndarray = None):
+               heat_flux: np.ndarray = None,
+               update_electrochemistry=True,
+               update_voltage_loss=True,
+               update_stoichiometry=False):
         """
         This function coordinates the program sequence
         """
 
-        if not self.break_program:
-            # self.channel.update(mole_flow_in, mole_flux)
-            # self.channel.mole_flow[:] = mole_flow_in
-            mass_flux, mole_flux = self.calc_species_flux(current_density)
-            channel_concentration = self.channel.concentration_ele
-            # channel_concentration = ip.interpolate_along_axis(
-            #     self.channel.fluid.gas.concentration, axis=-1)
+        if update_stoichiometry:
+            self.update_stoichiometry(current_density, current_control)
+
+        # Calculate material flux at membrane-gde-interface due to faradaic
+        # reaction and membrane cross-water flux
+        mole_flux_mem_gde = (
+            self.calc_species_mole_flux(current_density))
+        channel_concentration = self.channel.concentration_ele
+
+        # Update mass transport
+        (mole_flux_gde_chl, fuel_concentration, flux_interface_area,
+         flux_scaling_factors) = self.update_mass_transport(
+            temperature, channel_concentration, mole_flux_mem_gde, heat_flux)
+        mass_flux_gde_chl = (mole_flux_gde_chl.transpose()
+                             * self.channel.fluid.species_mw).transpose()
+
+        # Update channel mass/mole sources
+        if update_channel:
+            # Calculate mole and mass source from fluxes
+            mass_source = self.surface_flux_to_channel_source(
+                mass_flux_gde_chl, area=flux_interface_area)
+            # mass_source_old = self.surface_flux_to_channel_source(
+            #     mass_flux_old)
+            mole_source = self.surface_flux_to_channel_source(
+                mole_flux_gde_chl, flux_interface_area)
+            mole_source[self.id_inert] *= 0.0
+            mass_source[self.id_inert] *= 0.0
+            # mole_source_sum = np.sum(mole_source, axis=-1)
+
+            # Corrected water mass flows due to possible
+            # full dry-out of channel using material flows from previous
+            # iteration (material flows calculated in flow circuit loop)
+            _, mole_source[self.id_h2o] = gf.add_source(
+                self.channel.mole_flow[self.id_h2o],
+                mole_source[self.id_h2o])
+            mass_source[self.id_h2o] = (mole_source[self.id_h2o] *
+                               self.channel.fluid.species_mw[self.id_h2o])
+            self.channel.mass_source[:], self.channel.mole_source[:] = (
+                mass_source, mole_source)
+            # Only updating mass and mole sources here, because channel
+            # mass flow is updated in ParallelFlowCircuit calculations
+            # even for single cell, so be careful to modify this here
+            # self.channel.update(update_mass=True, update_flow=False,
+            #                     update_heat=False, update_fluid=True)
+        # Update water cross flow
+        if self.calc_gdl_diffusion:
+            # Recalculate mole fluxes after update of diffusion model
+            bc_type = 'Neumann'
+            mole_flux_mem_gde = self.gdl_diffusion.calc_boundary_flux(
+                bc_type)
+        self.w_cross_flow = mole_flux_mem_gde[self.id_h2o]
+
+        if update_electrochemistry:
             reference_fuel_concentration = np.max(
                 channel_concentration[self.id_fuel, self.channel.id_in])
-            if self.calc_gdl_diffusion:
-                # Explicitly calculate diffusion in GDL and use calculated
-                # concentrations at CL-GDL-Interface for the electrochemistry
-                # model, therefore the electrochemistry model does not need
-                # to account for GDL losses anymore
-                if not self.calc_two_phase_flow:
-                    self.gdl_diffusion.update(
-                        channel_concentration, mole_flux,
-                        temperature=temperature, pressure=self.channel.pressure)
-                else:
-                    # Adjust two-phase flow boundary conditions
-                    liquid_flux_ratio = 0.0
-                    ch_gdl_sat = (np.ones(self.two_phase_flow.saturation.shape)
-                                  * self.gdl_channel_saturation)
-                    liquid_water_flux = (mass_flux[self.id_h2o]
-                                         * liquid_flux_ratio)
-                    mole_flux[self.id_h2o] *= (1.0 - liquid_flux_ratio)
-                    iteration = 0
-                    molar_evap_rate = np.zeros(
-                        self.two_phase_flow.evaporation_rate.shape)
-                    molar_cond_coeff = np.zeros(
-                        self.two_phase_flow.implicit_condensation_coeff.shape)
-                    # Adjust numerical settings
-                    error = np.inf
-                    max_iterations = 1
-                    min_iterations = 1
-                    # urf = self.two_phase_flow.urf
-                    error_tolerance = 1e-5
-                    while (all((error > error_tolerance,
-                                iteration < max_iterations))
-                           or iteration < min_iterations):
-                        # Update gas diffusion in GDL
-                        self.gdl_diffusion.update(
-                            channel_concentration, mole_flux,
-                            self.explicit_source_terms,
-                            self.implicit_source_terms,
-                            temperature, self.channel.pressure,
-                            self.two_phase_flow.gas_volume_fraction)
+            self.electrochemistry.update(
+                current_density, fuel_concentration,
+                reference_fuel_concentration,
+                scaling_factors=flux_scaling_factors,
+                inlet_concentration=reference_fuel_concentration)
 
-                        # Update two-phase flow in GDL
-                        temp = self.gdl_diffusion.fluid.temperature
-                        press = self.gdl_diffusion.fluid.pressure
-                        mol_comp = self.gdl_diffusion.solution_array
-                        self.two_phase_flow.update(
-                            temp, press, mol_comp, ch_gdl_sat,
-                            liquid_water_flux, heat_flux, update_fluid=True)
-                        fluid = self.two_phase_flow.fluid
-                        molar_mass = fluid.species_mw[fluid.id_pc]
-                        molar_evap_rate_old = np.copy(molar_evap_rate)
-                        # molar_cond_coeff_old = np.copy(molar_cond_coeff)
-                        molar_evap_rate[:] = (
-                                self.two_phase_flow.evaporation_rate /
-                                molar_mass)
-                        # molar_evap_rate = (urf * molar_evap_rate
-                        #                    + (1.0 - urf) * molar_evap_rate_old)
-                        molar_cond_coeff[:] = (
-                                self.two_phase_flow.implicit_condensation_coeff
-                                / molar_mass)
-                        # molar_cond_coeff = (
-                        #     urf * molar_cond_coeff
-                        #     + (1.0 - urf) * molar_cond_coeff_old)
-                        self.explicit_source_terms[fluid.id_pc] = (
-                            1.0 * molar_evap_rate)
-                        self.implicit_source_terms[fluid.id_pc] = (
-                            -1.0 * molar_cond_coeff)
-                        # Error calculation
-                        diff_e = molar_evap_rate - molar_evap_rate_old
-                        diff_e[:] = np.divide(diff_e, molar_evap_rate,
-                                              where=molar_evap_rate != 0.0)
-                        diff_e = diff_e.ravel()
-                        error = (np.dot(diff_e.transpose(), diff_e)
-                                 / (2.0 * len(diff_e)))
-                        iteration += 1
-
-                    # Reduce evaporation heat to 2D discretization of GDE in
-                    # overall stack model
-                    self.evaporation_heat[:] = self.reduce_discretization(
-                        np.sum(self.two_phase_flow.evaporation_heat, axis=0),
-                        mode="sum")
-                    self.saturation[:] = self.reduce_discretization(
-                        np.average(self.two_phase_flow.saturation, axis=0))
-
-                # Reshape 3D-concentration fields from the GDL-Diffusion
-                # sub-model to the reduced discretization in this model
-                # Take only the concentration at the CL-Interface
-                # (axis: 1, last index)
-                # reduced_shape = mole_flux[self.id_fuel].shape
-                # Average along z-axis according to the reduced discretization
-                fuel_cl_concentration = self.reduce_discretization(
-                    self.gdl_diffusion.solution_array[self.id_fuel, -1, :, :])
-                flux_scaling_factors = self.reduce_discretization(
-                    self.gdl_diffusion.flux_scaling_factors[self.id_fuel])
-                # diff_coeff_by_length = self.reduce_discretization(
-                #     self.gdl_diffusion.diff_coeff_by_length[self.id_fuel])
-
-                # fuel_gdl_concentration = np.asarray([
-                #     ip.interpolate_1d(channel_concentration[self.id_fuel])
-                #     for i in range(current_density.shape[-1])]).transpose()
-                self.electrochemistry.update(
-                    current_density, fuel_cl_concentration,
-                    reference_fuel_concentration,
-                    scaling_factors=flux_scaling_factors,
-                    inlet_concentration=reference_fuel_concentration)
-
-                # mass_flux_old = np.copy(mass_flux)
-                # mole_flux_old = np.copy(mole_flux)
-                # mole_flux_avg_cl_old = np.average(
-                #     np.average(mole_flux_old, axis=-1), axis=-1)
-                # mole_flux_avg_old = np.average(np.average(mole_flux, axis=-1),
-                #                                axis=-1)
-
-                # Recalculate mass flux at GDL/Channel interface
-                bc_type = 'Dirichlet'
-                mole_flux = self.gdl_diffusion.calc_boundary_flux(bc_type)
-                # mole_flux_avg = np.average(np.average(mole_flux, axis=-1),
-                #                            axis=-1)
-                mass_flux = (mole_flux.transpose() *
-                             self.channel.fluid.species_mw).transpose()
-                axes, indices, _ = self.gdl_diffusion.get_boundary_indices(
-                    bc_type)
-                flux_interface_area = (
-                    self.gdl_diffusion.get_values(
-                        self.gdl_diffusion.discretization.d_area[axes[0]],
-                        axes,
-                        indices))
-                # mole_source_chl = np.sum(np.sum(flux_interface_area * mole_flux,
-                #                                 axis=-1), axis=-1)
-
-                # # Recalculate mass flux at GDL/Channel interface
-                # bc_type = 'Neumann'
-                # mole_flux_cl = - self.gdl_diffusion.calc_boundary_flux(
-                #     bc_type)
-                # mole_flux_avg_cl = np.average(np.average(mole_flux_cl, axis=-1),
-                #                               axis=-1)
-                #
-                # mass_flux_cl = (mole_flux_cl.transpose() *
-                #                 self.channel.fluid.species_mw).transpose()
-                # axes, indices, _ = self.gdl_diffusion.get_boundary_indices(
-                #     bc_type)
-                # flux_interface_area_cl = (
-                #     self.gdl_diffusion.get_values(
-                #         self.gdl_diffusion.discretization.d_area[axes[0]],
-                #         axes,
-                #         indices))
-                # mole_source_cl = np.sum(np.sum(mole_flux_cl *
-                #                         flux_interface_area_cl,
-                #                         axis=-1), axis=-1)
-
-                # Factor 2 due to symmetry assumption in gdl_diffusion model
-                flux_interface_area *= 2.0
-            else:
-                # fuel_gdl_concentration = np.asarray([
-                #     ip.interpolate_1d(channel_concentration[self.id_fuel])
-                #     for i in range(current_density.shape[-1])]).transpose()
-                fuel_gdl_concentration = np.asarray([
-                    channel_concentration[self.id_fuel]
-                    for i in range(current_density.shape[-1])]).transpose()
-
-                self.electrochemistry.update(
-                    current_density, fuel_gdl_concentration,
-                    reference_fuel_concentration,
-                    inlet_concentration=reference_fuel_concentration)
-                flux_interface_area = self.discretization.d_area
-
-            if update_channel:
-                # Calculate mole and mass source from fluxes
-                mass_source = self.surface_flux_to_channel_source(
-                    mass_flux, area=flux_interface_area)
-                # mass_source_old = self.surface_flux_to_channel_source(
-                #     mass_flux_old)
-                mole_source = self.surface_flux_to_channel_source(
-                    mole_flux, flux_interface_area)
-                mole_source[self.id_inert] *= 0.0
-                mass_source[self.id_inert] *= 0.0
-                # mole_source_sum = np.sum(mole_source, axis=-1)
-
-                # Corrected cross-water mass flows due to possible
-                # full dry-out of channel using material flows from previous
-                # iteration (material flows calculated in flow circuit loop)
-                _, mole_source[self.id_h2o] = gf.add_source(
-                    self.channel.mole_flow[self.id_h2o],
-                    mole_source[self.id_h2o])
-                mass_source[self.id_h2o] = (mole_source[self.id_h2o] *
-                                   self.channel.fluid.species_mw[self.id_h2o])
-                self.channel.mass_source[:], self.channel.mole_source[:] = (
-                    mass_source, mole_source)
-
-                # Only updating mass and mole sources here, because channel
-                # mass flow is updated in ParallelFlowCircuit calculations
-                # even for single cell, so be careful to modify this here
-                # self.channel.update(update_mass=True, update_flow=False,
-                #                     update_heat=False, update_fluid=True)
-
+        if update_voltage_loss:
+            # Update voltage loss
             self.update_voltage_loss(current_density)
 
-            # Calculate stoichiometry
-            current = self.surface_flux_to_channel_source(current_density)
-            # current_sum = np.sum(current)
-            # current_density = current_sum / np.sum(self.discretization.d_area)
-            self.inlet_stoi = (
+
+    def update_stoichiometry(self, current_density, current_control):
+        # Calculate stoichiometry
+        current = self.surface_flux_to_channel_source(current_density)
+        # current_sum = np.sum(current)
+        # current_density = current_sum / np.sum(self.discretization.d_area)
+        self.inlet_stoi = (
                 self.channel.mole_flow[self.id_fuel, self.channel.id_in]
                 * self.faraday * self.n_charge
                 / (np.sum(current) * abs(self.n_stoi[self.id_fuel])))
-            # if gs.global_state.iteration == 100:
-            #     print('test')
-            if current_control and self.inlet_stoi < 1.0:
-                raise ValueError('stoichiometry of cell {0} '
-                                 'becomes smaller than one: {1:0.3f}'
-                                 .format(self.number, self.inlet_stoi))
+        # if gs.global_state.iteration == 100:
+        #     print('test')
+        if current_control and self.inlet_stoi < 1.0:
+            raise ValueError('stoichiometry of cell {0} '
+                             'becomes smaller than one: {1:0.3f}'
+                             .format(self.number, self.inlet_stoi))
+
+    def update_mass_transport(self, temperature, concentration, mole_flux,
+                              heat_flux):
+        if self.calc_gdl_diffusion:
+            # Explicitly calculate diffusion in GDL and use calculated
+            # concentrations at CL-GDL-Interface for the electrochemistry
+            # model, therefore the electrochemistry model does not need
+            # to account for GDL losses anymore
+            mass_flux = (mole_flux.transpose()
+                         * self.channel.fluid.species_mw).transpose()
+            if not self.calc_two_phase_flow:
+                self.gdl_diffusion.update(
+                    concentration, mole_flux,
+                    temperature=temperature, pressure=self.channel.pressure)
+            else:
+                # Adjust two-phase flow boundary conditions
+                liquid_flux_ratio = 0.0
+                ch_gdl_sat = (np.ones(self.two_phase_flow.saturation.shape)
+                              * self.gdl_channel_saturation)
+                liquid_water_flux = (mass_flux[self.id_h2o] * liquid_flux_ratio)
+                mole_flux[self.id_h2o] *= (1.0 - liquid_flux_ratio)
+                iteration = 0
+                molar_evap_rate = np.zeros(
+                    self.two_phase_flow.evaporation_rate.shape)
+                molar_cond_coeff = np.zeros(
+                    self.two_phase_flow.implicit_condensation_coeff.shape)
+                # Adjust numerical settings
+                error = np.inf
+                max_iterations = 1
+                min_iterations = 1
+                # urf = self.two_phase_flow.urf
+                error_tolerance = 1e-5
+                while (all((error > error_tolerance,
+                            iteration < max_iterations))
+                       or iteration < min_iterations):
+                    # Update gas diffusion in GDL
+                    self.gdl_diffusion.update(
+                        concentration, mole_flux,
+                        self.explicit_source_terms,
+                        self.implicit_source_terms,
+                        temperature, self.channel.pressure,
+                        self.two_phase_flow.gas_volume_fraction)
+
+                    # Update two-phase flow in GDL
+                    temp = self.gdl_diffusion.fluid.temperature
+                    press = self.gdl_diffusion.fluid.pressure
+                    mol_comp = self.gdl_diffusion.solution_array
+                    self.two_phase_flow.update(
+                        temp, press, mol_comp, ch_gdl_sat,
+                        liquid_water_flux, heat_flux, update_fluid=True)
+                    fluid = self.two_phase_flow.fluid
+                    molar_mass = fluid.species_mw[fluid.id_pc]
+                    molar_evap_rate_old = np.copy(molar_evap_rate)
+                    molar_evap_rate[:] = (
+                            self.two_phase_flow.evaporation_rate /
+                            molar_mass)
+
+                    molar_cond_coeff[:] = (
+                            self.two_phase_flow.implicit_condensation_coeff
+                            / molar_mass)
+
+                    self.explicit_source_terms[fluid.id_pc] = (
+                            1.0 * molar_evap_rate)
+                    self.implicit_source_terms[fluid.id_pc] = (
+                            -1.0 * molar_cond_coeff)
+                    # Error calculation
+                    diff_e = molar_evap_rate - molar_evap_rate_old
+                    diff_e[:] = np.divide(diff_e, molar_evap_rate,
+                                          where=molar_evap_rate != 0.0)
+                    diff_e = diff_e.ravel()
+                    error = (np.dot(diff_e.transpose(), diff_e)
+                             / (2.0 * len(diff_e)))
+                    iteration += 1
+
+                # Reduce evaporation heat to 2D discretization of GDE in
+                # overall stack model
+                self.evaporation_heat[:] = self.reduce_discretization(
+                    np.sum(self.two_phase_flow.evaporation_heat, axis=0),
+                    mode="sum")
+                self.saturation[:] = self.reduce_discretization(
+                    np.average(self.two_phase_flow.saturation, axis=0))
+
+            # Reshape 3D-concentration fields from the GDL-Diffusion
+            # sub-model to the reduced discretization in this model
+            # Take only the concentration at the CL-Interface
+            # (axis: 1, last index)
+            # reduced_shape = mole_flux[self.id_fuel].shape
+            # Average along z-axis according to the reduced discretization
+            fuel_concentration = self.reduce_discretization(
+                self.gdl_diffusion.solution_array[self.id_fuel, -1, :, :])
+            flux_scaling_factors = self.reduce_discretization(
+                self.gdl_diffusion.flux_scaling_factors[self.id_fuel])
+
+            # Recalculate mass flux at GDL/Channel interface
+            bc_type = 'Dirichlet'
+            mole_flux_gde_chl = self.gdl_diffusion.calc_boundary_flux(
+                bc_type)
+            axes, indices, _ = self.gdl_diffusion.get_boundary_indices(
+                bc_type)
+            flux_interface_area = (
+                self.gdl_diffusion.get_values(
+                    self.gdl_diffusion.discretization.d_area[axes[0]],
+                    axes,
+                    indices))
+
+            # Factor 2 due to symmetry assumption in gdl_diffusion model
+            flux_interface_area *= 2.0
+        else:
+            # fuel_gdl_concentration = np.asarray([
+            #     ip.interpolate_1d(channel_concentration[self.id_fuel])
+            #     for i in range(current_density.shape[-1])]).transpose()
+            mole_flux_gde_chl = mole_flux
+            fuel_concentration = np.asarray([
+                concentration[self.id_fuel]
+                for i in range(heat_flux.shape[-1])]).transpose()
+            flux_scaling_factors = None
+            flux_interface_area = self.discretization.d_area
+        return (mole_flux_gde_chl, fuel_concentration, flux_interface_area,
+                flux_scaling_factors)
 
     def reduce_discretization(self, array, shape=None, mode="average"):
         array = np.asarray(array, dtype=np.float64)
@@ -475,7 +460,7 @@ class HalfCell(OutputObject2D):
         return (electrical_current * abs(stoich_factor) /
                 (self.n_charge * self.faraday))
 
-    def calc_species_flux(self, current_density: np.ndarray):
+    def calc_species_mole_flux(self, current_density: np.ndarray):
         if not isinstance(current_density, np.ndarray):
             current_density = np.asarray(current_density)
         mole_flux = np.zeros((self.channel.fluid.n_species,
@@ -490,9 +475,7 @@ class HalfCell(OutputObject2D):
         #     self.w_cross_flow)
         mole_flux[self.id_h2o] += self.w_cross_flow
         # self.channel.flow_direction
-        mass_flux = (mole_flux.transpose()
-                     * self.channel.fluid.species_mw).transpose()
-        return mass_flux, mole_flux
+        return mole_flux
 
     def surface_flux_to_channel_source(self, flux: np.ndarray, area=None):
         if area is None:

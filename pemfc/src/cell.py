@@ -208,12 +208,15 @@ class Cell(OutputObject2D):
     def update(self, current_density, update_channel=True,
                current_control=True, urf=None):
         """
-        This function coordinates the program sequence
+        The cell
         """
         if urf is None:
             urf = self.urf
         current_density = (
                 (1.0 - urf) * current_density + urf * self.current_density)
+
+        for item in self.half_cells:
+            item.update_stoichiometry(current_density, current_control)
 
         self.membrane.temp[:] = (
                 0.5 * (self.temp_layer[self.interface_id['cathode_gde_mem']] +
@@ -234,26 +237,50 @@ class Cell(OutputObject2D):
         cathode_temperature = np.stack(
             [self.temp_layer[self.interface_id['cathode_bpp_gde']],
              self.temp_layer[self.interface_id['cathode_gde_mem']]], axis=0)
+        anode_temperature = np.stack(
+            [self.temp_layer[self.interface_id['anode_mem_gde']],
+             self.temp_layer[self.interface_id['anode_gde_bpp']]], axis=0)
+
+        error = 1000.0
+        iteration = 0
+        iter_max = 3
+        while iteration < iter_max:
+            self.cathode.update(mea_current_density,
+                                cathode_temperature,
+                                update_channel=update_channel,
+                                current_control=current_control,
+                                heat_flux=heat_flux_cat_gdl,
+                                update_electrochemistry=False,
+                                update_voltage_loss=False)
+            self.anode.update(mea_current_density,
+                              anode_temperature,
+                              update_channel=update_channel,
+                              current_control=True,
+                              heat_flux=heat_flux_ano_gdl,
+                              update_electrochemistry=False,
+                              update_voltage_loss=False)
+            ano_water_flow_abs = np.abs(self.anode.w_cross_flow)
+            cat_water_flow_abs = np.abs(self.cathode.w_cross_flow)
+            error = np.sum(np.abs(cat_water_flow_abs - ano_water_flow_abs))
+            if error > 1e-3:
+                cat_w_cross_flow = np.where(
+                    cat_water_flow_abs <= ano_water_flow_abs,
+                    self.cathode.w_cross_flow, self.anode.w_cross_flow * -1.0)
+                ano_w_cross_flow = -1.0 * cat_w_cross_flow
+                self.cathode.w_cross_flow = cat_w_cross_flow
+                self.anode.w_cross_flow = ano_w_cross_flow
+            else:
+                break
         self.cathode.update(mea_current_density,
                             cathode_temperature,
                             update_channel=update_channel,
                             current_control=current_control,
                             heat_flux=heat_flux_cat_gdl)
-        anode_temperature = np.stack(
-            [self.temp_layer[self.interface_id['anode_mem_gde']],
-             self.temp_layer[self.interface_id['anode_gde_bpp']]], axis=0)
         self.anode.update(mea_current_density,
                           anode_temperature,
                           update_channel=update_channel,
                           current_control=True,
                           heat_flux=heat_flux_ano_gdl)
-
-        # Correct common membrane water cross-flow in case of one-side channel
-        # dry-out
-        #TODO: Update water cross flow, however only calculate differences to
-        # previous water cross flow (mole/m²-s), where mole_sources (mole/s)
-        # are smaller than previous water cross flow calculations (all in
-        # magnitude)
 
         if self.cathode.electrochemistry.corrected_current_density is not None:
             corrected_current_density = \
