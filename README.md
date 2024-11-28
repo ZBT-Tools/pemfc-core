@@ -27,7 +27,7 @@ cell stacks developed in Python.
     - cathodic gas diffusion electrode and membrane (GDE-Mem, Cat)        
     - cathodic bipolar plate and gas diffusion electrode (BPP-GDE, Cat)
   
-# Minimum requirements
+# Minimum Requirements
 - NumPy 1.14.3
 - SciPy 1.1.0
 - Matplotlib 2.2.2

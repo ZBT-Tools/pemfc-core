@@ -200,17 +200,22 @@ class HalfCell(OutputObject2D):
         # Stoichiometry of the reactant at the channel inlet
         self.inlet_stoi = 0.0
         # Cross water flux through the membrane
-        self.w_cross_flow = np.zeros(self.gde.discretization.shape)
+        self.water_cross_flux = np.zeros(self.gde.discretization.shape)
         # Voltage loss
         self.voltage_loss = np.zeros(self.gde.discretization.shape)
+        # Fuel concentration at catalyst layer interface
+        self.fuel_concentration = np.zeros(self.gde.discretization.shape)
+        # Fuel concentration at catalyst layer interface
+        self.flux_scaling_factors = np.zeros(self.gde.discretization.shape)
 
     def update(self, current_density: np.ndarray,
-               temperature: np.ndarray, update_channel: bool = True,
+               temperature: np.ndarray,
                current_control: bool = True,
                heat_flux: np.ndarray = None,
-               update_electrochemistry=True,
-               update_voltage_loss=True,
-               update_stoichiometry=False):
+               update_transport: bool = True,
+               update_electrochemistry: bool = True,
+               update_voltage_loss: bool = True,
+               update_stoichiometry: bool = True):
         """
         This function coordinates the program sequence
         """
@@ -220,60 +225,32 @@ class HalfCell(OutputObject2D):
 
         # Calculate material flux at membrane-gde-interface due to faradaic
         # reaction and membrane cross-water flux
-        mole_flux_mem_gde = (
+        mole_flux_mem_gde, mole_flux_reaction = (
             self.calc_species_mole_flux(current_density))
         channel_concentration = self.channel.concentration_ele
 
-        # Update mass transport
-        (mole_flux_gde_chl, fuel_concentration, flux_interface_area,
-         flux_scaling_factors) = self.update_mass_transport(
-            temperature, channel_concentration, mole_flux_mem_gde, heat_flux)
-        mass_flux_gde_chl = (mole_flux_gde_chl.transpose()
-                             * self.channel.fluid.species_mw).transpose()
+        if update_transport:
+            # Update mass transport
+            self.update_transport(temperature, channel_concentration,
+                                      mole_flux_mem_gde, heat_flux)
 
-        # Update channel mass/mole sources
-        if update_channel:
-            # Calculate mole and mass source from fluxes
-            mass_source = self.surface_flux_to_channel_source(
-                mass_flux_gde_chl, area=flux_interface_area)
-            # mass_source_old = self.surface_flux_to_channel_source(
-            #     mass_flux_old)
-            mole_source = self.surface_flux_to_channel_source(
-                mole_flux_gde_chl, flux_interface_area)
-            mole_source[self.id_inert] *= 0.0
-            mass_source[self.id_inert] *= 0.0
-            # mole_source_sum = np.sum(mole_source, axis=-1)
-
-            # Corrected water mass flows due to possible
-            # full dry-out of channel using material flows from previous
-            # iteration (material flows calculated in flow circuit loop)
-            _, mole_source[self.id_h2o] = gf.add_source(
-                self.channel.mole_flow[self.id_h2o],
-                mole_source[self.id_h2o])
-            mass_source[self.id_h2o] = (mole_source[self.id_h2o] *
-                               self.channel.fluid.species_mw[self.id_h2o])
-            self.channel.mass_source[:], self.channel.mole_source[:] = (
-                mass_source, mole_source)
-            # Only updating mass and mole sources here, because channel
-            # mass flow is updated in ParallelFlowCircuit calculations
-            # even for single cell, so be careful to modify this here
-            # self.channel.update(update_mass=True, update_flow=False,
-            #                     update_heat=False, update_fluid=True)
         # Update water cross flow
         if self.calc_gdl_diffusion:
-            # Recalculate mole fluxes after update of diffusion model
+            # Recalculate mole fluxes according to diffusion model
             bc_type = 'Neumann'
             mole_flux_mem_gde = self.gdl_diffusion.calc_boundary_flux(
                 bc_type)
-        self.w_cross_flow = mole_flux_mem_gde[self.id_h2o]
+
+        # Correct water cross flow by transport limitations
+        self.correct_water_cross_flux(mole_flux_mem_gde)
 
         if update_electrochemistry:
             reference_fuel_concentration = np.max(
                 channel_concentration[self.id_fuel, self.channel.id_in])
             self.electrochemistry.update(
-                current_density, fuel_concentration,
+                current_density, self.fuel_concentration,
                 reference_fuel_concentration,
-                scaling_factors=flux_scaling_factors,
+                scaling_factors=self.flux_scaling_factors,
                 inlet_concentration=reference_fuel_concentration)
 
         if update_voltage_loss:
@@ -297,8 +274,17 @@ class HalfCell(OutputObject2D):
                              'becomes smaller than one: {1:0.3f}'
                              .format(self.number, self.inlet_stoi))
 
-    def update_mass_transport(self, temperature, concentration, mole_flux,
-                              heat_flux):
+    def correct_water_cross_flux(self, mole_flux):
+        # Correct water cross flow by transport limitations
+        water_flux_mem_gde = mole_flux[self.id_h2o]
+        reduced_water_cross_flux = np.where(
+            np.abs(water_flux_mem_gde) < np.abs(self.water_cross_flux),
+            water_flux_mem_gde, self.water_cross_flux)
+        id_negative = np.nonzero(self.water_cross_flux < 0.0)
+        self.water_cross_flux[id_negative] = reduced_water_cross_flux[id_negative]
+
+    def update_transport(self, temperature, concentration, mole_flux,
+                         heat_flux, update_channel_sources=True):
         if self.calc_gdl_diffusion:
             # Explicitly calculate diffusion in GDL and use calculated
             # concentrations at CL-GDL-Interface for the electrochemistry
@@ -413,8 +399,38 @@ class HalfCell(OutputObject2D):
                 for i in range(heat_flux.shape[-1])]).transpose()
             flux_scaling_factors = None
             flux_interface_area = self.discretization.d_area
-        return (mole_flux_gde_chl, fuel_concentration, flux_interface_area,
-                flux_scaling_factors)
+
+        self.fuel_concentration[:] = fuel_concentration
+        self.flux_scaling_factors[:] = flux_scaling_factors
+        # Update channel mass/mole sources
+        if update_channel_sources:
+            # Calculate mole and mass source from fluxes
+            self.update_channel_sources(mole_flux_gde_chl, flux_interface_area)
+
+    def update_channel_sources(self, mole_flux, flux_interface_area):
+        mole_source = self.surface_flux_to_channel_source(
+            mole_flux, flux_interface_area)
+        mass_source = (mole_source.transpose()
+                       * self.channel.fluid.species_mw).transpose()
+        mole_source[self.id_inert] *= 0.0
+        mass_source[self.id_inert] *= 0.0
+        # mole_source_sum = np.sum(mole_source, axis=-1)
+
+        # Corrected water mass flows due to possible
+        # full dry-out of channel using material flows from previous
+        # iteration (material flows calculated in flow circuit loop)
+        _, mole_source[self.id_h2o] = gf.add_source(
+            self.channel.mole_flow[self.id_h2o],
+            mole_source[self.id_h2o])
+        mass_source[self.id_h2o] = (mole_source[self.id_h2o] *
+                                    self.channel.fluid.species_mw[self.id_h2o])
+        self.channel.mass_source[:], self.channel.mole_source[:] = (
+            mass_source, mole_source)
+        # Only updating mass and mole sources here, because channel
+        # mass flow is updated in ParallelFlowCircuit calculations
+        # even for single cell, so be careful to modify this here
+        # self.channel.update(update_mass=True, update_flow=False,
+        #                     update_heat=False, update_fluid=True)
 
     def reduce_discretization(self, array, shape=None, mode="average"):
         array = np.asarray(array, dtype=np.float64)
@@ -470,12 +486,14 @@ class HalfCell(OutputObject2D):
             mole_flux[i] = (current_density * self.n_stoi[i]
                             / (self.n_charge * self.faraday))
 
+        mole_flux_reaction = np.copy(mole_flux)
+
         # Water cross flow
         # water_cross_source = self.surface_flux_to_channel_source(
         #     self.w_cross_flow)
-        mole_flux[self.id_h2o] += self.w_cross_flow
+        mole_flux[self.id_h2o] += self.water_cross_flux
         # self.channel.flow_direction
-        return mole_flux
+        return mole_flux, mole_flux_reaction
 
     def surface_flux_to_channel_source(self, flux: np.ndarray, area=None):
         if area is None:
@@ -574,5 +592,5 @@ class HalfCell(OutputObject2D):
                 values, axes, indices)
             liquid_pressure = self.reduce_discretization(liquid_pressure)
         else:
-            liquid_pressure = np.zeros(self.discretization.shape)
+            liquid_pressure = None
         return liquid_pressure

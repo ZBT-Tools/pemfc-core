@@ -11,29 +11,6 @@ from . import global_state as gs
 
 
 class Membrane(tl.TransportLayer2D, ABC):
-    # def __new__(cls, membrane_dict: dict, discretization: dsct.Discretization2D,
-    #             *args, **kwargs):
-    #     # model_type = membrane_dict.get('type', 'Constant')
-    #     # transport_props = {
-    #     #     'thermal': membrane_dict.get('thermal_conductivity', 0.0),
-    #     #     'electrical': membrane_dict.get('electrical_conductivity', 0.0)}
-    #     # if model_type == 'Constant':
-    #     #     # return super(Membrane, cls).__new__(Constant, membrane_dict,
-    #     #     #                                     transport_props,
-    #     #     #                                     discretization)
-    #     #     return super(Membrane, cls).__new__(Constant)
-    #     #
-    #     # elif model_type == 'Linear':
-    #     #     return super(Membrane, cls).__new__(LinearMembrane)
-    #     # elif model_type == 'Springer':
-    #     #     return super(Membrane, cls).__new__(SpringerMembrane)
-    #     # elif model_type == 'YeWang2007':
-    #     #     return super(Membrane, cls).__new__(YeWang2007Membrane)
-    #     # else:
-    #     #     raise NotImplementedError('Specified membrane model not '
-    #     #                               'implemented. Available models are '
-    #     #                               'Constant, Linear, Springer, '
-    #     #                               'and YeWang2007.')
 
     def __init__(self, membrane_dict: dict,
                  discretization: dsct.Discretization2D, *args, **kwargs):
@@ -46,7 +23,7 @@ class Membrane(tl.TransportLayer2D, ABC):
                          discretization)
 
         # Membrane temperature
-        self.temp = np.zeros(self.discretization.shape)
+        self.temperature = np.zeros(self.discretization.shape)
 
         # Constant ionic conductivity of membrane
         self.ionic_conductivity = \
@@ -100,18 +77,15 @@ class Membrane(tl.TransportLayer2D, ABC):
         else:
             self.voltage_loss[:] = self.omega_ca * current_density
 
-    def update(self, current_density, humidity, *args, **kwargs):
+    def update(self, current_density=None, temperature=None,
+               humidity=None, *args, **kwargs):
+        if temperature is not None:
+            self.temperature[:] = temperature
         self.calc_ionic_resistance(humidity, *args, **kwargs)
         self.calc_voltage_loss(current_density)
 
 
 class Constant(Membrane):
-
-    # def __new__(cls, membrane_dict: dict,
-    #             discretization: dsct.Discretization2D, *args, **kwargs):
-    #     instance = super().__new__(cls, membrane_dict, discretization,
-    #                                *args, **kwargs)
-    #     return instance
 
     def __init__(self, membrane_dict: dict,
                  discretization: dsct.Discretization2D, *args, **kwargs):
@@ -137,7 +111,7 @@ class LinearMembrane(Membrane):
 
     def calc_ionic_resistance(self, *args, **kwargs):
         self.omega_ca[:] = \
-            (self.basic_resistance - self.temp_coeff * self.temp)  # * 1e-2
+            (self.basic_resistance - self.temp_coeff * self.temperature)  # * 1e-2
         self.omega[:] = self.omega_ca / self.discretization.d_area
         return self.omega, self.omega_ca
 
@@ -179,11 +153,15 @@ class WaterTransportMembrane(Membrane, ABC):
         """
         pass
 
-    def update(self, current_density, humidity, *args, **kwargs):
+    def update(self, current_density=None, temperature=None,
+               humidity=None, *args, **kwargs):
+        if temperature is not None:
+            self.temperature[:] = temperature
         self.water_content[:] = self.calc_water_content(self.activity)
         self.avg_water_content[:] = np.average(self.water_content, axis=0)
         self.calc_cross_water_flux(current_density, humidity, *args, **kwargs)
-        super().update(current_density, humidity, *args, **kwargs)
+        super().update(current_density=current_density, humidity=humidity,
+                       *args, **kwargs)
 
 
 class SpringerMembrane(WaterTransportMembrane):
@@ -254,7 +232,7 @@ class SpringerMembrane(WaterTransportMembrane):
                                        + 0.0264 * wc_avg ** 2.0
                                        - 0.000671 * wc_avg ** 3.0))))
 
-        diff_coeff = (1.0e-10 * np.exp(2416.0 * (1.0 / 303.0 * 1.0 / self.temp))
+        diff_coeff = (1.0e-10 * np.exp(2416.0 * (1.0 / 303.0 * 1.0 / self.temperature))
                       * diff_coeff_star)
 
         # # Based on Nguyen and White (1993);
@@ -283,7 +261,7 @@ class SpringerMembrane(WaterTransportMembrane):
         # Membrane conductivity [S/m]
 
         mem_cond = (0.005139 * self.avg_water_content - 0.00326) \
-            * np.exp(1268.0 * (0.0033 - 1. / self.temp)) * 1e2
+                   * np.exp(1268.0 * (0.0033 - 1. / self.temperature)) * 1e2
         # Area-specific membrane resistance [Ohm-m²]
         self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
         # Absolute resistance [Ohm]

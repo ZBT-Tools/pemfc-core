@@ -291,8 +291,7 @@ class Stack(OutputObject1D):
                           coolant_mass_flow=self.coolant_mass_flow)
         for i, cell in enumerate(self.cells):
             cell.update(self.current_density[i, :],
-                        current_control=self.current_control,
-                        update_channel=True)
+                        current_control=self.current_control)
             if cell.break_program:
                 self.break_program = True
                 break

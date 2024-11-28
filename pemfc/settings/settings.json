@@ -10,8 +10,8 @@
         "voltage": 0.3
     },
     "simulation": {
-        "maximum_iteration": 600,
-        "minimum_iteration": 300,
+        "maximum_iteration": 500,
+        "minimum_iteration": 100,
         "convergence_criteria": 1e-07,
         "underrelaxation_factor": 0.0,
         "current_control": true,
@@ -41,7 +41,7 @@
     },
     "membrane": {
         "type": "VapourLiquidInterface",
-        "underrelaxation_factor": 0.9,
+        "underrelaxation_factor": 0.5,
         "thickness": 1.5e-05,
         "ionic_conductivity": 15.0,
         "basic_resistance": 4.3e-05,

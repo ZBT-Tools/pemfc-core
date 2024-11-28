@@ -205,8 +205,7 @@ class Cell(OutputObject2D):
             * alpha_amb * self.cathode.flow_field.external_surface_factor
         return k_amb
 
-    def update(self, current_density, update_channel=True,
-               current_control=True, urf=None):
+    def update(self, current_density, current_control=True, urf=None):
         """
         The cell
         """
@@ -215,15 +214,16 @@ class Cell(OutputObject2D):
         current_density = (
                 (1.0 - urf) * current_density + urf * self.current_density)
 
+        # Calculate stoichiometry/molar flow into each half cell and raise error
+        # if below unity
         for item in self.half_cells:
-            item.update_stoichiometry(current_density, current_control)
+            item.update_stoichiometry(
+                current_density[self.layer_id['membrane']], current_control)
 
-        self.membrane.temp[:] = (
-                0.5 * (self.temp_layer[self.interface_id['cathode_gde_mem']] +
-                       self.temp_layer[self.interface_id['anode_mem_gde']]))
+
         if isinstance(self.membrane, membrane.WaterTransportMembrane):
-            self.cathode.w_cross_flow[:] = self.membrane.water_flux * -1.0
-            self.anode.w_cross_flow[:] = self.membrane.water_flux
+            self.cathode.water_cross_flux[:] = self.membrane.water_flux * -1.0
+            self.anode.water_cross_flux[:] = self.membrane.water_flux
 
         # Update electrochemical heat sources
         self.calc_electrochemical_heat_sources(
@@ -231,8 +231,6 @@ class Cell(OutputObject2D):
         # Calculate heat flux at MEA-GDL interfaces
         heat_flux_cat_gdl, heat_flux_ano_gdl = self.calc_heat_flux()
 
-        mea_current_density_prev = (
-            self.current_density[self.layer_id['membrane']])
         mea_current_density = current_density[self.layer_id['membrane']]
         cathode_temperature = np.stack(
             [self.temp_layer[self.interface_id['cathode_bpp_gde']],
@@ -241,44 +239,44 @@ class Cell(OutputObject2D):
             [self.temp_layer[self.interface_id['anode_mem_gde']],
              self.temp_layer[self.interface_id['anode_gde_bpp']]], axis=0)
 
-        error = 1000.0
         iteration = 0
         iter_max = 3
         while iteration < iter_max:
             self.cathode.update(mea_current_density,
                                 cathode_temperature,
-                                update_channel=update_channel,
                                 current_control=current_control,
                                 heat_flux=heat_flux_cat_gdl,
                                 update_electrochemistry=False,
                                 update_voltage_loss=False)
             self.anode.update(mea_current_density,
                               anode_temperature,
-                              update_channel=update_channel,
                               current_control=True,
                               heat_flux=heat_flux_ano_gdl,
                               update_electrochemistry=False,
                               update_voltage_loss=False)
-            ano_water_flow_abs = np.abs(self.anode.w_cross_flow)
-            cat_water_flow_abs = np.abs(self.cathode.w_cross_flow)
+            ano_water_flow_abs = np.abs(self.anode.water_cross_flux)
+            cat_water_flow_abs = np.abs(self.cathode.water_cross_flux)
             error = np.sum(np.abs(cat_water_flow_abs - ano_water_flow_abs))
             if error > 1e-3:
                 cat_w_cross_flow = np.where(
                     cat_water_flow_abs <= ano_water_flow_abs,
-                    self.cathode.w_cross_flow, self.anode.w_cross_flow * -1.0)
+                    self.cathode.water_cross_flux, self.anode.water_cross_flux * -1.0)
                 ano_w_cross_flow = -1.0 * cat_w_cross_flow
-                self.cathode.w_cross_flow = cat_w_cross_flow
-                self.anode.w_cross_flow = ano_w_cross_flow
+                self.cathode.water_cross_flux = cat_w_cross_flow
+                self.anode.water_cross_flux = ano_w_cross_flow
             else:
                 break
+            iteration += 1
         self.cathode.update(mea_current_density,
                             cathode_temperature,
-                            update_channel=update_channel,
+                            update_transport=False,
+                            update_channel=False,
                             current_control=current_control,
                             heat_flux=heat_flux_cat_gdl)
         self.anode.update(mea_current_density,
                           anode_temperature,
-                          update_channel=update_channel,
+                          update_transport=False,
+                          update_channel=False,
                           current_control=True,
                           heat_flux=heat_flux_ano_gdl)
 
@@ -287,22 +285,24 @@ class Cell(OutputObject2D):
                 self.cathode.electrochemistry.corrected_current_density
         else:
             corrected_current_density = current_density
-        if self.anode.break_program or self.cathode.break_program:
-            self.break_program = True
-        else:
-            humidity = np.asarray([self.cathode.calc_humidity(),
-                                   self.anode.calc_humidity()])
-            liquid_pressure = np.asarray([self.cathode.calc_liquid_pressure(),
-                                          self.anode.calc_liquid_pressure()])
 
-            self.membrane.update(
-                corrected_current_density[self.layer_id['membrane']], humidity,
-                liquid_pressure=liquid_pressure)
-            # self.calc_voltage_loss()
-            self.calc_electrochemical_conductance(
-                corrected_current_density[self.layer_id['membrane']])
-            self.current_density[:] = current_density
-            self.voltage[:] = self.e_0 - self.voltage_loss
+        humidity = np.asarray([self.cathode.calc_humidity(),
+                               self.anode.calc_humidity()])
+        # liquid_pressure = np.asarray([self.cathode.calc_liquid_pressure(),
+        #                               self.anode.calc_liquid_pressure()])
+        # Calculate average membrane temperature
+        membrane_temperature = (
+                0.5 * (self.temp_layer[self.interface_id['cathode_gde_mem']] +
+                       self.temp_layer[self.interface_id['anode_mem_gde']]))
+        self.membrane.update(
+            current_density=corrected_current_density[self.layer_id['membrane']],
+            temperature=membrane_temperature,
+            humiditiy=humidity)
+        # self.calc_voltage_loss()
+        self.calc_electrochemical_conductance(
+            corrected_current_density[self.layer_id['membrane']])
+        self.current_density[:] = current_density
+        self.voltage[:] = self.e_0 - self.voltage_loss
 
     def calc_voltage_loss(self):
         """
