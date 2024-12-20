@@ -257,7 +257,6 @@ class HalfCell(OutputObject2D):
             # Update voltage loss
             self.update_voltage_loss(current_density)
 
-
     def update_stoichiometry(self, current_density, current_control):
         # Calculate stoichiometry
         current = self.surface_flux_to_channel_source(current_density)
@@ -277,6 +276,7 @@ class HalfCell(OutputObject2D):
     def correct_water_cross_flux(self, mole_flux):
         # Correct water cross flow by transport limitations
         water_flux_mem_gde = mole_flux[self.id_h2o]
+        #TODO: correct array shapes
         reduced_water_cross_flux = np.where(
             np.abs(water_flux_mem_gde) < np.abs(self.water_cross_flux),
             water_flux_mem_gde, self.water_cross_flux)

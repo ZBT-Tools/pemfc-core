@@ -1230,7 +1230,6 @@ class ElectricalSystem(StackLinearSystem):
             voltage_array, conductance_array)
         self.update_cell_current_density()
 
-
     def create_dynamic_conductance_list(self):
         dynamic_cell_conductance_list = []
         for i, cell_sys in enumerate(self.cell_systems):
@@ -1274,15 +1273,14 @@ class ElectricalSystem(StackLinearSystem):
         return current_density
 
     def update_cell_current_density(self):
-            for i, cell in enumerate(self.cells):
-                cell.current_density[:] = self.current_density[i]
+        for i, cell in enumerate(self.cells):
+            cell.current_density[:] = self.current_density[i]
 
 
 class ConstantCurrentElectricalSystem(ElectricalSystem):
 
     def __init__(self, stack: stack_module.Stack, input_dict: dict):
         super().__init__(stack, input_dict)
-
 
     def update_rhs(self, *args, **kwargs):
         """
