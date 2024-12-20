@@ -7,7 +7,7 @@ import math
 from . import (
     half_cell as h_c, membrane as membrane, linear_system as ls)
 from .output_object import OutputObject2D
-# from . import global_state as gs
+from . import global_state as gs
 
 
 class Cell(OutputObject2D):
@@ -311,10 +311,10 @@ class Cell(OutputObject2D):
             corrected_current_density[self.layer_id['membrane']])
         self.current_density[:] = current_density
         self.voltage[:] = self.e_0 - self.voltage_loss
-        # if gs.global_state.iteration == 80:
-        #     pass
-        # water_flux = self.membrane.water_flux
-        # pass
+        if gs.global_state.iteration == 80:
+            pass
+        water_flux = self.membrane.water_flux
+        pass
 
     def calc_voltage_loss(self):
         """
