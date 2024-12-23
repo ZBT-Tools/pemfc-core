@@ -305,13 +305,13 @@ class Cell(OutputObject2D):
         self.membrane.update(
             current_density=corrected_current_density[self.layer_id['membrane']],
             temperature=membrane_temperature,
-            humiditiy=humidity)
+            humidity=humidity)
         # self.calc_voltage_loss()
         self.calc_electrochemical_conductance(
             corrected_current_density[self.layer_id['membrane']])
         self.current_density[:] = current_density
         self.voltage[:] = self.e_0 - self.voltage_loss
-        if gs.global_state.iteration == 80:
+        if gs.global_state.iteration == 100:
             pass
         water_flux = self.membrane.water_flux
         pass
