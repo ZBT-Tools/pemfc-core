@@ -580,7 +580,16 @@ class HalfCell(OutputObject2D):
                 range(self.discretization.shape[-1])]).transpose()
         return humidity
 
+    def calc_electrochemical_heat_source(self, current_density: np.ndarray):
+        current = self.discretization.d_area * current_density
+        v_loss = np.minimum(self.e_0, self.voltage_loss)
+        v_loss[v_loss < 0.0] = 0.0
+        cathode_reaction_heat = (self.e_tn - self.e_0 + v_loss) * current
+        return cathode_reaction_heat
+
     def calc_liquid_pressure(self):
+        # TODO: review this approach, not sure if pressure is continuous
+        #  across material interfaces
         """
         Liquid pressure at GDE-Membrane-Interface
         """

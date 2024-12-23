@@ -270,13 +270,11 @@ class Cell(OutputObject2D):
         self.cathode.update(mea_current_density,
                             cathode_temperature,
                             update_transport=False,
-                            update_channel=False,
                             current_control=current_control,
                             heat_flux=heat_flux_cat_gdl)
         self.anode.update(mea_current_density,
                           anode_temperature,
                           update_transport=False,
-                          update_channel=False,
                           current_control=True,
                           heat_flux=heat_flux_ano_gdl)
 
@@ -339,6 +337,7 @@ class Cell(OutputObject2D):
         # self.membrane.v_loss[:] *= correction_factor
 
     def calc_electrochemical_heat_sources(self, current_density: np.ndarray):
+        # TODO: move calculation to HalfCell class and include half-cell Nernst Potential calculations
         current = current_density * self.d_area
         half_ohmic_heat_membrane = (
                 0.5 * self.membrane.omega * np.square(current))
