@@ -2,8 +2,8 @@
     "stack": {
         "cell_number": 1,
         "cool_flow": true,
-        "calc_temperature": false,
-        "calc_current": false,
+        "calc_temperature": true,
+        "calc_current": true,
         "init_current_density": [
             45000
         ],
@@ -11,7 +11,7 @@
     },
     "simulation": {
         "maximum_iteration": 500,
-        "minimum_iteration": 100,
+        "minimum_iteration": 20,
         "convergence_criteria": 1e-07,
         "underrelaxation_factor": 0.0,
         "current_control": true,
@@ -23,9 +23,9 @@
         "average_cell_voltage": [
             0.3
         ],
-        "channel_land_discretization": false,
-        "calc_gdl_diffusion": false,
-        "calc_two_phase_flow": false
+        "channel_land_discretization": true,
+        "calc_gdl_diffusion": true,
+        "calc_two_phase_flow": true
     },
     "cell": {
         "width": 0.1,
@@ -40,7 +40,7 @@
         "last_cell": true
     },
     "membrane": {
-        "type": "VapourLiquidInterface",
+        "type": "Springer",
         "underrelaxation_factor": 0.5,
         "thickness": 1.5e-05,
         "ionic_conductivity": 15.0,

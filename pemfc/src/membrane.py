@@ -65,7 +65,9 @@ class Membrane(tl.TransportLayer2D, ABC):
 
     @abstractmethod
     def calc_ionic_resistance(self, *args, **kwargs):
-        pass
+        if np.any(self.omega < 0.0):
+            raise ValueError('ionic resistance calculation of membrane '
+                             'generated negative values')
 
     def calc_voltage_loss(self, current_density, **kwargs):
 
@@ -113,6 +115,7 @@ class LinearMembrane(Membrane):
         self.omega_ca[:] = \
             (self.basic_resistance - self.temp_coeff * self.temperature)  # * 1e-2
         self.omega[:] = self.omega_ca / self.discretization.d_area
+        super().calc_ionic_resistance(*args, **kwargs)
         return self.omega, self.omega_ca
 
 
@@ -147,6 +150,10 @@ class WaterTransportMembrane(Membrane, ABC):
         pass
 
     @abstractmethod
+    def calc_activity(self, humidity, *args, **kwargs):
+        pass
+
+    @abstractmethod
     def calc_cross_water_flux(self, current_density, humidity, *args, **kwargs):
         """
         Calculates the water cross flux through the membrane
@@ -157,11 +164,12 @@ class WaterTransportMembrane(Membrane, ABC):
                humidity=None, *args, **kwargs):
         if temperature is not None:
             self.temperature[:] = temperature
+        self.calc_activity(humidity=humidity)
         self.water_content[:] = self.calc_water_content(self.activity)
         self.avg_water_content[:] = np.average(self.water_content, axis=0)
         self.calc_cross_water_flux(current_density, humidity, *args, **kwargs)
-        super().update(current_density=current_density, humidity=humidity,
-                       *args, **kwargs)
+        super().update(current_density=current_density, temperature=temperature,
+                       humidity=humidity, *args, **kwargs)
 
 
 class SpringerMembrane(WaterTransportMembrane):
@@ -182,6 +190,9 @@ class SpringerMembrane(WaterTransportMembrane):
         super().__init__(membrane_dict, discretization, *args, **kwargs)
         # Under-relaxation factor for water flux update
         self.urf = membrane_dict.get('underrelaxation_factor', 0.95)
+
+    def calc_activity(self, humidity, *args, **kwargs):
+        self.activity[:] = humidity
 
     def calc_water_content(self, activity):
         """
@@ -259,13 +270,17 @@ class SpringerMembrane(WaterTransportMembrane):
         """
         # water_content[water_content < 1.0] = 1.0
         # Membrane conductivity [S/m]
-
-        mem_cond = (0.005139 * self.avg_water_content - 0.00326) \
-                   * np.exp(1268.0 * (0.0033 - 1. / self.temperature)) * 1e2
+        water_content_min = kwargs.get('water_content_min', 0.6344)
+        exponent = kwargs.get('exponent', 1.0)
+        mem_cond = np.where(
+            self.avg_water_content < water_content_min, 1e-3,
+            0.5139 * (self.avg_water_content - water_content_min) ** exponent
+            * np.exp(1268.0 * (0.0033 - 1. / self.temperature)) * 1e2)
         # Area-specific membrane resistance [Ohm-m²]
         self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
         # Absolute resistance [Ohm]
         self.omega[:] = self.omega_ca / self.discretization.d_area
+        super().calc_ionic_resistance(*args, **kwargs)
         return self.omega, self.omega_ca
 
     def calc_cross_water_flux(self, current_density, humidity, *args, **kwargs):
@@ -323,7 +338,7 @@ class SpringerMembrane(WaterTransportMembrane):
             pass
         self.water_flux[:] = self.urf * water_flux \
             + (1.0 - self.urf) * water_flux_new
-        self.activity[:] = humidity
+        # self.activity[:] = humidity
         return water_flux_new
 
 
@@ -390,7 +405,6 @@ class VapourLiquidInterfaceResistanceMembrane(SpringerMembrane):
         interfacial_resistance_coeff = (
                 vl_factor * vapour_interfacial_resistance_coeff)
 
-
         # Recalculate membrane water activity
         activity = np.zeros(humidity.shape)
         activity[0] = (
@@ -431,7 +445,9 @@ class VapourLiquidInterfaceResistanceMembrane(SpringerMembrane):
         self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
         # Absolute resistance [Ohm]
         self.omega[:] = self.omega_ca / self.discretization.d_area
+        super().calc_ionic_resistance(*args, **kwargs)
         return self.omega, self.omega_ca
+
 
 class YeWang2007Membrane(SpringerMembrane):
     """
@@ -464,6 +480,7 @@ class YeWang2007Membrane(SpringerMembrane):
         self.omega_ca[:] = self.thickness / mem_cond  # * 1.e-4
         # Absolute resistance [Ohm]
         self.omega[:] = self.omega_ca / self.discretization.d_area
+        super().calc_ionic_resistance(*args, **kwargs)
         return self.omega, self.omega_ca
 
     def calc_eod(self):

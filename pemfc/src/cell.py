@@ -7,6 +7,7 @@ import math
 from . import (
     half_cell as h_c, membrane as membrane, linear_system as ls)
 from .output_object import OutputObject2D
+from . import global_state as gs
 
 
 class Cell(OutputObject2D):
@@ -220,7 +221,6 @@ class Cell(OutputObject2D):
             item.update_stoichiometry(
                 current_density[self.layer_id['membrane']], current_control)
 
-
         if isinstance(self.membrane, membrane.WaterTransportMembrane):
             self.cathode.water_cross_flux[:] = self.membrane.water_flux * -1.0
             self.anode.water_cross_flux[:] = self.membrane.water_flux
@@ -240,18 +240,22 @@ class Cell(OutputObject2D):
              self.temp_layer[self.interface_id['anode_gde_bpp']]], axis=0)
 
         iteration = 0
-        iter_max = 3
+        iter_max = 2
         while iteration < iter_max:
             self.cathode.update(mea_current_density,
                                 cathode_temperature,
                                 current_control=current_control,
                                 heat_flux=heat_flux_cat_gdl,
+                                update_transport=True,
+                                update_stoichiometry=False,
                                 update_electrochemistry=False,
                                 update_voltage_loss=False)
             self.anode.update(mea_current_density,
                               anode_temperature,
                               current_control=True,
                               heat_flux=heat_flux_ano_gdl,
+                              update_transport=True,
+                              update_stoichiometry=False,
                               update_electrochemistry=False,
                               update_voltage_loss=False)
             ano_water_flow_abs = np.abs(self.anode.water_cross_flux)
@@ -269,14 +273,20 @@ class Cell(OutputObject2D):
             iteration += 1
         self.cathode.update(mea_current_density,
                             cathode_temperature,
-                            update_transport=False,
                             current_control=current_control,
-                            heat_flux=heat_flux_cat_gdl)
+                            heat_flux=heat_flux_cat_gdl,
+                            update_transport=False,
+                            update_stoichiometry=False,
+                            update_electrochemistry=True,
+                            update_voltage_loss=True)
         self.anode.update(mea_current_density,
                           anode_temperature,
-                          update_transport=False,
                           current_control=True,
-                          heat_flux=heat_flux_ano_gdl)
+                          heat_flux=heat_flux_ano_gdl,
+                          update_transport=False,
+                          update_stoichiometry=False,
+                          update_electrochemistry=True,
+                          update_voltage_loss=True)
 
         if self.cathode.electrochemistry.corrected_current_density is not None:
             corrected_current_density = \
@@ -301,6 +311,10 @@ class Cell(OutputObject2D):
             corrected_current_density[self.layer_id['membrane']])
         self.current_density[:] = current_density
         self.voltage[:] = self.e_0 - self.voltage_loss
+        if gs.global_state.iteration == 80:
+            pass
+        water_flux = self.membrane.water_flux
+        pass
 
     def calc_voltage_loss(self):
         """
@@ -337,7 +351,6 @@ class Cell(OutputObject2D):
         # self.membrane.v_loss[:] *= correction_factor
 
     def calc_electrochemical_heat_sources(self, current_density: np.ndarray):
-        # TODO: move calculation to HalfCell class and include half-cell Nernst Potential calculations
         current = current_density * self.d_area
         half_ohmic_heat_membrane = (
                 0.5 * self.membrane.omega * np.square(current))
