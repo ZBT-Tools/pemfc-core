@@ -311,9 +311,9 @@ class Cell(OutputObject2D):
             corrected_current_density[self.layer_id['membrane']])
         self.current_density[:] = current_density
         self.voltage[:] = self.e_0 - self.voltage_loss
-        if gs.global_state.iteration == 100:
+        if gs.global_state.iteration == 10:
             pass
-        water_flux = self.membrane.water_flux
+        # water_flux = self.membrane.water_flux
         pass
 
     def calc_voltage_loss(self):

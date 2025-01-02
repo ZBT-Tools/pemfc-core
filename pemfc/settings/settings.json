@@ -2,7 +2,7 @@
     "stack": {
         "cell_number": 1,
         "cool_flow": true,
-        "calc_temperature": true,
+        "calc_temperature": false,
         "calc_current": true,
         "init_current_density": [
             10000
@@ -11,20 +11,20 @@
     },
     "simulation": {
         "maximum_iteration": 200,
-        "minimum_iteration": 100,
-        "convergence_criteria": 1e-07,
-        "underrelaxation_factor": 0.3,
+        "minimum_iteration": 20,
+        "convergence_criteria": 1e-09,
+        "underrelaxation_factor": 0.0,
         "current_control": true,
         "operation_control": "current",
-        "elements": 1,
+        "elements": 10,
         "current_density": [
-            30000
+            40000
         ],
         "average_cell_voltage": [
             0.3
         ],
         "channel_land_discretization": true,
-        "calc_gdl_diffusion": true,
+        "calc_gdl_diffusion": false,
         "calc_two_phase_flow": false
     },
     "cell": {
@@ -32,16 +32,13 @@
         "length": 0.5,
         "open_circuit_voltage": 1.0,
         "thermoneutral_voltage": 1.25,
-        "channel_land_discretization": false,
         "flux_endplate": 0.0,
         "alpha_amb": 0.0,
-        "temp_amb": 293.15,
-        "first_cell": true,
-        "last_cell": true
+        "temp_amb": 293.15
     },
     "membrane": {
         "type": "Springer",
-        "underrelaxation_factor": 0.5,
+        "underrelaxation_factor": 0.0,
         "thickness": 1.5e-05,
         "ionic_conductivity": 15.0,
         "basic_resistance": 4.3e-05,
@@ -325,8 +322,8 @@
                 }
             }
         },
-        "calc_gdl_diffusion": true,
-        "calc_two_phase_flow": true
+        "calc_gdl_diffusion": false,
+        "calc_two_phase_flow": false
     },
     "anode": {
         "name": "Anode",
@@ -600,8 +597,8 @@
                 }
             }
         },
-        "calc_gdl_diffusion": true,
-        "calc_two_phase_flow": true
+        "calc_gdl_diffusion": false,
+        "calc_two_phase_flow": false
     },
     "coolant_channel": {
         "name": "Coolant Channel",
