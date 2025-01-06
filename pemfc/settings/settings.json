@@ -18,7 +18,7 @@
         "operation_control": "current",
         "elements": 10,
         "current_density": [
-            40000
+            30000
         ],
         "average_cell_voltage": [
             0.3
@@ -322,8 +322,8 @@
                 }
             }
         },
-        "calc_gdl_diffusion": false,
-        "calc_two_phase_flow": false
+        "calc_gdl_diffusion": true,
+        "calc_two_phase_flow": true
     },
     "anode": {
         "name": "Anode",
@@ -597,8 +597,8 @@
                 }
             }
         },
-        "calc_gdl_diffusion": false,
-        "calc_two_phase_flow": false
+        "calc_gdl_diffusion": true,
+        "calc_two_phase_flow": true
     },
     "coolant_channel": {
         "name": "Coolant Channel",

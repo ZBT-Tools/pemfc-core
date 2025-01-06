@@ -242,11 +242,17 @@ class Cell(OutputObject2D):
         iteration = 0
         iter_max = 2
         while iteration < iter_max:
+            if gs.global_state.iteration % 5 == 0:
+                update_transport = True
+            elif gs.global_state.iteration < 20:
+                update_transport = True
+            else:
+                update_transport = True
             self.cathode.update(mea_current_density,
                                 cathode_temperature,
                                 current_control=current_control,
                                 heat_flux=heat_flux_cat_gdl,
-                                update_transport=True,
+                                update_transport=update_transport,
                                 update_stoichiometry=False,
                                 update_electrochemistry=False,
                                 update_voltage_loss=False)
@@ -254,7 +260,7 @@ class Cell(OutputObject2D):
                               anode_temperature,
                               current_control=True,
                               heat_flux=heat_flux_ano_gdl,
-                              update_transport=True,
+                              update_transport=update_transport,
                               update_stoichiometry=False,
                               update_electrochemistry=False,
                               update_voltage_loss=False)
@@ -271,6 +277,7 @@ class Cell(OutputObject2D):
             else:
                 break
             iteration += 1
+
         self.cathode.update(mea_current_density,
                             cathode_temperature,
                             current_control=current_control,
@@ -311,7 +318,7 @@ class Cell(OutputObject2D):
             corrected_current_density[self.layer_id['membrane']])
         self.current_density[:] = current_density
         self.voltage[:] = self.e_0 - self.voltage_loss
-        if gs.global_state.iteration == 10:
+        if gs.global_state.iteration == 100:
             pass
         # water_flux = self.membrane.water_flux
         pass

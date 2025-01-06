@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 
 # local modul imports
 from . import interpolation as ip, global_functions as g_func, \
-    flow_resistance as fr, output_object as oo
+    flow_resistance as fr, output_object as oo, global_state as gs
 from .fluid import fluid as fluids, evaporation_model as evap
 try:
     import pemfc.src.cython.channel_heat_transfer as cht
@@ -246,6 +246,8 @@ class Channel(oo.OutputObject1D, ABC):
             self.update_heat(wall_temp=wall_temp, heat_flux=heat_flux,
                              enthalpy_source=enthalpy_source,
                              channel_factor=kwargs.get('channel_factor', 1.0))
+        if self.name == "Cathode Channel":
+            pass
 
     def calculate_flow_resistance_sum(self):
         """ Update and return the sum of flow resistances (zeta-values) """

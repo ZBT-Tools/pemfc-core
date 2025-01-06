@@ -261,6 +261,7 @@ class SpringerMembrane(WaterTransportMembrane):
         wc_min = np.min(self.water_content, axis=0)
         # Electro-osmotic drag coefficient according to Springer et al. (1991),
         eod = 2.5 * wc_min / 22.0
+        eod = 1.0
         return eod
 
     def calc_ionic_resistance(self, *args, **kwargs):
@@ -321,6 +322,7 @@ class SpringerMembrane(WaterTransportMembrane):
         # # negative diffusion flux mean from anode to cathode
         water_flux_diff = - rho_m / mw_m * diff_coeff \
             * (self.water_content[1] - self.water_content[0]) / self.thickness
+        water_flux_diff = 0.0
 
         # Predicting the water content on each membrane side seems to be
         # overpredicting the gradient significantly, thus the humidities are
