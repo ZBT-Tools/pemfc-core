@@ -834,6 +834,9 @@ class TwoPhaseMixture(DiscreteFluid):
             - np.sum(gas_mole_composition * self.gas.mw, axis=0)
         self.liquid_mass_fraction[self.liquid_mass_fraction < 0.0] = 0.0
         self.surface_tension[:] = self.calc_surface_tension()
+        if (self.name == "Cathode Fluid" and self.array_shape == (11,)):
+            water_mole_composition = gas_mole_composition[self.id_pc]
+            pass
 
         # dry_conc = np.copy(gas_conc)
         # dry_conc[self.id_pc] = 0.0

@@ -2,46 +2,43 @@
     "stack": {
         "cell_number": 1,
         "cool_flow": true,
-        "calc_temperature": true,
+        "calc_temperature": false,
         "calc_current": true,
         "init_current_density": [
-            45000
+            10000
         ],
         "voltage": 0.3
     },
     "simulation": {
-        "maximum_iteration": 500,
+        "maximum_iteration": 200,
         "minimum_iteration": 20,
-        "convergence_criteria": 1e-07,
-        "underrelaxation_factor": 0.6,
+        "convergence_criteria": 1e-09,
+        "underrelaxation_factor": 0.0,
         "current_control": true,
         "operation_control": "current",
-        "elements": 1,
+        "elements": 10,
         "current_density": [
-            40000
+            30000
         ],
         "average_cell_voltage": [
             0.3
         ],
         "channel_land_discretization": true,
-        "calc_gdl_diffusion": true,
-        "calc_two_phase_flow": true
+        "calc_gdl_diffusion": false,
+        "calc_two_phase_flow": false
     },
     "cell": {
         "width": 0.1,
         "length": 0.5,
         "open_circuit_voltage": 1.0,
         "thermoneutral_voltage": 1.25,
-        "channel_land_discretization": false,
         "flux_endplate": 0.0,
         "alpha_amb": 0.0,
-        "temp_amb": 293.15,
-        "first_cell": true,
-        "last_cell": true
+        "temp_amb": 293.15
     },
     "membrane": {
         "type": "Springer",
-        "underrelaxation_factor": 0.5,
+        "underrelaxation_factor": 0.0,
         "thickness": 1.5e-05,
         "ionic_conductivity": 15.0,
         "basic_resistance": 4.3e-05,
@@ -114,7 +111,7 @@
                 "pore_radius": 1e-05,
                 "relative_permeability_exponent": 3.0,
                 "saturation_model": {
-                    "type": "GostickCorrelation",
+                    "type": "Leverett",
                     "Leverett": {
                         "type": "Leverett",
                         "contact_angle": 100.0,
@@ -389,7 +386,7 @@
                 "pore_radius": 1e-05,
                 "relative_permeability_exponent": 3.0,
                 "saturation_model": {
-                    "type": "GostickCorrelation",
+                    "type": "Leverett",
                     "Leverett": {
                         "type": "Leverett",
                         "contact_angle": 100.0,
