@@ -13,7 +13,7 @@
         "maximum_iteration": 500,
         "minimum_iteration": 20,
         "convergence_criteria": 1e-07,
-        "underrelaxation_factor": 0.0,
+        "underrelaxation_factor": 0.6,
         "current_control": true,
         "operation_control": "current",
         "elements": 1,
