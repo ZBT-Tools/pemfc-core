@@ -364,6 +364,6 @@
         "save_csv": true,
         "save_plot": true,
         "show_loss": false,
-        "directory": "./output"
+        "directory": "../output"
     }
 }
