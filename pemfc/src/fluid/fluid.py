@@ -4,10 +4,10 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 # local module imports
-from pemfc.src.output_object import OutputObject
-from pemfc.src import constants, global_functions as gf
+from ..output_object import OutputObject
+from .. import constants, global_functions as gf
 from . import species
-from pemfc.src.global_functions import move_axis
+from ..global_functions import move_axis
 from collections import OrderedDict
 
 try:
@@ -29,7 +29,7 @@ except ImportError:
 #         super().__init__()
 
 
-class DiscreteFluid(ABC, OutputObject):
+class DiscreteFluid(OutputObject, ABC):
 
     PROPERTY_NAMES = ['density', 'specific_heat', 'viscosity',
                       'thermal_conductivity']

@@ -8,8 +8,8 @@ from abc import ABC, abstractmethod
 if 'main_app.py' in sys.argv[0]:
     from data import material_properties as mat_prop
 else:
-    from pemfc.data import material_properties as mat_prop
-from pemfc.src import global_functions as g_func
+    from ...data import material_properties as mat_prop
+from .. import global_functions as g_func
 
 
 class FluidProperties(ABC):
