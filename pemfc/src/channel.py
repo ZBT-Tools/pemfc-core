@@ -8,7 +8,7 @@ from . import interpolation as ip, global_functions as g_func, \
     flow_resistance as fr, output_object as oo
 from .fluid import fluid as fluids
 try:
-    import pemfc.src.cython.channel_heat_transfer as cht
+    import cython.channel_heat_transfer as cht
     CHT_FOUND = True
 except ModuleNotFoundError:
     CHT_FOUND = False
