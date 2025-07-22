@@ -1,5 +1,4 @@
 # general imports
-import sys
 import numpy as np
 from abc import ABC, abstractmethod
 
