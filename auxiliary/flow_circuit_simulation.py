@@ -6,12 +6,11 @@ import sys
 import matplotlib.pyplot as plt
 import matplotlib
 
-# local module imports
-from pemfc import channel as chl
-from pemfc import fluid as fluid
-from pemfc import flow_circuit as flow_circuit
-from pemfc import interpolation as ip
-
+# local module import
+try:
+    from import_pemfc import ip, flow_circuit, fluid, chl
+except:
+    from .import_pemfc import ip, flow_circuit, fluid, chl
 matplotlib.use('TkAgg')
 
 np.set_printoptions(threshold=sys.maxsize, linewidth=10000,

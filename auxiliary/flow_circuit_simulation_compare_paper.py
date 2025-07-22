@@ -13,13 +13,10 @@ import sys
 import matplotlib.pyplot as plt
 import matplotlib
 
-# local module imports
-from pemfc import channel as chl
-from pemfc import fluid as fluid
-from pemfc import flow_circuit as flow_circuit
-from pemfc import interpolation as ip
-from pemfc import constants
-from pemfc import half_cell
+try:
+    from import_pemfc import chl, fluid, flow_circuit, half_cell
+except:
+    from .import_pemfc import chl, fluid, flow_circuit, half_cell
 
 matplotlib.use('TkAgg')
 

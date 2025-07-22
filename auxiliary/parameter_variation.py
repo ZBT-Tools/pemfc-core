@@ -1,9 +1,14 @@
 import os
 import json
 import inspect
-from pemfc.main_app import main
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
+try:
+    from import_pemfc import main
+except:
+    from .import_pemfc import main
+
 
 # Variation of HFR
 hfr_factor = [1.0, 1.5/10.0]
@@ -16,7 +21,7 @@ current_density_array = np.linspace(100, 20000, 40)
 # Load settings file
 base_dir = \
     os.path.dirname(os.path.abspath(inspect.getsourcefile(lambda: 0)))
-with open(os.path.join(base_dir, '../pemfc/settings', 'settings.json')) as file:
+with open(os.path.join(base_dir, '../pemfc/settings', 'settings.json'), "r") as file:
     settings = json.load(file)
 
 # Disable writing output to files to save simulation time
@@ -31,12 +36,11 @@ settings['membrane']['type'] = 'Constant'
 stack_power_list = []
 average_voltage_list = []
 global_data = None
-
 membrane_conductivity = settings['membrane']['ionic_conductivity']
-cat_bpp_conductivity = settings['cathode']['electrical_conductivity_bpp']
-cat_gde_conductivity = settings['cathode']['electrical_conductivity_gde']
-ano_bpp_conductivity = settings['anode']['electrical_conductivity_bpp']
-ano_gde_conductivity = settings['anode']['electrical_conductivity_gde']
+cat_bpp_conductivity = settings['cathode']["bpp"]['electrical_conductivity']
+cat_gde_conductivity = settings['cathode']["gde"]['electrical_conductivity']
+ano_bpp_conductivity = settings['anode']["bpp"]['electrical_conductivity']
+ano_gde_conductivity = settings['anode']["gde"]['electrical_conductivity']
 
 # Loop for parameter variation simulation
 for i in range(len(hfr_factor)):
@@ -77,7 +81,7 @@ for i in range(len(average_voltage_list)):
 ax2 = ax.twinx()
 for i in range(len(stack_power_list)):
     ax2.plot(current_density_array / 1e4, stack_power_list[i],
-             label=labels[i], color=colors[i], linestyle=linestyles[1])
+            label=labels[i], color=colors[i], linestyle=linestyles[1])
 ax.set_xlabel('Current Density / A/cm²')
 ax.set_ylabel('Average Cell Voltage / ' + voltage_unit)
 ax2.set_ylabel('Stack Power / ' + power_unit)
