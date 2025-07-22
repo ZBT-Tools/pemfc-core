@@ -13,10 +13,15 @@ __location__ = os.path.realpath(
 run_location = os.path.realpath(os.path.join(
     os.getcwd(), os.path.dirname(sys.argv[0])))
 # if run_location == __location__:
-if __name__ == "__main__":
+
+try:
+    #if ran as script:
     from src import simulation
-else:
+except:
+    #if you ran it as a module: (-m):
     from .src import simulation
+
+    
 # import .src.simulation as simulation
 
 np.set_printoptions(threshold=sys.maxsize, linewidth=10000,

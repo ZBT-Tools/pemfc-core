@@ -1,8 +1,11 @@
 import numpy as np
-import pemfc.src.fluid.fluid as fluid
 import cantera as ct
-
 import time
+
+try:
+    from import_pemfc import fluid
+except:
+    from .import_pemfc import fluid
 
 fluid_dict = \
     {

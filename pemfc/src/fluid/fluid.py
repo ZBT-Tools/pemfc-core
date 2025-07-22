@@ -1,5 +1,4 @@
 # general imports
-import sys
 import numpy as np
 from abc import ABC, abstractmethod
 
@@ -9,6 +8,7 @@ from .. import constants, global_functions as gf
 from . import species
 from ..global_functions import move_axis
 from collections import OrderedDict
+
 
 try:
     import cantera as ct
@@ -29,7 +29,7 @@ except ImportError:
 #         super().__init__()
 
 
-class DiscreteFluid(OutputObject, ABC):
+class DiscreteFluid(ABC, OutputObject):
 
     PROPERTY_NAMES = ['density', 'specific_heat', 'viscosity',
                       'thermal_conductivity']
