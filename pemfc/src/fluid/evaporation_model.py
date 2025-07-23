@@ -5,8 +5,8 @@ import numpy as np
 from abc import ABC, abstractmethod
 from . import species
 from . import fluid as fl
-from pemfc.data import material_properties as mat_prop
-from pemfc.src import constants as constants
+from ...data import material_properties as mat_prop
+from ...src import constants as constants
 
 
 class EvaporationModel(ABC):
