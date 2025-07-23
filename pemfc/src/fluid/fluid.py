@@ -1,13 +1,14 @@
-# general imports
+# General imports
 import numpy as np
 from abc import ABC, abstractmethod
 
-# local module imports
+# Local module imports
 from ..output_object import OutputObject
 from .. import constants, global_functions as gf
 from . import species
 from ..global_functions import move_axis
 from collections import OrderedDict
+
 
 try:
     import cantera as ct
