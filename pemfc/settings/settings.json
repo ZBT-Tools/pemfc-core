@@ -12,8 +12,8 @@
     "simulation": {
         "maximum_iteration": 200,
         "minimum_iteration": 20,
-        "convergence_criteria": 1e-09,
-        "underrelaxation_factor": 0.0,
+        "convergence_criteria": 1e-07,
+        "underrelaxation_factor": 0.3,
         "current_control": true,
         "operation_control": "current",
         "elements": 10,
@@ -38,7 +38,7 @@
     },
     "membrane": {
         "type": "Springer",
-        "underrelaxation_factor": 0.0,
+        "underrelaxation_factor": 0.3,
         "thickness": 1.5e-05,
         "ionic_conductivity": 15.0,
         "basic_resistance": 4.3e-05,
