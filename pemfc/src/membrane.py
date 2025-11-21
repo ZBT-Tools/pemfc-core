@@ -5,7 +5,6 @@ from abc import ABC, abstractmethod
 
 # Local module imports
 from . import transport_layer as tl, constants
-# from pemfc.src import global_functions as gf
 from . import discretization as dsct
 from . import global_state as gs
 

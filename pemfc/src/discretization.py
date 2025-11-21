@@ -1,9 +1,6 @@
 import numpy as np
 import copy as cp
-from functools import reduce
 from abc import ABC, abstractmethod
-import pemfc.src.global_functions as gf
-
 
 class Discretization(ABC):
     """

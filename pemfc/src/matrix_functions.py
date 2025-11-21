@@ -7,7 +7,7 @@ from scipy import linalg as sp_la
 # from . import global_functions as g_func
 
 if TYPE_CHECKING:
-    from pemfc.src.cell import Cell
+    from cell import Cell
 
 
 def tile_add_overlap(array, n, m=1):
