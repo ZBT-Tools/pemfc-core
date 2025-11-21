@@ -36,7 +36,7 @@ cell stacks developed in Python.
 Download the repository, review settings in the pemfc/settings/settings.json 
 file. Then execute
 ```python
-python pemfc\main_app.py
+python main_app.py
 ```
 with your Python interpreter.
 If not specified otherwise, a folder called "output" will be created at the end 
