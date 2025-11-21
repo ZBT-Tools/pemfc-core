@@ -1,7 +1,7 @@
 import os
 import json
 import inspect
-from pemfc.main_app import main
+from main_app import main
 import numpy as np
 import matplotlib.pyplot as plt
 

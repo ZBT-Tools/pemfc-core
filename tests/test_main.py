@@ -1,6 +1,6 @@
 import os
 import json
-from pemfc.main_app import main
+from main_app import main
 
 # load settings
 with open(os.path.join('tests', 'settings.json')) as file:

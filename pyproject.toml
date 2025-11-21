@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]  # version that supports PEP 621
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pemfc"
+version = "0.0.1"
+description = "PEM Fuel Cell Stack Simulation Model"
+readme = "README.md"
+authors = [
+    { name = "Lukas Feierabend", email = "lukas.feierabend@gmail.com" },
+]
+requires-python = ">=3.6"
+license = { text = "MIT" }
+keywords = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+# Auto-discover packages (like find_packages)
+[tool.setuptools.packages.find]
+include = ["*"]
+
+# Include package data (similar to include_package_data=True)
+[tool.setuptools]
+include-package-data = true
+
+[project.urls]
+Homepage = "https://github.com/ZBT-Tools/pemfc-core"

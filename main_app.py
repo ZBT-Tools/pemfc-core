@@ -1,25 +1,14 @@
 import sys
 import os
-import inspect
+# import inspect
 import json
 import numpy as np
 import timeit
 from pprint import pprint
+import pemfc
+from pemfc.src import simulation
+from pemfc.src import global_state as gs
 
-# Location of this file
-__location__ = os.path.realpath(
-    os.path.join(os.getcwd(), os.path.dirname(__file__)))
-# Location of main executing file
-run_location = os.path.realpath(os.path.join(
-    os.getcwd(), os.path.dirname(sys.argv[0])))
-# if run_location == __location__:
-if __name__ == "__main__":
-    from src import simulation
-    from src import global_state as gs
-else:
-    from .src import simulation
-    from .src import global_state as gs
-# import .src.simulation as simulation
 
 np.set_printoptions(threshold=sys.maxsize, linewidth=10000,
                     precision=9, suppress=True)
@@ -40,7 +29,7 @@ def main(settings=None, print_iterations=False):
 
 if __name__ == "__main__":
     base_dir = \
-        os.path.dirname(os.path.abspath(inspect.getsourcefile(lambda: 0)))
+        os.path.dirname(os.path.abspath(pemfc.__file__))
     gs.global_state.base_directory = base_dir
     with open(os.path.join(base_dir, 'settings', 'settings.json')) as file:
         sim_settings = json.load(file)

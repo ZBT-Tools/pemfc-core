@@ -5,11 +5,12 @@ from numpy.polynomial.polynomial import polyval
 from abc import ABC, abstractmethod
 
 # local module imports
-if 'main_app.py' in sys.argv[0]:
-    from data import material_properties as mat_prop
-else:
-    from pemfc.data import material_properties as mat_prop
+# if 'main_app.py' in sys.argv[0]:
+#     from data import material_properties as mat_prop
+# else:
+#     from pemfc.data import material_properties as mat_prop
 from .. import global_functions as g_func
+from ...data import material_properties as mat_prop
 
 
 class FluidProperties(ABC):
