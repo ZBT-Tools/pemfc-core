@@ -1,0 +1,34 @@
+{
+    // See https://code.visualstudio.com/docs/editor/debugging for help
+    "version": "0.2.0",
+    "configurations": [
+        {
+            // Launch main_app.py under debugpy (normal workflow)
+            "name": "Python: Launch main_app (debugpy)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main_app.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "args": [],
+            "justMyCode": true,
+            "subProcess": true
+        },
+        {
+            // Attach to a debugpy server (if you start Python with: python -m debugpy --listen 5678 --wait-for-client main_app.py)
+            "name": "Python: Attach to debugpy (5678)",
+            "type": "python",
+            "request": "attach",
+            "connect": {
+                "host": "localhost",
+                "port": 5678
+            },
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}",
+                    "remoteRoot": "${workspaceFolder}"
+                }
+            ]
+        }
+    ]
+}

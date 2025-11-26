@@ -322,8 +322,8 @@
                 }
             }
         },
-        "calc_gdl_diffusion": true,
-        "calc_two_phase_flow": true
+        "calc_gdl_diffusion": false,
+        "calc_two_phase_flow": false
     },
     "anode": {
         "name": "Anode",
@@ -597,8 +597,8 @@
                 }
             }
         },
-        "calc_gdl_diffusion": true,
-        "calc_two_phase_flow": true
+        "calc_gdl_diffusion": false,
+        "calc_two_phase_flow": false
     },
     "coolant_channel": {
         "name": "Coolant Channel",

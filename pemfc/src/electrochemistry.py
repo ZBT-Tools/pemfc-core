@@ -109,7 +109,7 @@ class ElectrochemistryModel(ABC):
         concentration[concentration <= 0.0] = 1e-3
             # i_lim_star = (self.n_charge * self.faraday * concentration
             #               * self.diff_coeff_cl / self.th_cl)
-        if 'scaling_factors' in kwargs:
+        if 'scaling_factors' in kwargs and not np.isnan(kwargs['scaling_factors']).any():
             scaling_factors = kwargs['scaling_factors']
             i_lim_star = np.divide(current_density, scaling_factors,
                                    out=np.zeros(current_density.shape),
