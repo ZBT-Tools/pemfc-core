@@ -23,7 +23,7 @@
         "average_cell_voltage": [
             0.3
         ],
-        "channel_land_discretization": true,
+        "channel_land_discretization": false,
         "calc_gdl_diffusion": false,
         "calc_two_phase_flow": false
     },
@@ -94,8 +94,8 @@
             "calc_act_loss": true,
             "calc_cl_diff_loss": true,
             "calc_gdl_diff_loss": true,
-            "c_eps": 0.02,
-            "delta_i": 0.001
+            "c_eps": 0.2,
+            "delta_i": 1.0
         },
         "two_phase_flow": {
             "porosity_model": {
@@ -369,8 +369,8 @@
             "calc_act_loss": true,
             "calc_cl_diff_loss": true,
             "calc_gdl_diff_loss": true,
-            "c_eps": 0.02,
-            "delta_i": 0.001
+            "c_eps": 0.2,
+            "delta_i": 1.0
         },
         "two_phase_flow": {
             "porosity_model": {
