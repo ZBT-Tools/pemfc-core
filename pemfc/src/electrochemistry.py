@@ -294,9 +294,13 @@ class ElectrochemistryModel(ABC):
                              reference_concentration: float,
                              v_loss: np.ndarray):
         def func(curr_den: np.ndarray, over_pot: np.ndarray):
-            return self.calc_electrode_loss(curr_den, concentration,
-                                            reference_concentration) - over_pot
-        return np.asarray(optimize.newton(func, current_density,
-                                          args=(v_loss,)))
+            curr_den = curr_den.reshape(current_density.shape)
+            res = self.calc_electrode_loss(curr_den, concentration,
+                                           reference_concentration) - over_pot
+            return res.flatten()
+
+        res = optimize.least_squares(func, current_density.flatten(),
+                                     bounds=(0.0, np.inf), args=(v_loss,))
+        return res.x.reshape(current_density.shape)
 
 

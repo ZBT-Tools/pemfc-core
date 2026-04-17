@@ -4,7 +4,7 @@
         "heat_power": 0.0,
         "cool_flow": true,
         "calc_temperature": true,
-        "calc_current_density": true
+        "calc_current": true
     },
     "simulation": {
         "maximum_iteration": 100,
