@@ -184,13 +184,12 @@ def fill_zero_sum(array, axis=-1, axis_sum=None):
     else:
         raise ValueError('axis must be 0, 1 or -1. only 2D-arrays allowed.')
     nonzero = np.nonzero(axis_sum)[0]
-    try:
-        if nonzero[-1] != array.shape[axis] - 1:
-            array = fill_last_zeros(array, axis_sum=axis_sum)
-        if nonzero[0] != 0:
-            array = fill_first_zeros(array, axis_sum=axis_sum)
-    except IndexError:
-        raise IndexError
+    if len(nonzero) == 0:
+        return array
+    if nonzero[-1] != array.shape[axis] - 1:
+        array = fill_last_zeros(array, axis_sum=axis_sum)
+    if nonzero[0] != 0:
+        array = fill_first_zeros(array, axis_sum=axis_sum)
     return array
 
 

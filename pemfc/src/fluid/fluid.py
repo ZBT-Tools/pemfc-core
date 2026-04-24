@@ -116,23 +116,21 @@ class DiscreteFluid(OutputObject1D, ABC):
         Calculates mass or mole fractions based on a multi-dimensional
         array with different species along the provided axis.
         """
-        np.seterr(all='raise')
-        try:
-            comp_sum = np.sum(composition, axis)
-            # result = np.divide(composition, comp_sum, out=composition,
-            #                    where=comp_sum != 0.0)
-            result = composition / comp_sum
-            return result
-        except FloatingPointError:
+        comp_sum = np.sum(composition, axis)
+        
+        if np.any(comp_sum == 0.0):
+            if recursion_count > 0:
+                raise ValueError(
+                    f'Zero sum encountered in {self}.calc_fraction() that '
+                    'could not be resolved by back-filling.'
+                )
             if axis == 0:
                 composition = gf.fill_zero_sum(composition, axis=-1)
             else:
                 composition = gf.fill_zero_sum(composition, axis=0)
-            recursion_count += 1
-            if recursion_count > 1:
-                raise ValueError('Something wrong in '
-                                 '{}.calc_fraction()'.format(self))
-            return self.calc_fraction(composition, axis, recursion_count)
+            return self.calc_fraction(composition, axis, recursion_count + 1)
+            
+        return composition / comp_sum
 
     @property
     def temperature(self):

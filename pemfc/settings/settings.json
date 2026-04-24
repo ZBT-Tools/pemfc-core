@@ -1,29 +1,27 @@
 {
     "stack": {
-        "cell_number": 1,
+        "cell_number": 5,
         "cool_flow": true,
-        "calc_temperature": false,
+        "calc_temperature": true,
         "calc_current": true,
         "init_current_density": [
             10000
-        ],
-        "voltage": 0.3
+        ]
     },
     "simulation": {
-        "maximum_iteration": 200,
+        "maximum_iteration": 500,
         "minimum_iteration": 20,
         "convergence_criteria": 1e-07,
-        "underrelaxation_factor": 0.3,
-        "current_control": true,
-        "operation_control": "current",
+        "underrelaxation_factor": 0.5,
+        "operation_control": "voltage",
         "elements": 10,
         "current_density": [
-            30000
+            27294.83245799701
         ],
         "average_cell_voltage": [
-            0.3
+            0.5
         ],
-        "channel_land_discretization": false,
+        "channel_land_discretization": true,
         "calc_gdl_diffusion": false,
         "calc_two_phase_flow": false
     },
@@ -38,7 +36,7 @@
     },
     "membrane": {
         "type": "Springer",
-        "underrelaxation_factor": 0.3,
+        "underrelaxation_factor": 0.5,
         "thickness": 1.5e-05,
         "ionic_conductivity": 15.0,
         "basic_resistance": 4.3e-05,
@@ -94,7 +92,7 @@
             "calc_act_loss": true,
             "calc_cl_diff_loss": true,
             "calc_gdl_diff_loss": true,
-            "c_eps": 0.2,
+            "c_eps": 0.1,
             "delta_i": 1.0
         },
         "two_phase_flow": {
@@ -231,8 +229,8 @@
             "evaporation_model": {
                 "name": "Evaporation Model",
                 "type": "HertzKnudsenSchrage",
-                "evaporation_coefficient": 0.37,
-                "condensation_coefficient": 5000
+                "evaporation_coefficient": 0.001,
+                "condensation_coefficient": 0.001
             },
             "gdl_channel_saturation": 0.05
         },
@@ -369,7 +367,7 @@
             "calc_act_loss": true,
             "calc_cl_diff_loss": true,
             "calc_gdl_diff_loss": true,
-            "c_eps": 0.2,
+            "c_eps": 0.1,
             "delta_i": 1.0
         },
         "two_phase_flow": {
@@ -506,8 +504,8 @@
             "evaporation_model": {
                 "name": "Evaporation Model",
                 "type": "HertzKnudsenSchrage",
-                "evaporation_coefficient": 0.37,
-                "condensation_coefficient": 5000
+                "evaporation_coefficient": 0.001,
+                "condensation_coefficient": 0.001
             },
             "gdl_channel_saturation": 1e-06
         },

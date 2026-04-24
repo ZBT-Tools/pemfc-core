@@ -85,6 +85,10 @@ class Simulation:
             raise ValueError('parameter current_density must be provided')
         elif self.current_density is None and self.average_cell_voltage is None:
             raise ValueError('parameter average_cell_voltage must be provided')
+            
+        if self.average_cell_voltage is not None:
+            self.average_cell_voltage = np.asarray(self.average_cell_voltage)
+            
         stack_dict = self.settings['stack']
         cell_number = stack_dict['cell_number']
 
@@ -114,6 +118,17 @@ class Simulation:
         current_densities = []
         local_data_list = []
         global_data_list = []
+
+        # Adaptive conductance URF: starts at 4× the base urf (so easy operating
+        # points get large steps immediately) and is cut by half whenever the
+        # iteration diverges. It only ever decreases — once the scheduler learns
+        # the stability limit for a regime it stays conservative for harder points.
+        # The value carries across operating points within a simulation run.
+        urf_base = self.settings['simulation']['underrelaxation_factor']
+        urf_min = urf_base
+        urf_max = self.settings['simulation'].get('urf_max', 1.0)
+        conductance_urf = min(urf_max, urf_base * 1.2)
+
         for i, tar_value in enumerate(target_value):
             current_errors = []
             temp_errors = []
@@ -121,20 +136,39 @@ class Simulation:
             self.timing['simulation'] = 0.0
             simulation_start_time = timeit.default_timer()
             counter = 0
+            gs.global_state.iteration = 0
             gs.global_state.max_iteration = self.max_it
+
+            # Outer-loop error fed to the two-phase coupling scheduler inside
+            # each half-cell. None on the first iteration (no prior error).
+            current_error = None
+
             while True:
                 if counter == 0:
                     if self.current_control:
-                        self.stack.update(current_density=tar_value)
+                        self.stack.update(current_density=tar_value,
+                                          conductance_urf=conductance_urf,
+                                          outer_error=current_error)
                     else:
-                        self.stack.update(voltage=tar_value)
+                        self.stack.update(voltage=tar_value,
+                                          conductance_urf=conductance_urf,
+                                          outer_error=current_error)
                 else:
-                    self.stack.update()
+                    self.stack.update(conductance_urf=conductance_urf,
+                                      outer_error=current_error)
                 if self.stack.break_program:
                     break
                 current_error, temp_error = self.calc_convergence_criteria()
                 current_errors.append(current_error)
                 temp_errors.append(temp_error)
+
+                # Cut conductance URF by half on divergence; never increase.
+                # Skip the first min_it iterations so the initial transient
+                # from a cold conductance state doesn't trigger premature cuts.
+                if counter > self.min_it and len(current_errors) >= 2:
+                    if current_error > current_errors[-2]:
+                        conductance_urf = max(conductance_urf * 0.5, urf_min)
+
                 if print_iterations:
                     if len(target_value) < 1:
                         print(counter)

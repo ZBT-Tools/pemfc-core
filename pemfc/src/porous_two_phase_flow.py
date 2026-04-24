@@ -94,10 +94,35 @@ class TwoPhaseMixtureDiffusionTransport:
                 self.transport.transport_layers[0].initial_volume_fraction)
         # Inner looping numerical settings
         self.error = np.inf
-        self.max_iterations = 1
-        self.min_iterations = 1
-        self.urf = 0.9
-        self.error_tolerance = 1e-5
+        self.max_iterations = input_dict.get('max_iterations', 20)
+        self.min_iterations = input_dict.get('min_iterations', 2)
+        self.urf = input_dict.get('underrelaxation_factor', 0.5)
+        # Tighten inner-loop tolerance so it doesn't create a noise floor 
+        # that prevents the global solver from reaching 1e-6
+        self.error_tolerance = input_dict.get('error_tolerance', 1e-10)
+
+        # Scaling for the volumetric evaporation heat fed into the GDL
+        # thermal solve. 1.0 is the physical value (evaporation cooling /
+        # condensation heating couples into the local temperature, which in
+        # turn changes phase-change rates). 0.0 disables the coupling — the
+        # thermal solve is then skipped entirely and phase calculations
+        # read the input temperature (the CL-GDL boundary field).
+        self.evaporation_heat_factor = input_dict.get(
+            'evaporation_heat_factor', 1.0)
+        # Maximum deviation allowed between the GDL thermal solution and
+        # the Dirichlet boundary field. The thermal PDE can produce
+        # transient overshoots (cold spots, hot spots) before the coupled
+        # loop stabilises — clipping keeps the field in a physical range
+        # so downstream saturation-pressure / enthalpy correlations do
+        # not crash. Only active when evaporation_heat_factor > 0.
+        self.thermal_solution_max_deviation = input_dict.get(
+            'thermal_solution_max_deviation', 30.0)
+        # Under-relaxation factor for the thermal solution_array: blend the
+        # newly-solved temperature field with the previous one as
+        # alpha * new + (1-alpha) * old. Damps the sawtooth produced by the
+        # coupled evap-cooling / phase-rate feedback. Only active when
+        # evaporation_heat_factor > 0.
+        self.thermal_urf = input_dict.get('thermal_urf', 0.3)
 
     def update(self, temperature: np.ndarray,
                gas_pressure: np.ndarray,
@@ -120,14 +145,34 @@ class TwoPhaseMixtureDiffusionTransport:
                 liquid_saturation_value)
         if liquid_mass_flux.shape != self.transport.base_shape:
             liquid_mass_flux = self.transport.rescale_input(liquid_mass_flux)
+
+        # The GDL temperature field used for phase-change and fluid
+        # calculations depends on whether the thermal coupling is active.
+        # When ``evaporation_heat_factor > 0`` the thermal sub-solve's
+        # output (self.thermal_transport.solution_array) incorporates
+        # evaporation cooling / condensation heating and feeds back into
+        # the phase rates. When the factor is zero the thermal path is
+        # skipped entirely and the input `temperature` (CL-GDL interface
+        # field, uniform along z) is used throughout — this preserves the
+        # legacy decoupled behaviour. In either case the input
+        # `temperature` is what lives at the Dirichlet boundary of the
+        # thermal PDE, so it enters as the BC argument to
+        # thermal_transport.update() when the solve runs.
+        if self.evaporation_heat_factor > 0.0 and self.calc_thermal_transport:
+            if not np.any(self.thermal_transport.solution_array):
+                self.thermal_transport.solution_array[:] = temperature
+            phase_temperature = self.thermal_transport.solution_array
+        else:
+            phase_temperature = temperature
+
         if update_fluid:
-            self.fluid.update(temperature, gas_pressure,
+            self.fluid.update(phase_temperature, gas_pressure,
                               gas_mole_composition=molar_composition)
 
         # Boundary conditions for liquid pressure
         sigma_liquid = \
             self.fluid.phase_change_species.calc_surface_tension(
-                temperature)[0, :, -1]
+                phase_temperature)[0, :, -1]
         sigma_liquid = self.transport.rescale_input(sigma_liquid)
         humidity = self.transport.rescale_input(self.fluid.humidity[0, :, -1])
         # humidity[humidity < 0.5] = 0.5
@@ -183,10 +228,12 @@ class TwoPhaseMixtureDiffusionTransport:
             #     temperature=t, pressure=p, capillary_pressure=p_cap)
             specific_evap_arrays = (
                 self.evaporation_model.calc_evaporation_rate(
-                    saturation=saturation, temperature=temperature,
+                    saturation=saturation,
+                    temperature=phase_temperature,
                     pressure=gas_pressure,
                     capillary_pressure=None,
                     porosity=self.porosity_model.porosity))
+            
             evap_test_factor = 1.0
 
             vol_evap_arrays = [
@@ -207,46 +254,76 @@ class TwoPhaseMixtureDiffusionTransport:
             vol_net_evap_rate, vol_evap_rate, vol_cond_rate, vol_cond_coeff = \
                 vol_evap_arrays
 
-            # # Limit maximum evaporation rate
-            # max_rate = 10000.0
-            # vol_net_evap_rate_unlimited = np.copy(vol_net_evap_rate)
-            # vol_net_evap_rate[vol_net_evap_rate > max_rate] = max_rate
-            # vol_net_evap_rate[vol_net_evap_rate < -max_rate] = -max_rate
-            # limiting_factor = vol_net_evap_rate / vol_net_evap_rate_unlimited
-            # # Scale other rates accordingly
-            # vol_evap_rate *= limiting_factor
-            # vol_net_evap_rate *= limiting_factor
-            # vol_cond_coeff *= limiting_factor
-            show_volumetric_evap_rate = np.moveaxis(vol_net_evap_rate,
-                                                    (0, 1, 2), (1, 0, 2))
+            # Limit maximum evaporation rate to prevent massive unphysical spikes 
+            # from destabilizing the local or global mass/thermal solvers.
+            max_rate = self.dict.get('max_evaporation_rate', 500.0)
+            vol_net_evap_rate_unlimited = np.copy(vol_net_evap_rate)
+            
+            # Smooth bounding instead of hard clipping. Tanh naturally caps the spikes 
+            # to protect the un-clipped temperature while maintaining a smooth gradient.
+            vol_net_evap_rate = max_rate * np.tanh(vol_net_evap_rate_unlimited / max_rate)
+            
+            limiting_factor = np.divide(vol_net_evap_rate, vol_net_evap_rate_unlimited,
+                                        out=np.ones_like(vol_net_evap_rate),
+                                        where=vol_net_evap_rate_unlimited != 0.0)
+            vol_evap_rate *= limiting_factor
+            vol_cond_rate *= limiting_factor
+            vol_cond_coeff *= limiting_factor
+            # show_volumetric_evap_rate = np.moveaxis(vol_net_evap_rate,
+            #                                         (0, 1, 2), (1, 0, 2))
             self.transport.update(
                 liquid_pressure_boundary,
                 liquid_mass_flux,
                 -vol_net_evap_rate * 1.0,
                 transport_property)
 
-            # Calculate dedicated temperature field for GDL
-            if self.calc_thermal_transport:
+            # Update the GDL temperature field via the thermal sub-solve.
+            # Only runs when the coupling is active (factor > 0); otherwise
+            # thermal_transport.solution_array is not consumed downstream,
+            # so solving it would be wasted work.
+            if (self.calc_thermal_transport
+                    and self.evaporation_heat_factor > 0.0):
                 mw_pc = self.fluid.gas.species_mw[self.fluid.id_pc]
                 evap_enthalpy = (
                         self.fluid.calc_vaporization_enthalpy(
-                            temperature) / mw_pc)
+                            phase_temperature) / mw_pc)
                 evaporation_heat = evap_enthalpy * vol_net_evap_rate
-                # heat_flux = -self.thermal_transport.calc_boundary_flux(
-                #     'Neumann', values=temperature)
+                # Save the pre-solve field for URF blending below.
+                old_thermal_solution = np.copy(
+                    self.thermal_transport.solution_array)
                 self.thermal_transport.update(
                     temperature, heat_flux,
-                    source_values=-evaporation_heat * 0.0)
+                    source_values=(-evaporation_heat
+                                   * self.evaporation_heat_factor))
 
-            temperature_gdl = self.thermal_transport.solution_array
+                # Under-relaxation on the thermal solution: damps the
+                # sawtooth produced by the evap-cooling feedback loop.
+                alpha = self.thermal_urf
+                self.thermal_transport.solution_array[:] = (
+                        alpha * self.thermal_transport.solution_array
+                        + (1.0 - alpha) * old_thermal_solution)
+
+                # Transient overshoots in the thermal solve (caused by
+                # undamped evap-rate spikes on early iterations) can push
+                # the solution below the physical operating range and crash
+                # downstream saturation-pressure / vaporization-enthalpy
+                # correlations. Clamp to ±delta around the Dirichlet
+                # boundary field so the coupled loop has a chance to settle.
+                delta = self.thermal_solution_max_deviation
+                t_min = float(np.min(temperature)) - delta
+                t_max = float(np.max(temperature)) + delta
+                np.clip(self.thermal_transport.solution_array,
+                        t_min, t_max,
+                        out=self.thermal_transport.solution_array)
+
             # Save old capillary pressure
             capillary_pressure_old = np.copy(capillary_pressure)
 
             # Calculate and constrain capillary pressure
             liquid_pressure = self.transport.solution_array
             capillary_pressure = liquid_pressure - gas_pressure
-            show_capillary_pressure = np.round(np.moveaxis(capillary_pressure,
-                                               (0, 1, 2), (1, 0, 2)), 2)
+            # show_capillary_pressure = np.round(np.moveaxis(capillary_pressure,
+            #                                    (0, 1, 2), (1, 0, 2)), 2)
             # min_value = self.saturation_model.calc_capillary_pressure(
             #     self.saturation_min,
             #     surface_tension=np.min(self.fluid.surface_tension),
@@ -259,26 +336,26 @@ class TwoPhaseMixtureDiffusionTransport:
             # )
             # capillary_pressure[capillary_pressure < min_value] = min_value
             # capillary_pressure[capillary_pressure > max_value] = max_value
-            show_capillary_pressure = np.round(np.moveaxis(capillary_pressure,
-                                               (0, 1, 2), (1, 0, 2)), 2)
-            show_humidity = np.moveaxis(self.fluid.humidity,
-                                        (0, 1, 2), (1, 0, 2))
+            # show_capillary_pressure = np.round(np.moveaxis(capillary_pressure,
+            #                                    (0, 1, 2), (1, 0, 2)), 2)
+            # show_humidity = np.moveaxis(self.fluid.humidity,
+            #                             (0, 1, 2), (1, 0, 2))
             # Save old saturation
             saturation_old = np.copy(saturation)
 
             # Calculate new saturation
             saturation = self.saturation_model.calc_saturation(
                 capillary_pressure)
-            show_saturation = np.moveaxis(saturation,
-                                          (0, 1, 2), (1, 0, 2))
+            # show_saturation = np.moveaxis(saturation,
+            #                               (0, 1, 2), (1, 0, 2))
             # Apply underrelaxation
             saturation[:] = ((1.0 - self.urf) * saturation
                              + self.urf * saturation_old)
             # Constrain solution
             saturation[saturation < self.saturation_min] = self.saturation_min
             saturation[saturation > 1.0] = 1.0
-            show_saturation = np.moveaxis(saturation,
-                                          (0, 1, 2), (1, 0, 2))
+            # show_saturation = np.moveaxis(saturation,
+            #                               (0, 1, 2), (1, 0, 2))
 
             # Error calculation
             s_diff = saturation - saturation_old
@@ -291,20 +368,20 @@ class TwoPhaseMixtureDiffusionTransport:
             error_s = np.dot(s_diff.transpose(), s_diff) / (2.0 * len(s_diff))
             error_p = np.dot(p_diff.transpose(), p_diff) / (2.0 * len(p_diff))
             self.error = error_s + error_p
-            show_liquid_pressure = np.moveaxis(liquid_pressure,
-                                               (0, 1, 2), (1, 0, 2))
-            show_capillary_pressure = np.moveaxis(capillary_pressure,
-                                                  (0, 1, 2), (1, 0, 2))
-            show_temperature = np.moveaxis(temperature,
-                                           (0, 1, 2), (1, 0, 2))
-            show_temperature_gdl = np.moveaxis(temperature_gdl,
-                                               (0, 1, 2), (1, 0, 2))
+            # show_liquid_pressure = np.moveaxis(liquid_pressure,
+            #                                    (0, 1, 2), (1, 0, 2))
+            # show_capillary_pressure = np.moveaxis(capillary_pressure,
+            #                                       (0, 1, 2), (1, 0, 2))
+            # show_temperature = np.moveaxis(temperature,
+            #                                (0, 1, 2), (1, 0, 2))
+            # show_temperature_gdl = np.moveaxis(temperature_gdl,
+            #                                    (0, 1, 2), (1, 0, 2))
             iteration += 1
             if gs.global_state.iteration == gs.global_state.max_iteration:
                 pass
 
-        show_concentration = np.moveaxis(self.fluid.gas.concentration,
-                                         (0, 1, 2, 3), (0, 2, 1, 3))
+        # show_concentration = np.moveaxis(self.fluid.gas.concentration,
+        #                                  (0, 1, 2, 3), (0, 2, 1, 3))
 
         self.net_evaporation_rate[:] = vol_net_evap_rate
         self.condensation_rate[:] = vol_cond_rate
@@ -317,7 +394,8 @@ class TwoPhaseMixtureDiffusionTransport:
         self.gas_volume_fraction = (
                 self.transport.transport_layers[0].initial_volume_fraction
                 * (1.0 - self.saturation))
-        self.evaporation_heat[:] = (self.fluid.calc_vaporization_enthalpy() *
+        mw_pc = self.fluid.gas.species_mw[self.fluid.id_pc]
+        self.evaporation_heat[:] = (self.fluid.calc_vaporization_enthalpy() / mw_pc *
                                     self.net_evaporation_rate *
                                     self.transport.transport_layers[0].d_volume)
         # if gs.global_state.iteration == 200:
@@ -346,4 +424,3 @@ class TwoPhaseMixtureDiffusionTransport:
         #                     r'\output\GDL_Images\Cathode_GDL_Saturation.png')
         #         # input("Press Enter to continue...")
         #         # matplotlib.use('Agg')
-

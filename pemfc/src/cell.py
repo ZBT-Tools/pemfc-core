@@ -43,8 +43,10 @@ class Cell(OutputObject2D):
             self.additional_layer = cell_dict.get('additional_layer', False)
         # self.additional_layer = True
 
-        # Underrelaxation factor
+        # Underrelaxation factor (current-density update)
         self.urf = cell_dict['underrelaxation_factor']
+        # Conductance URF — updated each iteration by the adaptive scheduler
+        self.conductance_urf = self.urf
 
         self.e_0 = cell_dict['open_circuit_voltage']
         self.e_tn = cell_dict['thermoneutral_voltage']
@@ -59,6 +61,7 @@ class Cell(OutputObject2D):
             # name = self.name + ': ' + half_cell_dicts[i]['name']
             name = half_cell_dicts[i]['name']
             half_cell_dicts[i]['name'] = name
+            half_cell_dicts[i]['underrelaxation_factor'] = self.urf
         self.half_cells = [h_c.HalfCell(half_cell_dicts[i], cell_dict,
                                         channels[i], number=self.number)
                            for i in range(len(half_cell_dicts))]
@@ -206,10 +209,13 @@ class Cell(OutputObject2D):
             * alpha_amb * self.cathode.flow_field.external_surface_factor
         return k_amb
 
-    def update(self, current_density, current_control=True, urf=None):
+    def update(self, current_density, current_control=True, urf=None,
+               conductance_urf=None, outer_error=None):
         """
         The cell
         """
+        if conductance_urf is not None:
+            self.conductance_urf = conductance_urf
         if urf is None:
             urf = self.urf
         current_density = (
@@ -240,14 +246,10 @@ class Cell(OutputObject2D):
              self.temp_layer[self.interface_id['anode_gde_bpp']]], axis=0)
 
         iteration = 0
-        iter_max = 2
+        error_tolerance = 1e-3
+        iter_max = self.cell_dict.get('transport_iter_max', 1)
         while iteration < iter_max:
-            if gs.global_state.iteration % 5 == 0:
-                update_transport = True
-            elif gs.global_state.iteration < 20:
-                update_transport = True
-            else:
-                update_transport = True
+            update_transport = True
             self.cathode.update(mea_current_density,
                                 cathode_temperature,
                                 current_control=current_control,
@@ -255,19 +257,22 @@ class Cell(OutputObject2D):
                                 update_transport=update_transport,
                                 update_stoichiometry=False,
                                 update_electrochemistry=False,
-                                update_voltage_loss=False)
+                                update_voltage_loss=False,
+                                outer_error=outer_error)
             self.anode.update(mea_current_density,
                               anode_temperature,
-                              current_control=True,
+                              current_control=current_control,
                               heat_flux=heat_flux_ano_gdl,
                               update_transport=update_transport,
                               update_stoichiometry=False,
                               update_electrochemistry=False,
-                              update_voltage_loss=False)
+                              update_voltage_loss=False,
+                              outer_error=outer_error)
             ano_water_flow_abs = np.abs(self.anode.water_cross_flux)
             cat_water_flow_abs = np.abs(self.cathode.water_cross_flux)
-            error = np.sum(np.abs(cat_water_flow_abs - ano_water_flow_abs))
-            if error > 1e-3:
+            error = np.average(np.abs(cat_water_flow_abs - ano_water_flow_abs))
+            # print(f"  Transport Iteration {iteration+1} | Water Flux Error: {error:.2e}")
+            if error > error_tolerance:
                 cat_w_cross_flow = np.where(
                     cat_water_flow_abs <= ano_water_flow_abs,
                     self.cathode.water_cross_flux, self.anode.water_cross_flux * -1.0)
@@ -288,7 +293,7 @@ class Cell(OutputObject2D):
                             update_voltage_loss=True)
         self.anode.update(mea_current_density,
                           anode_temperature,
-                          current_control=True,
+                          current_control=current_control,
                           heat_flux=heat_flux_ano_gdl,
                           update_transport=False,
                           update_stoichiometry=False,
@@ -309,10 +314,16 @@ class Cell(OutputObject2D):
         membrane_temperature = (
                 0.5 * (self.temp_layer[self.interface_id['cathode_gde_mem']] +
                        self.temp_layer[self.interface_id['anode_mem_gde']]))
+        
+        limited_water_flux = None
+        if isinstance(self.membrane, membrane.WaterTransportMembrane):
+            limited_water_flux = self.anode.water_cross_flux
+
         self.membrane.update(
             current_density=corrected_current_density[self.layer_id['membrane']],
             temperature=membrane_temperature,
-            humidity=humidity)
+            humidity=humidity,
+            limited_water_flux=limited_water_flux)
         # self.calc_voltage_loss()
         self.calc_electrochemical_conductance(
             corrected_current_density[self.layer_id['membrane']])
@@ -419,5 +430,13 @@ class Cell(OutputObject2D):
         current = current_density * self.membrane.discretization.d_area
         mea_voltage_loss = self.calc_voltage_loss()
         electrochemical_resistance = mea_voltage_loss / current
-        self.electrochemical_conductance[:] = (
-                1.0 / electrochemical_resistance)
+        new_conductance = 1.0 / electrochemical_resistance
+        # Under-relax to dampen oscillations near the mass-transport limit.
+        # Without this, the conductance swings sharply when nodes cross i_crit
+        # (especially land vs. channel nodes), driving the linear system into
+        # a divergent current-density oscillation.
+        new_val = (self.conductance_urf * new_conductance
+                   + (1.0 - self.conductance_urf) * self.electrochemical_conductance)
+        self.electrochemical_conductance[:] = new_val
+
+        # self.electrochemical_conductance[:] = np.maximum(new_val, 1e-12)

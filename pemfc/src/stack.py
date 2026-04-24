@@ -275,7 +275,8 @@ class Stack(OutputObject1D):
         # Add data container for output
         self.add_print_data(self.voltage_cells, 'Cell Voltage', 'V')
 
-    def update(self, current_density=None, voltage=None):
+    def update(self, current_density=None, voltage=None, conductance_urf=None,
+               outer_error=None):
         """
         This function coordinates the program sequence
         """
@@ -291,7 +292,9 @@ class Stack(OutputObject1D):
                           coolant_mass_flow=self.coolant_mass_flow)
         for i, cell in enumerate(self.cells):
             cell.update(self.current_density[i, :],
-                        current_control=self.current_control)
+                        current_control=self.current_control,
+                        conductance_urf=conductance_urf,
+                        outer_error=outer_error)
             if cell.break_program:
                 self.break_program = True
                 break
@@ -356,13 +359,14 @@ class Stack(OutputObject1D):
 
     def calc_fuel_mass_flows(self):
         mass_flows_in = []
+        # Safeguard against transient drops to zero during voltage control
+        safe_current_density = np.maximum(self.current_density_avg, 1e-6)
         for i in range(len(self.cells[0].half_cells)):
             cell_mass_flow, cell_mole_flow = \
                 self.cells[0].half_cells[i].calc_inlet_flow(
-                    self.current_density_avg)
+                    safe_current_density)
             cell_mass_flow = np.sum(cell_mass_flow, axis=0)
             mass_flow = cell_mass_flow \
                 * self.cells[0].half_cells[i].n_channels * self.n_cells
             mass_flows_in.append(mass_flow)
         return mass_flows_in
-

@@ -16,7 +16,19 @@ from . import global_functions as gf
 from . import matrix_functions as mf
 from . import global_state as gs
 from . import porous_two_phase_flow as p2pf
+from . import grid_rescaler as gr
 from porous_two_phase_flow import porous_layer as pl
+
+
+# --- Performance toggle ----------------------------------------------------
+# ``rescale_input`` is called O(10^4) times per operating point when
+# calc_gdl_diffusion is enabled and it dominates runtime (~40 % of total)
+# via Python-level loops in ``gf.rescale`` / ``apply_along_axis``.
+# ``GridRescaler`` does the same work with precomputed indices/weights
+# and no Python loop over 1D slices. Flip this flag to False to fall back
+# to the original ``gf.rescale`` path (e.g. for A/B comparison).
+USE_VECTORIZED_RESCALE = True
+# ---------------------------------------------------------------------------
 
 
 class DiffusionTransport(ABC):
@@ -53,6 +65,10 @@ class DiffusionTransport(ABC):
         self.discretization = self.transport_layers[0].discretization
         self.time_step = None
         self.capacitance = [1.0 for item in self.linear_systems]
+
+        # Cache of GridRescaler objects keyed by (source_shape, target_shape,
+        # method). Populated lazily on first use in :meth:`rescale_input`.
+        self._rescaler_cache = {}
 
     @classmethod
     def create(cls, input_dict: dict,
@@ -180,11 +196,37 @@ class DiffusionTransport(ABC):
             shape = self.base_shape
         reshaped_array = self.reshape_input(
             array, except_first_axis=except_first_axis)
+        if not USE_VECTORIZED_RESCALE:
+            # Original path — kept for fallback / A-B comparison.
+            if except_first_axis:
+                return np.asarray([gf.rescale(arr, shape, method=method)
+                                   for arr in reshaped_array])
+            else:
+                return gf.rescale(reshaped_array, shape, method=method)
+        # Vectorised path — reuses a precomputed GridRescaler per shape pair.
         if except_first_axis:
-            return np.asarray([gf.rescale(arr, shape, method=method)
-                               for arr in reshaped_array])
-        else:
-            return gf.rescale(reshaped_array, shape, method=method)
+            out = None
+            for i, arr in enumerate(reshaped_array):
+                rescaled = self._get_rescaler(
+                    arr.shape, shape, method).apply(arr)
+                if out is None:
+                    out = np.empty((len(reshaped_array),) + rescaled.shape,
+                                   dtype=rescaled.dtype)
+                out[i] = rescaled
+            return out
+        return self._get_rescaler(
+            reshaped_array.shape, shape, method).apply(reshaped_array)
+
+    def _get_rescaler(self, source_shape, target_shape, method):
+        method_key = (method if isinstance(method, str)
+                      else tuple(method))
+        key = (tuple(source_shape), tuple(target_shape), method_key)
+        rescaler = self._rescaler_cache.get(key)
+        if rescaler is None:
+            rescaler = gr.GridRescaler(source_shape, target_shape,
+                                       method=method)
+            self._rescaler_cache[key] = rescaler
+        return rescaler
 
     def calc_bc_array_shape(self, axes: tuple, indices: tuple):
         if len(self.linear_systems) > 1:

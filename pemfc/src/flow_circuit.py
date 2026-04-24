@@ -6,7 +6,7 @@ import copy
 
 # local module imports
 from . import interpolation as ip, global_functions as g_func, \
-    channel as chl, output_object as oo, flow_resistance as fr
+    channel as chl, output_object as oo, flow_resistance as fr, constants
 from .fluid import fluid as fluids
 
 
@@ -223,7 +223,7 @@ class ParallelFlowCircuit(oo.OutputObject1D, ABC):
         channel_enthalpy_out = \
             np.asarray([ch.g_fluid[ch.id_out] * ch.temperature[ch.id_out]
                         for ch in self.channels]) * self.n_subchannels
-        mfd_out.update(mass_flow_in=0.0, mass_source=mass_source,
+        mfd_out.update(mass_flow_in=constants.SMALL, mass_source=mass_source,
                        update_mass=True, update_flow=True,
                        update_heat=False, update_fluid=update_fluid,
                        enthalpy_source=channel_enthalpy_out)

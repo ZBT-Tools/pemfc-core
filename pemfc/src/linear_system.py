@@ -12,8 +12,9 @@ from dataclasses import dataclass
 
 # Local module imports
 from . import (
-    stack as stack_module, channel as chl, matrix_functions as mtx_func,
-    global_functions as g_func, transport_layer as tl, discretization as dsct)
+    stack as stack_module, channel as chl, matrix_functions as mtx_func, constants,
+    global_functions as g_func, transport_layer as tl, discretization as dsct,
+    global_state as gs)
 
 if TYPE_CHECKING:
     from .stack import Stack
@@ -67,9 +68,10 @@ class LinearSystem(ABC):
         """
         This function coordinates the temp_layer program sequence
         """
+        urf = kwargs.pop('urf', 1.0)
         self.update_matrix(*args, **kwargs)
         self.update_rhs(*args, **kwargs)
-        self.solve_system()
+        self.solve_system(urf=urf)
 
     @abstractmethod
     def update_rhs(self, *args, **kwargs):
@@ -86,7 +88,7 @@ class LinearSystem(ABC):
         """
         pass
 
-    def solve_system(self):
+    def solve_system(self, urf=1.0):
         """
         Solves for the solution vector.
         """
@@ -100,11 +102,12 @@ class LinearSystem(ABC):
             rhs = np.array(self.rhs, dtype=self.dtype)
             x = spsolve(mtx, rhs)
             # self.solution_vector[:], _ = cg(mtx, rhs, M=precond_mtx, rtol=1e-12)
-            self.solution_vector[:] = x
+            self.solution_vector[:] = (1.0 - urf) * self.solution_vector + urf * x
 
         else:
             # cond_number = np.linalg.cond(self.mtx)
-            self.solution_vector[:] = np.linalg.solve(self.mtx, self.rhs)
+            x = np.linalg.solve(self.mtx, self.rhs)
+            self.solution_vector[:] = (1.0 - urf) * self.solution_vector + urf * x
         self.solution_array[:] = np.reshape(
             self.solution_vector, self.shape, order='F')
 
@@ -326,9 +329,8 @@ class BasicLinearSystem(LinearSystem, ABC):
         # Calculate inter-nodal conductance array and build conductance
         # matrix accordingly
         self.conductance, shape = self.calculate_conductance(conductance)
-        mtx_dyn = np.diag(source_vector)
-        self.mtx[:] = mtx_func.build_cell_conductance_matrix(
-                self.conductance) + mtx_dyn
+        self.mtx[:] = mtx_func.build_cell_conductance_matrix(self.conductance)
+        np.fill_diagonal(self.mtx, self.mtx.diagonal() + source_vector)
 
     def update_rhs(self, *args, **kwargs):
         """
@@ -680,6 +682,10 @@ class StackLinearSystem(LinearSystem, ABC):
         self.mtx_const = self.connect_cells(self.transport_type)
         self.rhs_const = np.hstack(
             [cell_sys.rhs_const for cell_sys in self.cell_systems])
+        
+        # Populate the global solution vector from initialized cell vectors
+        self.solution_vector[:] = np.hstack(
+            [cell_sys.solution_vector for cell_sys in self.cell_systems])
         # if self.sparse_solve:
         #     self.mtx_const = sparse.csr_matrix(self.mtx_const)
 
@@ -807,16 +813,29 @@ class TemperatureSystem(StackLinearSystem):
             self.update_coolant_channel()
         self.update_gas_channel()
 
+        # Apply under-relaxation to the thermal solve to prevent limit cycles
+        urf = self.input_dict.get('underrelaxation_factor', 0.1)
+        
+        # Save old temperature to enforce a maximum step size
+        old_temp = np.copy(self.solution_vector)
+
         self.update_and_solve_linear_system(gas_transfer=True,
-                                            electrochemical_heat=True)
+                                            electrochemical_heat=True,
+                                            urf=urf)
         A = self.mtx
         b = self.rhs
         x = self.solution_vector
 
         if np.any(self.solution_vector < 200.0):
-            raise ValueError('temperature too low, check boundary conditions')
+            raise ValueError(f'temperature too low at iteration {gs.global_state.iteration}, check boundary conditions')
         if np.any(self.solution_vector > 1000.0):
-            raise ValueError('temperature too high, check boundary conditions')
+            raise ValueError(f'temperature too high at iteration {gs.global_state.iteration}, check boundary conditions')
+        # # Guardrail: Prevent the temperature from deviating more than 10 K per iteration.
+        # # This protects non-linear property evaluations (like saturation pressure)
+        # # from blowing up due to transient un-dampened source terms.
+        # max_dt = 10.0
+        # np.clip(self.solution_vector, old_temp - max_dt, old_temp + max_dt, out=self.solution_vector)
+
         self.update_cell_solution()
 
     def update_matrix(self, *args, **kwargs):
@@ -915,8 +934,8 @@ class TemperatureSystem(StackLinearSystem):
                 source_vectors[i][:] += source_vec_3
 
         dyn_vec = np.hstack(source_vectors)
-        mtx_dyn = np.diag(dyn_vec)
-        self.mtx[:] = self.mtx_const + mtx_dyn
+        self.mtx[:] = self.mtx_const
+        np.fill_diagonal(self.mtx, self.mtx.diagonal() + dyn_vec)
 
     def update_rhs(self, *args, **kwargs):
         """
@@ -1165,14 +1184,17 @@ class ElectricalSystem(StackLinearSystem):
         if self.current_control:
             bc_current = self.current_density_target * cell.d_area
             if np.sum(cell_sys.solution_array[0]) == 0.0:
-                rhs_bc_values = self.current_density_target * cell.d_area
+                rhs_bc_values = bc_current
             else:
                 inlet_current = (
                     np.abs(cell_sys.solution_array[0]
                            - cell_sys.solution_array[1])
                     * self.cell_systems[index].conductance[0][0])
-                correction_factors = bc_current / inlet_current
-                rhs_bc_values = inlet_current * correction_factors
+                correction_factors = bc_current / (inlet_current + constants.SMALL)
+                # rhs_bc_values = inlet_current * correction_factors
+                # Use global sum to find the correction factor, avoiding local 0.0 division
+                global_correction = np.sum(bc_current) / (np.sum(inlet_current) + constants.SMALL)
+                rhs_bc_values = inlet_current * global_correction
             self.add_explicit_source(
                 cell_rhs, rhs_bc_values.ravel(order='F'),
                 index_array=cell_sys.index_array, layer_id=0)

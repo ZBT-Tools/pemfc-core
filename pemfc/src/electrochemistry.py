@@ -81,7 +81,8 @@ class ElectrochemistryModel(ABC):
             self.corrected_current_density = \
                 self.calc_current_density(current_density,
                                           concentration,
-                                          reference_concentration, self.v_loss)
+                                          reference_concentration, self.v_loss,
+                                          **kwargs)
         if current_control or self.corrected_current_density is None:
             corrected_current_density = current_density
         else:
@@ -129,8 +130,8 @@ class ElectrochemistryModel(ABC):
             diff_coeff_gdl_by_length = self.diff_coeff_gdl / self.th_gdl
             if current_density.shape[-1] == 2:
                 diff_coeff_gdl_by_length[:, 0] = (
-                        1.0 / (self.th_gdl + self.discretization.dx[-1, :, 0] /
-                               self.diff_coeff_gdl[:, 0])
+                        self.diff_coeff_gdl[:, 0] /
+                        (self.th_gdl + self.discretization.dx[-1, :, 0])
                 )
                 # diff_coeff_gdl_by_length[:, 0] = (
                 #         1.0 / (1.0 * self.th_gdl /
@@ -155,20 +156,36 @@ class ElectrochemistryModel(ABC):
             conc_crit = concentration[id_lin]
             conc_crit_stack = np.stack((conc_crit, conc_crit),
                                        axis=conc_crit.ndim)
-            delta_i = self.delta_i * np.average(i_crit_lin)
-            i_crit_stack = np.stack(
-                (i_crit_lin - delta_i, i_crit_lin + delta_i),
-                axis=i_crit_lin.ndim)
             i_lim_star_lin = np.copy(i_lim_star[id_lin])
             i_lim_star_stack = np.stack((i_lim_star_lin, i_lim_star_lin),
                                         axis=i_lim_star_lin.ndim)
+            # Per-node half-step: a fraction of each node's own i_crit so
+            # the gradient reflects the local Kulikovsky slope, not the global
+            # average. A global-average step is dominated by the largest i_crit
+            # (channel nodes), making land-node gradients artificially shallow
+            # and allowing too much current at low voltages.
+            # Minimum step is 1% of the average limiting current so that
+            # near-zero-i_crit nodes (fully depleted outlet cells) still get a
+            # physically meaningful gradient instead of a zero-divide.
+            min_step = 0.01 * np.average(i_lim_star_lin)
+            delta_step = np.maximum(0.5 * self.delta_i * i_crit_lin, min_step)
+            i_low = np.maximum(i_crit_lin - delta_step, constants.SMALL)
+            i_high = i_crit_lin + delta_step
+            i_crit_stack = np.stack((i_low, i_high), axis=i_crit_lin.ndim)
             eta_crit_stack = self.calc_electrode_loss_kulikovsky(
                 i_crit_stack, conc_crit_stack, reference_concentration,
                 i_lim_star_stack, gdl_loss=gdl_loss)
 
-            grad_eta = np.moveaxis(
-                np.gradient(eta_crit_stack, delta_i, axis=-1), -1, 0)[0]
-            eta_crit = np.average(eta_crit_stack, axis=-1)
+            # Central difference with per-node span (i_high - i_low).
+            actual_span = i_high - i_low
+            grad_eta = ((eta_crit_stack[..., 1] - eta_crit_stack[..., 0])
+                        / actual_span)
+            
+            # Evaluate exactly at i_crit_lin to ensure C0 continuity 
+            # (no vertical jump between regular and linear regions)
+            eta_crit = self.calc_electrode_loss_kulikovsky(
+                i_crit_lin, conc_crit, reference_concentration,
+                i_lim_star_lin, gdl_loss=gdl_loss)
             b = eta_crit - grad_eta * i_crit_lin
             eta_lin = grad_eta * current_density[id_lin] + b
 
@@ -232,20 +249,20 @@ class ElectrochemistryModel(ABC):
         Calculates the activation voltage loss,
         according to (Kulikovsky, 2013).
         """
-        np.seterr(divide='ignore')
-        try:
-            v_loss_act = \
-                np.where(np.logical_and(current_density > constants.SMALL,
-                                        conc > constants.SMALL),
-                         self.tafel_slope
-                         * np.arcsinh((current_density / self.i_sigma) ** 2.
-                                      / (2. * conc
-                                         * (1. - np.exp(-current_density /
-                                                        (2. * self.i_star))))),
-                         0.0)
-            np.seterr(divide='raise')
-        except FloatingPointError:
-            raise
+        SAFE_LIMIT = 1e-5
+        safe_current = np.where(current_density > SAFE_LIMIT, current_density, SAFE_LIMIT)
+        safe_conc = np.where(conc > SAFE_LIMIT, conc, SAFE_LIMIT)
+
+        np.seterr(divide='ignore', invalid='ignore')
+        v_loss_act = (self.tafel_slope * 
+                    np.arcsinh((safe_current / self.i_sigma) ** 2. / 
+                                (2. * safe_conc * 
+                                (1. - np.exp(-safe_current / (2. * self.i_star))))))
+        
+        v_loss_act = np.where(np.logical_and(current_density > constants.SMALL,
+                                             conc > constants.SMALL),
+                              v_loss_act, 0.0)
+        np.seterr(divide='raise', invalid='warn')
         return v_loss_act
 
     def calc_transport_loss_catalyst_layer(self, current_density: np.ndarray,
@@ -292,15 +309,16 @@ class ElectrochemistryModel(ABC):
     def calc_current_density(self, current_density: np.ndarray,
                              concentration: np.ndarray,
                              reference_concentration: float,
-                             v_loss: np.ndarray):
+                             v_loss: np.ndarray, **kwargs):
         def func(curr_den: np.ndarray, over_pot: np.ndarray):
             curr_den = curr_den.reshape(current_density.shape)
             res = self.calc_electrode_loss(curr_den, concentration,
-                                           reference_concentration) - over_pot
+                                           reference_concentration, **kwargs) - over_pot
             return res.flatten()
 
+        # Tighten tolerances to prevent the inner solver from creating
+        # a noise floor that limits the outer iterative loop's convergence.
         res = optimize.least_squares(func, current_density.flatten(),
                                      bounds=(0.0, np.inf), args=(v_loss,))
+                                    #  ftol=1e-13, xtol=1e-13, gtol=1e-13)
         return res.x.reshape(current_density.shape)
-
-

@@ -13,6 +13,7 @@ from . import diffusion_transport as diff
 from . import global_functions as gf
 from . import global_state as gs
 from . import porous_two_phase_flow as p2pf
+from .two_phase_coupling import TwoPhaseCouplingScheduler
 from .output_object import OutputObject2D
 
 warnings.filterwarnings("ignore")
@@ -131,6 +132,20 @@ class HalfCell(OutputObject2D):
         self.calc_gdl_diffusion = halfcell_dict.get('calc_gdl_diffusion', False)
         self.calc_two_phase_flow = halfcell_dict.get('calc_two_phase_flow',
                                                      False)
+        # Source-term URF: when the two-phase update fires, blend the new
+        # evaporation / condensation source terms (and gas-volume fraction)
+        # with the previous values via alpha * new + (1-alpha) * old. Softens
+        # the "kick" that each two-phase update gives the current-density
+        # loop. See also :class:`TwoPhaseCouplingScheduler`.
+        self.two_phase_source_urf = halfcell_dict.get(
+            'two_phase_source_urf', halfcell_dict.get('underrelaxation_factor', 0.2))
+        # Scheduler that picks the two-phase update frequency (N) based on
+        # the outer-error reported via :meth:`update`.
+        self.coupling_scheduler = TwoPhaseCouplingScheduler(
+            n_high=halfcell_dict.get('two_phase_update_frequency_high', 5),
+            n_low=halfcell_dict.get('two_phase_update_frequency_low', 1),
+            error_threshold=halfcell_dict.get(
+                'two_phase_deescalation_error_threshold', 5e-4))
 
         if self.calc_gdl_diffusion:
             gdl_diffusion_dict = gde_dict.copy()
@@ -215,10 +230,19 @@ class HalfCell(OutputObject2D):
                update_transport: bool = True,
                update_electrochemistry: bool = True,
                update_voltage_loss: bool = True,
-               update_stoichiometry: bool = True):
+               update_stoichiometry: bool = True,
+               outer_error: float = None):
         """
         This function coordinates the program sequence
         """
+        if self.calc_two_phase_flow:
+            # Reset the scheduler at the start of each new operating point.
+            if gs.global_state.iteration == 0:
+                self.coupling_scheduler.reset()
+            # Feed the latest outer-iteration error to the scheduler so it
+            # can de-escalate N once clean decay is observed.
+            if outer_error is not None:
+                self.coupling_scheduler.register_error(outer_error)
 
         if update_stoichiometry:
             self.update_stoichiometry(current_density, current_control)
@@ -251,7 +275,9 @@ class HalfCell(OutputObject2D):
                 current_density, self.fuel_concentration,
                 reference_fuel_concentration,
                 scaling_factors=self.flux_scaling_factors,
-                inlet_concentration=reference_fuel_concentration)
+                inlet_concentration=reference_fuel_concentration,
+                # current_control=current_control)
+                )
 
         if update_voltage_loss:
             # Update voltage loss
@@ -296,72 +322,15 @@ class HalfCell(OutputObject2D):
                     concentration, mole_flux,
                     temperature=temperature, pressure=self.channel.pressure)
             else:
-                # Adjust two-phase flow boundary conditions
-                liquid_flux_ratio = 0.0
-                ch_gdl_sat = (np.ones(self.two_phase_flow.saturation.shape)
-                              * self.gdl_channel_saturation)
-                liquid_water_flux = (mass_flux[self.id_h2o] * liquid_flux_ratio)
-                mole_flux[self.id_h2o] *= (1.0 - liquid_flux_ratio)
-                iteration = 0
-                molar_evap_rate = np.zeros(
-                    self.two_phase_flow.evaporation_rate.shape)
-                molar_cond_coeff = np.zeros(
-                    self.two_phase_flow.implicit_condensation_coeff.shape)
-                # Adjust numerical settings
-                error = np.inf
-                max_iterations = 1
-                min_iterations = 1
-                # urf = self.two_phase_flow.urf
-                error_tolerance = 1e-5
-                while (all((error > error_tolerance,
-                            iteration < max_iterations))
-                       or iteration < min_iterations):
-                    # Update gas diffusion in GDL
-                    self.gdl_diffusion.update(
-                        concentration, mole_flux,
-                        self.explicit_source_terms,
-                        self.implicit_source_terms,
-                        temperature, self.channel.pressure,
-                        self.two_phase_flow.gas_volume_fraction)
-
-                    # Update two-phase flow in GDL
-                    temp = self.gdl_diffusion.fluid.temperature
-                    press = self.gdl_diffusion.fluid.pressure
-                    mol_comp = self.gdl_diffusion.solution_array
-                    self.two_phase_flow.update(
-                        temp, press, mol_comp, ch_gdl_sat,
-                        liquid_water_flux, heat_flux, update_fluid=True)
-                    fluid = self.two_phase_flow.fluid
-                    molar_mass = fluid.species_mw[fluid.id_pc]
-                    molar_evap_rate_old = np.copy(molar_evap_rate)
-                    molar_evap_rate[:] = (
-                            self.two_phase_flow.evaporation_rate /
-                            molar_mass)
-
-                    molar_cond_coeff[:] = (
-                            self.two_phase_flow.implicit_condensation_coeff
-                            / molar_mass)
-
-                    self.explicit_source_terms[fluid.id_pc] = (
-                            1.0 * molar_evap_rate)
-                    self.implicit_source_terms[fluid.id_pc] = (
-                            -1.0 * molar_cond_coeff)
-                    # Error calculation
-                    diff_e = molar_evap_rate - molar_evap_rate_old
-                    diff_e[:] = np.divide(diff_e, molar_evap_rate,
-                                          where=molar_evap_rate != 0.0)
-                    diff_e = diff_e.ravel()
-                    error = (np.dot(diff_e.transpose(), diff_e)
-                             / (2.0 * len(diff_e)))
-                    iteration += 1
-
-                # Reduce evaporation heat to 2D discretization of GDE in
-                # overall stack model
-                self.evaporation_heat[:] = self.reduce_discretization(
-                    np.sum(self.two_phase_flow.evaporation_heat, axis=0),
-                    mode="sum")
-                self.saturation[:] = self.reduce_discretization(
-                    np.average(self.two_phase_flow.saturation, axis=0))
+                ch_gdl_sat, liquid_water_flux, mole_flux = (
+                    self._prepare_two_phase_inputs(mass_flux, mole_flux))
+                self._update_gdl_diffusion_with_two_phase_sources(
+                    concentration, mole_flux, temperature)
+                iteration = gs.global_state.iteration
+                if self.coupling_scheduler.should_update_two_phase(iteration):
+                    self._update_two_phase_state(
+                        temperature, ch_gdl_sat, liquid_water_flux,
+                        heat_flux, seed=(iteration == 0))
 
             # Reshape 3D-concentration fields from the GDL-Diffusion
             # sub-model to the reduced discretization in this model
@@ -405,6 +374,93 @@ class HalfCell(OutputObject2D):
         if update_channel_sources:
             # Calculate mole and mass source from fluxes
             self.update_channel_sources(mole_flux_gde_chl, flux_interface_area)
+
+    # --- two-phase / gdl_diffusion coupling helpers ----------------------
+
+    def _prepare_two_phase_inputs(self, mass_flux, mole_flux):
+        """Set up the boundary conditions the two-phase sub-model consumes.
+
+        Splits the membrane-side water molar flux between the gas-phase
+        (carried through gdl_diffusion) and the liquid-phase channel-GDL
+        saturation boundary condition (carried through two_phase_flow).
+        """
+        liquid_flux_ratio = 0.0
+        ch_gdl_sat = (np.ones(self.two_phase_flow.saturation.shape)
+                      * self.gdl_channel_saturation)
+        liquid_water_flux = mass_flux[self.id_h2o] * liquid_flux_ratio
+        mole_flux[self.id_h2o] *= (1.0 - liquid_flux_ratio)
+        return ch_gdl_sat, liquid_water_flux, mole_flux
+
+    def _update_gdl_diffusion_with_two_phase_sources(
+            self, concentration, mole_flux, temperature):
+        """Run gdl_diffusion against the most recent two-phase source terms
+        and gas-volume fraction. Called every main iteration — between
+        two-phase updates the stored source terms act as a frozen
+        resistance field."""
+        self.gdl_diffusion.update(
+            concentration, mole_flux,
+            self.explicit_source_terms,
+            self.implicit_source_terms,
+            temperature, self.channel.pressure,
+            self.two_phase_flow.gas_volume_fraction)
+
+    def _update_two_phase_state(self, temperature, ch_gdl_sat,
+                                liquid_water_flux, heat_flux, seed=False):
+        """Refresh the two-phase sub-system and blend its outputs into the
+        cached source terms and gas-volume fraction via the source URF.
+
+        The URF softens the "kick" each two-phase update delivers to the
+        gdl_diffusion / current-density loop. On the first call of a new
+        operating point (``seed=True``) the source terms must be fully
+        initialised, so the blend is bypassed.
+
+        ``temperature`` is the stack-side (CL-GDL interface) temperature
+        field — passed through so the two-phase sub-model uses a stable
+        Dirichlet boundary for its thermal PDE rather than reading back
+        the fluid's cached (and potentially mutated) temperature.
+        """
+        old_gas_volume_fraction = np.copy(
+            self.two_phase_flow.gas_volume_fraction)
+
+        press = self.gdl_diffusion.fluid.pressure
+        mol_comp = self.gdl_diffusion.solution_array
+        self.two_phase_flow.update(
+            temperature, press, mol_comp, ch_gdl_sat,
+            liquid_water_flux, heat_flux, update_fluid=True)
+
+        fluid = self.two_phase_flow.fluid
+        molar_mass = fluid.species_mw[fluid.id_pc]
+        new_explicit = self.two_phase_flow.evaporation_rate / molar_mass
+        new_implicit = (-self.two_phase_flow.implicit_condensation_coeff
+                        / molar_mass)
+
+        alpha = 1.0 if seed else self.two_phase_source_urf
+        self.explicit_source_terms[fluid.id_pc] = (
+                alpha * new_explicit
+                + (1.0 - alpha) * self.explicit_source_terms[fluid.id_pc])
+        self.implicit_source_terms[fluid.id_pc] = (
+                alpha * new_implicit
+                + (1.0 - alpha) * self.implicit_source_terms[fluid.id_pc])
+        self.two_phase_flow.gas_volume_fraction = (
+                alpha * self.two_phase_flow.gas_volume_fraction
+                + (1.0 - alpha) * old_gas_volume_fraction)
+
+        # Reduce 3D evaporation heat and saturation to 2D for the outer
+        # thermal / stack models
+        new_evap_heat = self.reduce_discretization(
+            np.sum(self.two_phase_flow.evaporation_heat, axis=0),
+            mode="sum")
+        # Always under-relax heat to prevent massive thermal shocks to the global solver
+        heat_alpha = self.two_phase_source_urf
+        self.evaporation_heat[:] = (
+            heat_alpha * new_evap_heat + (1.0 - heat_alpha) * self.evaporation_heat)
+
+        new_saturation = self.reduce_discretization(
+            np.average(self.two_phase_flow.saturation, axis=0))
+        self.saturation[:] = (
+            alpha * new_saturation + (1.0 - alpha) * self.saturation)
+
+    # --- end two-phase coupling helpers ----------------------------------
 
     def update_channel_sources(self, mole_flux, flux_interface_area):
         mole_source = self.surface_flux_to_channel_source(

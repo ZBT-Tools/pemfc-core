@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import numpy as np
 from scipy import linalg as sp_la
+from scipy import sparse
 # import scipy as sp
 # from . import cell
 # from . import global_functions as g_func
@@ -180,9 +181,13 @@ def create_one_dimensional_conductance_matrix(conductance_array, axis):
     center_diag = calculate_center_diagonal(conductance_array, axis=axis)
     off_diag = calculate_off_diagonal(conductance_array, axis)[:-offset]
     center_diag *= -1.0
-    return np.diag(center_diag, k=0) \
-        + np.diag(off_diag, k=-offset) \
-        + np.diag(off_diag, k=offset)
+
+    return sparse.diags(
+        [off_diag, center_diag, off_diag], 
+        [-offset, 0, offset], 
+        shape=(len(center_diag), len(center_diag)), 
+        format='csr'
+    )
 
 
 def build_cell_conductance_matrix(conductance_list: list[np.ndarray]):
@@ -192,7 +197,14 @@ def build_cell_conductance_matrix(conductance_list: list[np.ndarray]):
                 and conductance_array.shape[i] > 0):
             cond_mtx_list.append(create_one_dimensional_conductance_matrix(
                 conductance_array, axis=i))
-    return np.sum(cond_mtx_list, axis=0)
+    
+    if not cond_mtx_list:
+        return 0.0
+    
+    total_sparse = cond_mtx_list[0]
+    for m in cond_mtx_list[1:]:
+        total_sparse = total_sparse + m
+    return total_sparse.toarray()
 
 
 def transform_nodes(node_values: (list, np.ndarray), axis,
