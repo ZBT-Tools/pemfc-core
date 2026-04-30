@@ -1,7 +1,7 @@
 # PEMFC-Stack-Model
 
-A reduced dimensional numerical model to simulate the performance of PEM fuel
-cell stacks developed in Python.
+A reduced-dimensional numerical model developed in Python to simulate the
+performance of PEM fuel cell stacks.
 
 #### Geometric Layout
 

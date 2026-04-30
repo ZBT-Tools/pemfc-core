@@ -10,7 +10,7 @@ readme = "README.md"
 authors = [
     { name = "Lukas Feierabend", email = "lukas.feierabend@gmail.com" },
 ]
-requires-python = ">=3.6"
+requires-python = ">=3.9"
 license = { text = "MIT" }
 keywords = []
 classifiers = [
